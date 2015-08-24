@@ -12,6 +12,7 @@ import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
 import static oj.NextItem.*;
+import static oj.Options.*;
 
 public class Parse {
     static final boolean HAS_PROC_WITH_BLOCK = false;
@@ -78,7 +79,7 @@ public class Parse {
                 case HASH_VALUE:
                     pi.hash_set_value(parent, rval);
                     // FIXME: key is offset in contiguous pointer.  cur < key must be recorded another way
-                    if (parent.key != null && 0 < parent.klen && (parent.key < pi.json || pi.cur < parent.key)) {
+                    if (parent.key != null && 0 < parent.key.getRealSize() && (parent.key < pi.json || pi.cur < parent.key)) {
                         parent.key = null;
                     }
                     parent.next = HASH_COMMA;
@@ -259,7 +260,7 @@ public class Parse {
                 case HASH_VALUE:
                     pi.hash_set_cstr(pi, parent, buf, start);
                     if (null != parent.key && 0 < parent.key.getRealSize() && (parent.key < pi.json || pi.cur < parent.key)) {
-                        parent.key = 0;
+                        parent.key = null;
                     }
                     parent.next =  HASH_COMMA;
                     break;
@@ -447,13 +448,13 @@ public class Parse {
                     break;
                 case HASH_VALUE:
                     pi.hash_set_num(pi, parent, ni);
-                    if (null != parent.key && 0 < parent.klen && (parent.key < pi.json || pi.cur < parent.key)) {
+                    if (null != parent.key && 0 < parent.key.getRealSize() && (parent.key < pi.json || pi.cur < parent.key)) {
                         parent.key = null;
                     }
                     parent.next =  HASH_COMMA;
                     break;
                 default:
-                    pi.setError("expected %s", oj_stack_string(parent.next));
+                    pi.setError("expected " + parent.next);
                     break;
             }
         }
@@ -463,71 +464,71 @@ public class Parse {
         pi.stack.push(pi.start_array(ARRAY_NEW));
     }
 
-static void
-array_end(ParseInfo pi) {
-    Val	array = pi.stack.pop();
+    static void
+    array_end(ParseInfo pi) {
+        Val	array = pi.stack.pop();
 
-    if (null == array) {
-        pi.setError("unexpected array close");
-    } else if (ARRAY_COMMA != array.next && ARRAY_NEW != array.next) {
-        pi.setError("expected " + array.next + ", not an array close");
-    } else {
-        pi.end_array();
-        add_value(pi, array.val);
+        if (null == array) {
+            pi.setError("unexpected array close");
+        } else if (ARRAY_COMMA != array.next && ARRAY_NEW != array.next) {
+            pi.setError("expected " + array.next + ", not an array close");
+        } else {
+            pi.end_array();
+            add_value(pi, array.val);
+        }
     }
-}
 
-static void
-hash_start(ParseInfo pi) {
-    pi.stack.push(pi.start_hash(HASH_NEW));
-}
-
-static void
-hash_end(ParseInfo pi) {
-    Val	hash = pi.stack.peek();
-
-    // leave hash on stack until just before
-    if (null == hash) {
-        pi.setError("unexpected hash close");
-    } else if (HASH_COMMA != hash.next && HASH_NEW != hash.next) {
-        pi.setError("expected " + hash.next + ", not a hash close");
-    } else {
-        pi.end_hash();
-        pi.stack.pop();
-        add_value(pi, hash.val);
+    static void
+    hash_start(ParseInfo pi) {
+        pi.stack.push(pi.start_hash(HASH_NEW));
     }
-}
 
-static void comma(ParseInfo pi) {
-    Val	parent = pi.stack.peek();
+    static void
+    hash_end(ParseInfo pi) {
+        Val	hash = pi.stack.peek();
 
-    if (null == parent) {
-        pi.setError("unexpected comma");
-    } else if (ARRAY_COMMA == parent.next) {
-	parent.next =  ARRAY_ELEMENT;
-    } else if (HASH_COMMA == parent.next) {
-	parent.next =  HASH_KEY;
-    } else {
-        pi.setError("unexpected comma");
+        // leave hash on stack until just before
+        if (null == hash) {
+            pi.setError("unexpected hash close");
+        } else if (HASH_COMMA != hash.next && HASH_NEW != hash.next) {
+            pi.setError("expected " + hash.next + ", not a hash close");
+        } else {
+            pi.end_hash();
+            pi.stack.pop();
+            add_value(pi, hash.val);
+        }
     }
-}
 
-static void colon(ParseInfo pi) {
-    Val	parent = pi.stack.peek();
+    static void comma(ParseInfo pi) {
+        Val	parent = pi.stack.peek();
 
-    if (null != parent && HASH_COLON == parent.next) {
-	parent.next =  HASH_VALUE;
-    } else {
-        pi.setError("unexpected colon");
+        if (null == parent) {
+            pi.setError("unexpected comma");
+        } else if (ARRAY_COMMA == parent.next) {
+            parent.next =  ARRAY_ELEMENT;
+        } else if (HASH_COMMA == parent.next) {
+            parent.next =  HASH_KEY;
+        } else {
+            pi.setError("unexpected comma");
+        }
     }
-}
 
-static void oj_parse2(ParseInfo pi) {
-    boolean first = true;
+    static void colon(ParseInfo pi) {
+        Val	parent = pi.stack.peek();
 
-    pi.cur = pi.json;
-    pi.err_init();
-    while (true) {
+        if (null != parent && HASH_COLON == parent.next) {
+            parent.next =  HASH_VALUE;
+        } else {
+            pi.setError("unexpected colon");
+        }
+    }
+
+    static void oj_parse2(ParseInfo pi) {
+        boolean first = true;
+
+        pi.cur = pi.json;
+        pi.err_init();
+        while (true) {
         non_white(pi);
         if (!first && '\0' != pi.current()) {
             pi.setError("unexpected characters after the JSON document");
@@ -607,8 +608,7 @@ static void oj_parse2(ParseInfo pi) {
                         Object[] args= new Object[] { pi.stack.firstElement() };
                         pi.proc.call(args);
                     } else {
-                        rb_raise(rb_eNotImpError,
-                                "Calling a Proc with a block not supported in this version. Use func() {|x| } syntax instead.");
+                        throw pi.getRuntime().newNotImplementedError("Calling a Proc with a block not supported in this version. Use func() {|x| } syntax instead.");
                     }
                 }
             } else {
@@ -700,7 +700,7 @@ Object  oj_num_as_value(ParseInfo pi, NumInfo ni) {
         int			free_json = 0;
 
         if (argv.length < 1) {
-            rb_raise(rb_eArgError, "Wrong number of arguments to parse.");
+            throw pi.getRuntime().newArgumentError("Wrong number of arguments to parse.");
         }
         input = argv[0];
         if (2 == argv.length) {
@@ -747,7 +747,7 @@ Object  oj_num_as_value(ParseInfo pi, NumInfo ni) {
                 // use stream parser instead
                 return oj_pi_sparse(argc, argv, pi, 0);
             } else {
-                rb_raise(rb_eArgError, "strict_parse() expected a String or IO Object.");
+                throw pi.getRuntime().newArgumentError("strict_parse() expected a String or IO Object.");
             }
         }
         if (Yes == pi.options.circular) {

@@ -16,6 +16,7 @@ public class ParseInfo {
     public Object proc;
     private Object undef = new Object();
     private String error = null;
+    public Options options;
 
     public ParseInfo(Ruby runtime) {
         this.runtime = runtime;
