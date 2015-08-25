@@ -17,6 +17,7 @@ public class ParseInfo {
     private Object undef = new Object();
     private String error = null;
     public Options options;
+    public IRubyObject handler;
 
     public ParseInfo(Ruby runtime) {
         this.runtime = runtime;
