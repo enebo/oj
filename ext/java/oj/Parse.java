@@ -735,8 +735,8 @@ Object  oj_num_as_value(ParseInfo pi, NumInfo ni) {
                 buf = ALLOC_N(char, len + 1);
                 pi.json = buf;
                 pi.end = buf + len;
-                if (0 >= (cnt = read(fd, (char*)pi.json, len)) || cnt != (ssize_t)len) {
-                    rb_raise(rb_eIOError, "failed to read from IO Object.");
+                if (0 >= (cnt = read(fd, (char*)pi.json, len)) || cnt != len) {
+                    throw pi.getRuntime().newIOError("failed to read from IO Object.");
                 }
                 ((char*)pi.json)[len] = '\0';
                 /* skip UTF-8 BOM if present */
