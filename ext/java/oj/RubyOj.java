@@ -3,8 +3,18 @@ package oj;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import oj.handlers.ArrayAppendPICall;
+import oj.handlers.DispatchArrayAppendPICall;
+import oj.handlers.DispatchHashSetPICall;
+import oj.handlers.DispatchPICall;
+import oj.handlers.HashSetPICall;
+import oj.handlers.NoopArrayAppendPICall;
+import oj.handlers.NoopHashSetPICall;
+import oj.handlers.NoopPICall;
+import oj.handlers.PICall;
 import org.jruby.Ruby;
 import org.jruby.RubyClass;
+import org.jruby.RubyFile;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyHash;
 import org.jruby.RubyModule;
@@ -14,9 +24,10 @@ import org.jruby.RubySymbol;
 import org.jruby.anno.JRubyMethod;
 import org.jruby.anno.JRubyModule;
 import org.jruby.platform.Platform;
+import org.jruby.runtime.Block;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
-import org.jruby.util.ByteList;
+import org.jruby.util.ByteList;>
 import org.jruby.util.TypeConverter;
 
 import static oj.Options.*;
@@ -29,30 +40,66 @@ public class RubyOj extends RubyModule {
     public static final int MAX_ODD_ARGS = 10;
 
     // FIXME: This should be internal variable
-    public static Options oj_default_options;
+    public Options default_options;
 
+    public PICall endArrayDispatch;
+    public PICall endHashDispatch;
+    public PICall startArrayDispatch;
+    public PICall startHashDispatch;
+    public PICall hashKeyDispatch;
+    public PICall noopPICall;
+    public HashSetPICall scpHashSetDispatch;
+    public HashSetPICall hashSetNoop;
+    public ArrayAppendPICall scpArrayAppendDispatch;
+    public ArrayAppendPICall arrayAppendNoop;
+
+    public RubyOj(Ruby runtime) {
+        super(runtime);
+        
+        default_options = new Options();
+        endHashDispatch = new DispatchPICall("end_hash");
+        endArrayDispatch = new DispatchPICall("end_array");
+        startHashDispatch = new DispatchPICall("start_hash");
+        startArrayDispatch = new DispatchPICall("start_array");
+        hashKeyDispatch = new DispatchPICall("hash_key");
+        noopPICall = new NoopPICall();
+        scpHashSetDispatch = new DispatchHashSetPICall();
+        hashSetNoop = new NoopHashSetPICall();
+        scpArrayAppendDispatch = new DispatchArrayAppendPICall();
+        arrayAppendNoop = new NoopArrayAppendPICall();
+    }
+
+    private static RubyOj resolveOj(IRubyObject self) {
+        if (!(self instanceof RubyOj)) {
+            throw self.getRuntime().newArgumentError("self is not an instance of Oj");
+        }
+        
+        return (RubyOj) self;
+    }
+    
     @JRubyMethod(module = true)
     public static IRubyObject default_options(ThreadContext context, IRubyObject self) {
+        RubyOj oj = resolveOj(self);
         Ruby runtime = context.runtime;
         RubyHash opts = RubyHash.newHash(runtime);
         IRubyObject Qtrue = runtime.getTrue();
         IRubyObject Qfalse = runtime.getFalse();
         IRubyObject Qnil = runtime.getNil();
 
-        opts.fastASet(runtime.newSymbol("indent"), runtime.newFixnum(oj_default_options.indent));
-        opts.fastASet(runtime.newSymbol("sec_prec"), runtime.newFixnum(oj_default_options.sec_prec));
-        opts.fastASet(runtime.newSymbol("circular"), (Yes == oj_default_options.circular) ? Qtrue : ((No == oj_default_options.circular) ? Qfalse : Qnil));
-        opts.fastASet(runtime.newSymbol("class_cache"), (Yes == oj_default_options.class_cache) ? Qtrue : ((No == oj_default_options.class_cache) ? Qfalse : Qnil));
-        opts.fastASet(runtime.newSymbol("auto_define"), (Yes == oj_default_options.auto_define) ? Qtrue : ((No == oj_default_options.auto_define) ? Qfalse : Qnil));
-        opts.fastASet(runtime.newSymbol("symbol_keys"), (Yes == oj_default_options.sym_key) ? Qtrue : ((No == oj_default_options.sym_key) ? Qfalse : Qnil));
-        opts.fastASet(runtime.newSymbol("bigdecimal_as_decimal"), (Yes == oj_default_options.bigdec_as_num) ? Qtrue : ((No == oj_default_options.bigdec_as_num) ? Qfalse : Qnil));
-        opts.fastASet(runtime.newSymbol("use_to_json"), (Yes == oj_default_options.to_json) ? Qtrue : ((No == oj_default_options.to_json) ? Qfalse : Qnil));
-        opts.fastASet(runtime.newSymbol("nilnil"), (Yes == oj_default_options.nilnil) ? Qtrue : ((No == oj_default_options.nilnil) ? Qfalse : Qnil));
-        opts.fastASet(runtime.newSymbol("allow_gc"), (Yes == oj_default_options.allow_gc) ? Qtrue : ((No == oj_default_options.allow_gc) ? Qfalse : Qnil));
-        opts.fastASet(runtime.newSymbol("quirks_mode"), (Yes == oj_default_options.quirks_mode) ? Qtrue : ((No == oj_default_options.quirks_mode) ? Qfalse : Qnil));
-        opts.fastASet(runtime.newSymbol("float_prec"), runtime.newFixnum(oj_default_options.float_prec));
+        opts.fastASet(runtime.newSymbol("indent"), runtime.newFixnum(oj.default_options.indent));
+        opts.fastASet(runtime.newSymbol("sec_prec"), runtime.newFixnum(oj.default_options.sec_prec));
+        opts.fastASet(runtime.newSymbol("circular"), (Yes == oj.default_options.circular) ? Qtrue : ((No == oj.default_options.circular) ? Qfalse : Qnil));
+        opts.fastASet(runtime.newSymbol("class_cache"), (Yes == oj.default_options.class_cache) ? Qtrue : ((No == oj.default_options.class_cache) ? Qfalse : Qnil));
+        opts.fastASet(runtime.newSymbol("auto_define"), (Yes == oj.default_options.auto_define) ? Qtrue : ((No == oj.default_options.auto_define) ? Qfalse : Qnil));
+        opts.fastASet(runtime.newSymbol("symbol_keys"), (Yes == oj.default_options.sym_key) ? Qtrue : ((No == oj.default_options.sym_key) ? Qfalse : Qnil));
+        opts.fastASet(runtime.newSymbol("bigdecimal_as_decimal"), (Yes == oj.default_options.bigdec_as_num) ? Qtrue : ((No == oj.default_options.bigdec_as_num) ? Qfalse : Qnil));
+        opts.fastASet(runtime.newSymbol("use_to_json"), (Yes == oj.default_options.to_json) ? Qtrue : ((No == oj.default_options.to_json) ? Qfalse : Qnil));
+        opts.fastASet(runtime.newSymbol("nilnil"), (Yes == oj.default_options.nilnil) ? Qtrue : ((No == oj.default_options.nilnil) ? Qfalse : Qnil));
+        opts.fastASet(runtime.newSymbol("allow_gc"), (Yes == oj.default_options.allow_gc) ? Qtrue : ((No == oj.default_options.allow_gc) ? Qfalse : Qnil));
+        opts.fastASet(runtime.newSymbol("quirks_mode"), (Yes == oj.default_options.quirks_mode) ? Qtrue : ((No == oj.default_options.quirks_mode) ? Qfalse : Qnil));
+        opts.fastASet(runtime.newSymbol("float_prec"), runtime.newFixnum(oj.default_options.float_prec));
 
-        switch (oj_default_options.mode) {
+        switch (oj.default_options.mode) {
             case StrictMode:
                 opts.fastASet(runtime.newSymbol("mode"), runtime.newSymbol("strict"));
                 break;
@@ -67,7 +114,7 @@ public class RubyOj extends RubyModule {
                 opts.fastASet(runtime.newSymbol("mode"), runtime.newSymbol("object"));
                 break;
         }
-        switch (oj_default_options.escape_mode) {
+        switch (oj.default_options.escape_mode) {
             case NLEsc:
                 opts.fastASet(runtime.newSymbol("escape_mode"), runtime.newSymbol("newline"));
                 break;
@@ -84,7 +131,7 @@ public class RubyOj extends RubyModule {
                 opts.fastASet(runtime.newSymbol("escape_mode"), runtime.newSymbol("json"));
                 break;
         }
-        switch (oj_default_options.time_format) {
+        switch (oj.default_options.time_format) {
             case XmlTime:
                 opts.fastASet(runtime.newSymbol("time_format"), runtime.newSymbol("xmlschema"));
                 break;
@@ -99,7 +146,7 @@ public class RubyOj extends RubyModule {
                 opts.fastASet(runtime.newSymbol("time_format"), runtime.newSymbol("unix"));
                 break;
         }
-        switch (oj_default_options.bigdec_load) {
+        switch (oj.default_options.bigdec_load) {
             case BigDec:
                 opts.fastASet(runtime.newSymbol("bigdecimal_load"), runtime.newSymbol("bigdecimal"));
                 break;
@@ -111,14 +158,16 @@ public class RubyOj extends RubyModule {
                 opts.fastASet(runtime.newSymbol("bigdecimal_load"), runtime.newSymbol("auto"));
                 break;
         }
-        opts.fastASet(runtime.newSymbol("create_id"), (null == oj_default_options.create_id) ? Qnil : runtime.newString(oj_default_options.create_id));
+        opts.fastASet(runtime.newSymbol("create_id"), (null == oj.default_options.create_id) ? Qnil : runtime.newString(oj.default_options.create_id));
 
         return opts;
     }
 
     @JRubyMethod(name = "default_options=")
     public static IRubyObject set_def_opts(ThreadContext context, IRubyObject self, IRubyObject roptsArg) {
-        if (roptsArg instanceof RubyHash) oj_parse_options(context, roptsArg, oj_default_options);
+        RubyOj oj = resolveOj(self);
+
+        if (roptsArg instanceof RubyHash) oj_parse_options(context, roptsArg, oj.default_options);
 
         return context.nil;
     }
@@ -128,6 +177,7 @@ public class RubyOj extends RubyModule {
             // FIXME: I think this should be a raise.
             return;
         }
+        RubyHash ropts = (RubyHash) roptsArg;
         Ruby runtime = context.runtime;
         IRubyObject Qtrue = runtime.getTrue();
         IRubyObject Qfalse = runtime.getFalse();
@@ -263,8 +313,9 @@ public class RubyOj extends RubyModule {
 
     @JRubyMethod(module = true)
     public static IRubyObject load(ThreadContext context, IRubyObject self, IRubyObject[] args) {
+        RubyOj oj = resolveOj(self);
         Ruby runtime = context.runtime;
-        char mode = oj_default_options.mode;
+        char mode = oj.default_options.mode;
 
         if (1 > args.length) {
             throw context.runtime.newArgumentError("Wrong number of arguments to load().");
@@ -309,9 +360,10 @@ public class RubyOj extends RubyModule {
 
     @JRubyMethod(module = true)
     public static IRubyObject load_file(ThreadContext context, IRubyObject self, IRubyObject[] args) {
+        RubyOj oj = resolveOj(self);
         Ruby runtime = context.runtime;
-        char		mode = oj_default_options.mode;
-        ParseInfo	pi = new ParseInfo(runtime);
+        char		mode = oj.default_options.mode;
+        ParseInfo	pi = new ParseInfo(context);
 
         if (1 > args.length) {
             throw runtime.newArgumentError("Wrong number of arguments to load().");
@@ -323,7 +375,7 @@ public class RubyOj extends RubyModule {
         }
 
         IRubyObject Qnil = runtime.getNil();
-        pi.options = oj_default_options;
+        pi.options = oj.default_options;
         pi.handler = Qnil;
 
         if (2 <= args.length) {
@@ -375,28 +427,30 @@ public class RubyOj extends RubyModule {
     }
 
     @JRubyMethod(module = true)
-    public static IRubyObject safe_load(ThreadContext context, IRubyObject self, IRubyObject doc) {
-        ParseInfo pi = new ParseInfo(context.runtime);
+    public static IRubyObject safe_load(ThreadContext context, IRubyObject self, IRubyObject doc, Block block) {
+        RubyOj oj = resolveOj(self);
+        ParseInfo pi = new ParseInfo(context);
 
-        pi.options = oj_default_options;
+        pi.options = oj.default_options;
         pi.options.auto_define = No;
         pi.options.sym_key = No;
         pi.options.mode = StrictMode;
         oj_set_strict_callbacks(pi);
 
-        return oj_pi_parse(1, new IRubyObject[] { doc }, pi, 0, 0, 1);
+        return Parse.oj_pi_parse(context, new IRubyObject[] { doc }, pi, null, 0, true, block);
     }
 
     @JRubyMethod(alias = {"compat_load", "object_load"}, module = true, required = 1, rest = true)
-    public static IRubyObject strict_load(ThreadContext context, IRubyObject self, IRubyObject[] args) {
-        ParseInfo pi = new ParseInfo(context.runtime);
+    public static IRubyObject strict_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
+        RubyOj oj = resolveOj(self);
+        ParseInfo pi = new ParseInfo(context);
 
-        pi.options = oj_default_options;
+        pi.options = oj.default_options;
         pi.handler = context.nil;
         oj_set_strict_callbacks(pi);
 
         if (args[0] instanceof RubyString) {
-            return oj_pi_parse(args, pi, 0, 0, 1);
+            return Parse.oj_pi_parse(context, args, pi, null, 0, true, block);
         } else {
             return oj_pi_sparse(args, pi, 0);
         }
@@ -404,9 +458,10 @@ public class RubyOj extends RubyModule {
 
     @JRubyMethod(module = true)
     public static IRubyObject dump(ThreadContext context, IRubyObject self, IRubyObject[] args) {
-        char		buf[4096];
+        RubyOj oj = resolveOj(self);
+        ByteList		buf = new ByteList();
         Out		out;
-        Options	copts = oj_default_options;
+        Options	copts = oj.default_options;
         IRubyObject		rstr;
 
         if (2 == args.length) {
@@ -425,7 +480,8 @@ public class RubyOj extends RubyModule {
 
     @JRubyMethod(module = true, required=2)
     public static IRubyObject to_file(ThreadContext context, IRubyObject self, IRubyObject[] args) {
-        Options copts = oj_default_options;
+        RubyOj oj = resolveOj(self);
+        Options copts = oj.default_options;
 
         if (3 == args.length) {
             oj_parse_options(context, args[2], copts);
@@ -439,10 +495,11 @@ public class RubyOj extends RubyModule {
 
     @JRubyMethod(module = true)
     public static IRubyObject to_stream(ThreadContext context, IRubyObject self, IRubyObject[] args) {
-        Options copts = oj_default_options;
+        RubyOj oj = resolveOj(self);
+        Options copts = oj.default_options;
 
         if (3 == args.length) {
-            oj_parse_options(context, args[2], oj_default_options);
+            oj_parse_options(context, args[2], oj.default_options);
         }
         oj_write_obj_to_stream(args[1], args, copts);
 
@@ -451,6 +508,7 @@ public class RubyOj extends RubyModule {
     
     @JRubyMethod(module = true)
     public static IRubyObject register_odd(ThreadContext context, IRubyObject self, IRubyObject[] args) {
+        RubyOj oj = resolveOj(self);
         if (3 > args.length) {
             throw context.runtime.newArgumentError("incorrect number of arguments.");
         }
@@ -487,35 +545,7 @@ public class RubyOj extends RubyModule {
         if (input instanceof RubyString) {
             json = ((RubyString) input).getByteList();
         } else {
-            RubyModule clas = input.getMetaClass();
-
-            if (runtime.getClass("StringIO") == clas) {
-                IRubyObject s = input.callMethod(context, "string");
-                if (!(s instanceof RubyString)) {
-                    throw runtime.newArgumentError("Especting a string.");
-                }
-                json = ((RubyString) s).getByteList();
-            } else if (!Platform.IS_WINDOWS && runtime.getFile() == clas && 0 == FIX2INT(input.callMethod(context, "pos"), 0))) {
-                int		fd = FIX2INT(rb_funcall(input, oj_fileno_id, 0));
-                ssize_t	cnt;
-
-                len = lseek(fd, 0, SEEK_END);
-                lseek(fd, 0, SEEK_SET);
-                json = ALLOC_N(char, len + 1);
-                if (0 >= (cnt = read(fd, json, len)) || cnt != (ssize_t)len) {
-                    rb_raise(rb_eIOError, "failed to read from IO Object.");
-                }
-                json[len] = '\0';
-            } else if (input.respondsTo("read")) {
-                IRubyObject s = input.callMethod(content, "read");
-                if (!(s instanceof RubyString)) {
-                    throw runtime.newArgumentError("Especting a string.");
-                }
-
-                json = ((RubyString) s).getByteList();
-            } else {
-                throw runtime.newArgumentError("saj_parse() expected a String or IO Object.");
-            }
+            json = getInput(context, input);
         }
         Saj.parse(args, json);
 
@@ -523,6 +553,80 @@ public class RubyOj extends RubyModule {
     }
 
     @JRubyMethod(module = true)
-    public static IRubyObject sc_parse(ThreadContext context, IRubyObject self) {
+    public static IRubyObject sc_parse(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
+        RubyOj oj = resolveOj(self);
+        ParseInfo pi = new ParseInfo(context);
+        IRubyObject input = args[1];
+
+        pi.options = oj.default_options;
+        if (3 == args.length) {
+            oj_parse_options(context, args[2], pi.options);
+        }
+        if (block.isGiven()) {
+            pi.proc = context.nil;
+        } else {
+            pi.proc = pi.undefValue();
+        }
+        pi.handler = args[0];
+
+        pi.start_hash = pi.handler.respondsTo("hash_start") ? oj.startHashDispatch : oj.noopPICall;
+        pi.end_hash = pi.handler.respondsTo("hash_end") ? oj.endHashDispatch : oj.noopPICall;
+        pi.hash_key = pi.handler.respondsTo("hash_key") ? oj.hashKeyDispatch : oj.noopPICall;
+        pi.start_array = pi.handler.respondsTo("array_start") ? oj.startArrayDispatch : oj.noopPICall;
+        pi.end_array = pi.handler.respondsTo("array_end") ? oj.endArrayDispatch : oj.noopPICall;
+        if (pi.handler.respondsTo("hash_set")) {
+            pi.hash_set = oj.scpHashSetDispatch;
+            pi.expect_value = true;
+        } else {
+            pi.hash_set = oj.hashSetNoop;
+            pi.expect_value = false;
+        }
+        if (pi.handler.respondsTo("array_append")) {
+            pi.array_append = oj.scpArrayAppendDispatch;
+            pi.expect_value = true;
+        } else {
+            pi.array_append = oj.arrayAppendNoop;
+            pi.expect_value = false;
+        }
+        if (pi.handler.respondsTo("add_value")) {
+            pi.add_cstr = "add_cstr";
+            pi.add_num = "add_num";
+            pi.add_value = "add_value";
+            pi.expect_value = true;
+        } else {
+            pi.add_cstr = "noop_add_cstr";
+            pi.add_num = "noop_add_num";
+            pi.add_value = "noop_add_value";
+            pi.expect_value = false;
+        }
+
+        IRubyObject[] newArgs = new IRubyObject[args.length - 1];
+        System.arraycopy(args, 1, newArgs, 0, newArgs.length);
+        if (input instanceof RubyString) {
+            return Parse.oj_pi_parse(context, newArgs, pi, null, 0, true, block);
+        } else {
+            return oj_pi_sparse(newArgs, pi, 0);
+        }
+    }
+
+    public static ByteList getInput(ThreadContext context, IRubyObject input) {
+        Ruby runtime = context.runtime;
+        RubyModule clas = input.getMetaClass();
+
+        if (runtime.getClass("StringIO") == clas) {
+            input = input.callMethod(context, "string");
+        } else if (!Platform.IS_WINDOWS && runtime.getFile() == clas && 0 == input.callMethod(context, "pos").convertToInteger().getLongValue()) {
+            input = ((RubyFile) input).read(context);
+        } else if (input.respondsTo("read")) {
+            input = input.callMethod(context, "read");
+        } else {
+            throw runtime.newArgumentError("saj_parse() expected a String or IO Object.");
+        }
+
+        if (!(input instanceof RubyString)) {
+            throw runtime.newArgumentError("Especting a string.");
+        }
+
+        return ((RubyString) input).getByteList();
     }
 }

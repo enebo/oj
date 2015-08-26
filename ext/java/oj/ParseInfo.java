@@ -1,9 +1,14 @@
 package oj;
 
 import java.util.Stack;
+import oj.handlers.ArrayAppendPICall;
+import oj.handlers.HashSetPICall;
+import oj.handlers.PICall;
 import org.jruby.Ruby;
+import org.jruby.RubyBasicObject;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;
 import org.jruby.runtime.Block;
+import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
@@ -11,38 +16,37 @@ import org.jruby.util.ByteList;
  * Created by enebo on 8/24/15.
  */
 public class ParseInfo {
-    private Ruby runtime;
+    private ThreadContext context;
+    public ByteList json;
+    public ByteList cur;
     public Stack<Val> stack;
     public Object proc;
-    private Object undef = new Object();
+    public IRubyObject undef;
     private String error = null;
     public Options options;
     public IRubyObject handler;
 
-    public ParseInfo(Ruby runtime) {
-        this.runtime = runtime;
+    public PICall start_hash;
+    public PICall end_hash;
+    public PICall start_array;
+    public PICall hash_key;
+    public PICall end_array;
+    public HashSetPICall hash_set;
+    public ArrayAppendPICall array_append;
+    public boolean expect_value;
+    public String add_cstr;
+    public String add_num;
+    public String add_value;
+
+    public ParseInfo(ThreadContext context) {
+        this.context = context;
         this.stack = new Stack<Val>();
         this.proc = null;
-    }
-
-    public Val start_array(NextItem nextItem) {
-        return null;
-    }
-
-    public void end_array() {
-
-    }
-
-    public Val start_hash(NextItem nextItem) {
-        return null;
+        this.undef = new RubyBasicObject(null);
     }
 
     public void appendTo(ByteList buf) {
         // append all bytes up to current....
-    }
-
-    public void end_hash() {
-
     }
 
     public char advance(int amount) {
@@ -66,12 +70,6 @@ public class ParseInfo {
     public void add_value(Object value) {
     }
 
-    public void array_append_value(Object value) {
-    }
-
-    public void hash_set_value(Val parent, Object rval) {
-    }
-
     public void err_init() {
         error = null;
     }
@@ -88,35 +86,39 @@ public class ParseInfo {
     // in a single JVM but these values are not shared between those runtimes.
 
     public IRubyObject nilValue() {
-        return runtime.getNil();
+        return context.runtime.getNil();
     }
 
     public IRubyObject trueValue() {
-        return runtime.getTrue();
+        return context.runtime.getTrue();
     }
 
     public IRubyObject falseValue() {
-        return runtime.getFalse();
+        return context.runtime.getFalse();
     }
 
-    public Object undefValue() {
+    public IRubyObject undefValue() {
         return undef;
     }
 
     public IRubyObject newFloat(double value) {
-        return runtime.newFloat(value);
+        return context.runtime.newFloat(value);
     }
 
     // FIXME: This could potentially use an access point which directly consumed a bytelist (although JRuby needs to add one).
     public IRubyObject newBigDecimal(IRubyObject string) {
-        return RubyBigDecimal.newBigDecimal(runtime.getBasicObject(), new IRubyObject[] {string}, Block.NULL_BLOCK);
+        return RubyBigDecimal.newBigDecimal(context.runtime.getBasicObject(), new IRubyObject[]{string}, Block.NULL_BLOCK);
     }
 
     public IRubyObject newString(Object stringValue) {
         return null;
     }
 
+    public ThreadContext getContext() {
+        return context;
+    }
+
     public Ruby getRuntime() {
-        return runtime;
+        return context.runtime;
     }
 }

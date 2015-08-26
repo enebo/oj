@@ -1,9 +1,12 @@
 package oj;
 
+import org.jruby.util.ByteList;
+
 /**
  * Created by enebo on 8/24/15.
  */
 public class NumInfo {
+    public ByteList str;
     public boolean infinity;
     public boolean neg;
     public boolean nan;

@@ -36,6 +36,8 @@ public class Options {
     public static final char STREAM_IO = 's';
     public static final char FILE_IO = 'f';
 
+    public static final String JSON_CLASS = "json_class";
+
     int		indent;		// indention for dump; default 2
     char	circular;	// YesNo
     char	auto_define;	// YesNo
@@ -71,7 +73,7 @@ public class Options {
         nilnil = No;			// nilnil
         allow_gc = Yes;		// allow_gc
         quirks_mode = Yes;		// quirks_mode
-        create_id = json_class;		// create_id
+        create_id = JSON_CLASS;		// create_id
         sec_prec = 9;			// sec_prec
         dump_opts = null;			// dump_opts
         float_prec = 15;			// float_prec

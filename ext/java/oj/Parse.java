@@ -1,15 +1,20 @@
 package oj;
 
-import java.io.InputStream;
+import org.jruby.Ruby;
 import org.jruby.RubyBoolean;
+import org.jruby.RubyFile;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyFloat;
 import org.jruby.RubyModule;
 import org.jruby.RubyNil;
 import org.jruby.RubyString;
 import org.jruby.RubySymbol;
+import org.jruby.platform.Platform;
+import org.jruby.runtime.Block;
+import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
+import org.jruby.util.ConvertBytes;
 
 import static oj.NextItem.*;
 import static oj.Options.*;
@@ -19,6 +24,7 @@ public class Parse {
     static final boolean IS_WINDOWS = false;
     static final int DEC_MAX = 15;
     static final int EXP_MAX = 100000;
+    static final double OJ_INFINITY = 1.0/0.0;
 
     static void non_white(ParseInfo pi) {
         while (true) {
@@ -64,7 +70,7 @@ public class Parse {
         }
     }
 
-    static void add_value(ParseInfo pi, Object rval) {
+    static void add_value(ParseInfo pi, IRubyObject rval) {
         Val parent = pi.stack_peek();
 
         if (parent == null) { // simple add
@@ -73,11 +79,11 @@ public class Parse {
             switch (parent.next) {
             case ARRAY_NEW:
             case ARRAY_ELEMENT:
-                pi.array_append_value(rval);
+                pi.array_append.appendValue(pi, rval);
                 parent.next = ARRAY_COMMA;
                 break;
                 case HASH_VALUE:
-                    pi.hash_set_value(parent, rval);
+                    pi.hash_set.setValue(pi, parent, rval);
                     // FIXME: key is offset in contiguous pointer.  cur < key must be recorded another way
                     if (parent.key != null && 0 < parent.key.getRealSize() && (parent.key < pi.json || pi.cur < parent.key)) {
                         parent.key = null;
@@ -244,12 +250,12 @@ public class Parse {
             switch (parent.next) {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
-                    pi.array_append_cstr(pi, buf, start);
+                    pi.array_append.appendCStr(pi, buf);
                     parent.next =  ARRAY_COMMA;
                     break;
                 case HASH_NEW:
                 case HASH_KEY:
-                    if (pi.undefValue() == (parent.key_val = pi.hash_key(pi, buf, buf.getRealSize())))) {
+                    if (pi.undefValue() == (parent.key_val = pi.hash_key.call(pi, pi.getRuntime().newString(buf)))) {
                     parent.key = buf.dup();
                 } else {
                     parent.key = new ByteList();
@@ -258,7 +264,7 @@ public class Parse {
                 parent.next =  HASH_COLON;
                 break;
                 case HASH_VALUE:
-                    pi.hash_set_cstr(pi, parent, buf, start);
+                    pi.hash_set.setCStr(pi, parent, buf);
                     if (null != parent.key && 0 < parent.key.getRealSize() && (parent.key < pi.json || pi.cur < parent.key)) {
                         parent.key = null;
                     }
@@ -298,7 +304,7 @@ public class Parse {
             switch (parent.next) {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
-                    pi.array_append_cstr(pi, str, pi.cur - str, str);
+                    pi.array_append.appendCStr(pi, str, pi.cur - str);
                     parent.next =  ARRAY_COMMA;
                     break;
                 case HASH_NEW:
@@ -314,7 +320,7 @@ public class Parse {
                     parent.next =  HASH_COLON;
                     break;
                 case HASH_VALUE:
-                    pi.hash_set_cstr(pi, parent, str, pi.cur - str, str);
+                    pi.hash_set.setCStr(pi, parent, str, pi.cur - str);
                     if (null != parent.key && 0 < parent.klen && (parent.key < pi.json || pi.cur < parent.key)) {
                         parent.key = null;
                     }
@@ -438,16 +444,16 @@ public class Parse {
             ni.big = true;
         }
         if (null == parent) {
-            add_num(pi, ni);
+            pi.add_num(ni);
         } else {
             switch (parent.next) {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
-                    pi.array_append_num(pi, ni);
+                    pi.array_append.appendNum(pi, ni);
                     parent.next =  ARRAY_COMMA;
                     break;
                 case HASH_VALUE:
-                    pi.hash_set_num(pi, parent, ni);
+                    pi.hash_set.setNum(pi, parent, ni);
                     if (null != parent.key && 0 < parent.key.getRealSize() && (parent.key < pi.json || pi.cur < parent.key)) {
                         parent.key = null;
                     }
@@ -461,11 +467,10 @@ public class Parse {
     }
 
     static void array_start(ParseInfo pi) {
-        pi.stack.push(pi.start_array(ARRAY_NEW));
+        pi.stack.push(new Val(pi.start_array.call(pi), ARRAY_NEW));
     }
 
-    static void
-    array_end(ParseInfo pi) {
+    static void array_end(ParseInfo pi) {
         Val	array = pi.stack.pop();
 
         if (null == array) {
@@ -473,18 +478,16 @@ public class Parse {
         } else if (ARRAY_COMMA != array.next && ARRAY_NEW != array.next) {
             pi.setError("expected " + array.next + ", not an array close");
         } else {
-            pi.end_array();
+            pi.end_array.call(pi);
             add_value(pi, array.val);
         }
     }
 
-    static void
-    hash_start(ParseInfo pi) {
-        pi.stack.push(pi.start_hash(HASH_NEW));
+    static void hash_start(ParseInfo pi) {
+        pi.stack.push(new Val(pi.start_hash.call(pi), HASH_NEW));
     }
 
-    static void
-    hash_end(ParseInfo pi) {
+    static void hash_end(ParseInfo pi) {
         Val	hash = pi.stack.peek();
 
         // leave hash on stack until just before
@@ -493,7 +496,7 @@ public class Parse {
         } else if (HASH_COMMA != hash.next && HASH_NEW != hash.next) {
             pi.setError("expected " + hash.next + ", not a hash close");
         } else {
-            pi.end_hash();
+            pi.end_hash.call(pi);
             pi.stack.pop();
             add_value(pi, hash.val);
         }
@@ -523,7 +526,7 @@ public class Parse {
         }
     }
 
-    static void oj_parse2(ParseInfo pi) {
+    static void oj_parse2(ParseInfo pi, Block block) {
         boolean first = true;
 
         pi.cur = pi.json;
@@ -602,7 +605,8 @@ public class Parse {
         if (pi.stack.isEmpty()) {
             if (pi.undefValue() != pi.proc) {
                 if (pi.nilValue() == pi.proc) {
-                    yield(pi.stack.firstElement());
+                    // FIXME: pi.proc should store the block
+                    block.yield(pi.stack.firstElement());
                 } else {
                     if (HAS_PROC_WITH_BLOCK) {
                         Object[] args= new Object[] { pi.stack.firstElement() };
@@ -630,27 +634,19 @@ Object  oj_num_as_value(ParseInfo pi, NumInfo ni) {
     } else if (ni.nan) {
 	rnum = pi.newFloat(0.0/0.0);
     } else if (1 == ni.div && 0 == ni.exp) { // fixnum
-	if (ni.big) {
-	    if (256 > ni.len) {
-		char	buf[256];
-
-		memcpy(buf, ni.str, ni.len);
-		buf[ni.len] = '\0';
-		rnum = rb_cstr_to_inum(buf, 10, 0);
-	    } else {
-		char	*buf = ALLOC_N(char, ni.len + 1);
-
-		memcpy(buf, ni.str, ni.len);
-		buf[ni.len] = '\0';
-		rnum = rb_cstr_to_inum(buf, 10, 0);
-	    }
-	} else {
-	    if (ni.neg) {
-		rnum = rb_ll2inum(-ni.i);
-	    } else {
-		rnum = rb_ll2inum(ni.i);
-	    }
-	}
+        if (ni.big) {
+            if (256 > ni.len) {
+                rnum = ConvertBytes.byteListToInum19(pi.getRuntime(), ni.str, 10, true);
+            } else {
+                rnum = ConvertBytes.byteListToInum19(pi.getRuntime(), ni.str, 10, true);
+            }
+        } else {
+            if (ni.neg) {
+                rnum = rb_ll2inum(-ni.i);
+            } else {
+                rnum = rb_ll2inum(ni.i);
+            }
+        }
     } else { // decimal
 	if (ni.big) {
         rnum = pi.newBigDecimal(pi.newString(ni.str));
@@ -680,76 +676,62 @@ Object  oj_num_as_value(ParseInfo pi, NumInfo ni) {
         }
 }
 
-    static Object protect_parse(Object pip) {
-        oj_parse2((ParseInfo) pip);
+    static Object protect_parse(ParseInfo pip, Block block) {
+        oj_parse2(pip, block);
 
-        return ((ParseInfo) pip).nilValue();
+        return pip.nilValue();
     }
 
-    void oj_pi_set_input_str(ParseInfo pi, InputStream input) {
+    static void oj_pi_set_input_str(ParseInfo pi, ByteList input) {
         pi.json = input;
-        pi.end = pi.json + RSTRING_LEN(input);
     }
 
-    static Object oj_pi_parse(Object[] argv, ParseInfo pi, String json, int len, int yieldOk) {
+    static IRubyObject oj_pi_parse(ThreadContext context, IRubyObject[] args, ParseInfo pi, ByteList json, int len, boolean yieldOk, Block block) {
+        Ruby runtime = context.runtime;
         StringBuilder buf = null;
-        Object	input;
+        IRubyObject	input;
         Object	wrapped_stack;
         Object		result = pi.nilValue();
         int			line = 0;
-        int			free_json = 0;
 
-        if (argv.length < 1) {
+        if (args.length < 1) {
             throw pi.getRuntime().newArgumentError("Wrong number of arguments to parse.");
         }
-        input = argv[0];
-        if (2 == argv.length) {
-            oj_parse_options(argv[1], pi.options);
+        input = args[0];
+        if (2 == args.length) {
+            RubyOj.oj_parse_options(context, args[1], pi.options);
         }
-        if (yieldOk && rb_block_given_p()) {
+        if (yieldOk && block.isGiven()) {
             pi.proc = pi.nilValue();
         } else {
             pi.proc = pi.undefValue();
         }
         if (null != json) {
             pi.json = json;
-            pi.end = json + len;
-            free_json = 1;
         } else if (input instanceof RubyString) {
-            oj_pi_set_input_str(pi, input);
+            oj_pi_set_input_str(pi, ((RubyString) input).getByteList());
         } else if (pi.nilValue() == input && Yes == pi.options.nilnil) {
             return pi.nilValue();
         } else {
-            Object clas = rb_obj_class(input);
-            Object	s;
+            RubyModule clas = input.getMetaClass();
 
-            if (oj_stringio_class == clas) {
-                s = rb_funcall2(input, oj_string_id, 0, 0);
-                oj_pi_set_input_str(pi, s);
-            } else if (!IS_WINDOWS && rb_cFile == clas && 0 == FIX2INT(rb_funcall(input, oj_pos_id, 0))) {
-                int	fd = FIX2INT(rb_funcall(input, oj_fileno_id, 0));
-                int cnt;
-                int len = lseek(fd, 0, SEEK_END);
-
-                lseek(fd, 0, SEEK_SET);
-                buf = ALLOC_N(char, len + 1);
-                pi.json = buf;
-                pi.end = buf + len;
-                if (0 >= (cnt = read(fd, (char*)pi.json, len)) || cnt != len) {
-                    throw pi.getRuntime().newIOError("failed to read from IO Object.");
-                }
-                ((char*)pi.json)[len] = '\0';
-                /* skip UTF-8 BOM if present */
-                if (0xEF == (uint8_t)*pi.json && 0xBB == (uint8_t)pi.json[1] && 0xBF == (uint8_t)pi.json[2]) {
-                    pi.json += 3;
-                }
-            } else if (rb_respond_to(input, oj_read_id)) {
+            if (runtime.getClass("StringIO") == clas) {
+                input = input.callMethod(context, "string");
+            } else if (!Platform.IS_WINDOWS && runtime.getFile() == clas && 0 == input.callMethod(context, "pos").convertToInteger().getLongValue()) {
+                input = ((RubyFile) input).read(context);
+            } else if (input.respondsTo("read")) {
                 // use stream parser instead
-                return oj_pi_sparse(argc, argv, pi, 0);
+                return oj_pi_sparse(args, pi, 0);
             } else {
-                throw pi.getRuntime().newArgumentError("strict_parse() expected a String or IO Object.");
+                throw runtime.newArgumentError("strict_parse() expected a String or IO Object.");
             }
+
+            if (!(input instanceof RubyString)) {
+                throw runtime.newArgumentError("strict_parse() expected a String or IO Object.");
+            }
+            pi.json = ((RubyString) input).getByteList();
         }
+
         if (Yes == pi.options.circular) {
             pi.circ_array = oj_circ_array_new();
         } else {
