@@ -39,4 +39,9 @@ require 'oj/mimic'
 require 'oj/saj'
 require 'oj/schandler'
 
-require 'oj/oj' # C extension
+if RUBY_ENGINE == 'jruby'
+  require 'oj.jar'
+  oj.OjLibrary.new.load(JRuby.runtime, false)
+else
+  require 'oj/oj'
+end

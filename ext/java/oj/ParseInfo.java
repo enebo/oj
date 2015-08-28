@@ -1,6 +1,7 @@
 package oj;
 
 import java.util.Stack;
+import oj.handlers.AddPICall;
 import oj.handlers.ArrayAppendPICall;
 import oj.handlers.HashSetPICall;
 import oj.handlers.PICall;
@@ -18,11 +19,11 @@ import org.jruby.util.ByteList;
 public class ParseInfo {
     private ThreadContext context;
     public ByteList json;
-    public ByteList cur;
+    public int cur;
     public Stack<Val> stack;
-    public Object proc;
+    public Block proc;
     public IRubyObject undef;
-    private String error = null;
+    public String error = null;
     public Options options;
     public IRubyObject handler;
 
@@ -34,9 +35,12 @@ public class ParseInfo {
     public HashSetPICall hash_set;
     public ArrayAppendPICall array_append;
     public boolean expect_value;
-    public String add_cstr;
-    public String add_num;
-    public String add_value;
+    public AddPICall add;
+
+    public void setJSON(ByteList json) {
+        this.json = json;
+        this.cur = 0;
+    }
 
     public ParseInfo(ThreadContext context) {
         this.context = context;
@@ -46,28 +50,36 @@ public class ParseInfo {
     }
 
     public void appendTo(ByteList buf) {
-        // append all bytes up to current....
+        buf.append(json, 0, cur);
     }
 
-    public char advance(int amount) {
+    public int advance(int amount) {
+        cur += amount;
+        return json.get(cur);
     }
 
-    public char current() {
+    public ByteList subStr(int offset, int length) {
+        return json.makeShared(offset, length);
     }
 
-    public char current(int amount) {
+    public boolean startsWith(ByteList str) {
+        return json.startsWith(str, cur);
+    }
+
+    public int current() {
+        return json.get(cur);
+    }
+
+    public int current(int amount) {
+        return json.get(cur + amount);
     }
 
     public int offset() {
+        return cur;
     }
 
     public int length() {
-    }
-
-    public Val stack_peek() {
-    }
-
-    public void add_value(Object value) {
+        return json.getRealSize();
     }
 
     public void err_init() {

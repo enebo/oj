@@ -3,11 +3,14 @@ package oj;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import oj.handlers.AddPICall;
 import oj.handlers.ArrayAppendPICall;
+import oj.handlers.DispatchAddPICall;
 import oj.handlers.DispatchArrayAppendPICall;
 import oj.handlers.DispatchHashSetPICall;
 import oj.handlers.DispatchPICall;
 import oj.handlers.HashSetPICall;
+import oj.handlers.NoopAddPICall;
 import oj.handlers.NoopArrayAppendPICall;
 import oj.handlers.NoopHashSetPICall;
 import oj.handlers.NoopPICall;
@@ -27,7 +30,7 @@ import org.jruby.platform.Platform;
 import org.jruby.runtime.Block;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
-import org.jruby.util.ByteList;>
+import org.jruby.util.ByteList;
 import org.jruby.util.TypeConverter;
 
 import static oj.Options.*;
@@ -52,6 +55,8 @@ public class RubyOj extends RubyModule {
     public HashSetPICall hashSetNoop;
     public ArrayAppendPICall scpArrayAppendDispatch;
     public ArrayAppendPICall arrayAppendNoop;
+    public AddPICall scpAddDispatch;
+    public AddPICall noopAdd;
 
     public RubyOj(Ruby runtime) {
         super(runtime);
@@ -67,6 +72,8 @@ public class RubyOj extends RubyModule {
         hashSetNoop = new NoopHashSetPICall();
         scpArrayAppendDispatch = new DispatchArrayAppendPICall();
         arrayAppendNoop = new NoopArrayAppendPICall();
+        scpAddDispatch = new DispatchAddPICall();
+        noopAdd = new NoopAddPICall();
     }
 
     private static RubyOj resolveOj(IRubyObject self) {
@@ -204,7 +211,8 @@ public class RubyOj extends RubyModule {
                 if (20 < n) {
                     n = 20;
                 }
-                sprintf(copts.float_fmt, "%%0.%dg", n);
+                // FIXME:
+                //sprintf(copts.float_fmt, "%%0.%dg", n);
                 copts.float_prec = (char) n;
             }
         }
@@ -287,6 +295,8 @@ public class RubyOj extends RubyModule {
             }
         }
 
+        // FIXME:
+        /*
         for (o = ynos; 0 != o.attr; o++) {
             if (Qnil != (v = ropts.fastARef(o.sym))) {
                 if (Qtrue == v) {
@@ -294,10 +304,10 @@ public class RubyOj extends RubyModule {
                 } else if (Qfalse == v) {
                     o.attr = No;
                 } else {
-                    throw runtime.newArgumentError("%s must be true or false.", rb_id2name(SYM2ID(o.sym)));
+                    throw runtime.newArgumentError("" + o.sym +  "must be true or false.");
                 }
             }
-        }
+        }*/
         // This is here only for backwards compatibility with the original Oj.
         v = ropts.fastARef(runtime.newSymbol("ascii_only"));
         if (Qtrue == v) {
@@ -309,6 +319,8 @@ public class RubyOj extends RubyModule {
 
     @JRubyMethod(module = true)
     public static IRubyObject mimic_JSON(ThreadContext context, IRubyObject self) {
+        // FIXME:
+        return null;
     }
 
     @JRubyMethod(module = true)
@@ -343,6 +355,8 @@ public class RubyOj extends RubyModule {
                 }
             }
         }
+        // FIXME:
+        /*
         switch (mode) {
             case StrictMode:
                 return oj_strict_parse(args, self);
@@ -354,10 +368,12 @@ public class RubyOj extends RubyModule {
                 break;
         }
         return oj_object_parse(argc, argv, self);
+        */
+        return null;
     }
 
 
-
+ /*
     @JRubyMethod(module = true)
     public static IRubyObject load_file(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         RubyOj oj = resolveOj(self);
@@ -404,17 +420,17 @@ public class RubyOj extends RubyModule {
 
             switch (mode) {
                 case StrictMode:
-                    oj_set_strict_callbacks(pi);
+                    Strict.oj_set_strict_callbacks(pi, oj);
                     return oj_pi_sparse(args, pi, fd);
                 case NullMode:
                 case CompatMode:
-                    oj_set_compat_callbacks(pi);
+                    Compat.oj_set_compat_callbacks(pi, oj);
                     return oj_pi_sparse(args, pi, fd);
                 case ObjectMode:
                 default:
                     break;
             }
-            oj_set_object_callbacks(pi);
+            Object.oj_set_object_callbacks(pi, oj);
 
             return oj_pi_sparse(args, pi, fd);
         } catch (IOException e) {
@@ -425,6 +441,7 @@ public class RubyOj extends RubyModule {
             }
         }
     }
+    */
 
     @JRubyMethod(module = true)
     public static IRubyObject safe_load(ThreadContext context, IRubyObject self, IRubyObject doc, Block block) {
@@ -435,11 +452,12 @@ public class RubyOj extends RubyModule {
         pi.options.auto_define = No;
         pi.options.sym_key = No;
         pi.options.mode = StrictMode;
-        oj_set_strict_callbacks(pi);
+        Strict.oj_set_strict_callbacks(pi, oj);
 
         return Parse.oj_pi_parse(context, new IRubyObject[] { doc }, pi, null, 0, true, block);
     }
 
+    /*
     @JRubyMethod(alias = {"compat_load", "object_load"}, module = true, required = 1, rest = true)
     public static IRubyObject strict_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         RubyOj oj = resolveOj(self);
@@ -447,14 +465,18 @@ public class RubyOj extends RubyModule {
 
         pi.options = oj.default_options;
         pi.handler = context.nil;
-        oj_set_strict_callbacks(pi);
+        Strict.oj_set_strict_callbacks(pi, oj);
 
         if (args[0] instanceof RubyString) {
             return Parse.oj_pi_parse(context, args, pi, null, 0, true, block);
         } else {
             return oj_pi_sparse(args, pi, 0);
         }
-    }
+    }*/
+
+
+// FIXME:
+    /*
 
     @JRubyMethod(module = true)
     public static IRubyObject dump(ThreadContext context, IRubyObject self, IRubyObject[] args) {
@@ -477,7 +499,9 @@ public class RubyOj extends RubyModule {
 
         return oj_encode(context.runtime.newString(out.buf));
     }
+    */
 
+    /*
     @JRubyMethod(module = true, required=2)
     public static IRubyObject to_file(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         RubyOj oj = resolveOj(self);
@@ -491,8 +515,9 @@ public class RubyOj extends RubyModule {
         oj_write_obj_to_file(args[1], args[0].asJavaString(), copts);
 
         return context.nil;
-    }
+    }*/
 
+    /*
     @JRubyMethod(module = true)
     public static IRubyObject to_stream(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         RubyOj oj = resolveOj(self);
@@ -505,7 +530,9 @@ public class RubyOj extends RubyModule {
 
         return context.nil;
     }
-    
+    */
+
+    /*
     @JRubyMethod(module = true)
     public static IRubyObject register_odd(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         RubyOj oj = resolveOj(self);
@@ -531,7 +558,9 @@ public class RubyOj extends RubyModule {
 
         return context.nil;
     }
+    */
 
+    /*
     @JRubyMethod(module = true)
     public static IRubyObject saj_parse(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         Ruby runtime = context.runtime;
@@ -551,6 +580,7 @@ public class RubyOj extends RubyModule {
 
         return context.nil;
     }
+    */
 
     @JRubyMethod(module = true)
     public static IRubyObject sc_parse(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
@@ -562,11 +592,8 @@ public class RubyOj extends RubyModule {
         if (3 == args.length) {
             oj_parse_options(context, args[2], pi.options);
         }
-        if (block.isGiven()) {
-            pi.proc = context.nil;
-        } else {
-            pi.proc = pi.undefValue();
-        }
+
+        pi.proc = block;
         pi.handler = args[0];
 
         pi.start_hash = pi.handler.respondsTo("hash_start") ? oj.startHashDispatch : oj.noopPICall;
@@ -589,14 +616,10 @@ public class RubyOj extends RubyModule {
             pi.expect_value = false;
         }
         if (pi.handler.respondsTo("add_value")) {
-            pi.add_cstr = "add_cstr";
-            pi.add_num = "add_num";
-            pi.add_value = "add_value";
+            pi.add = oj.scpAddDispatch;
             pi.expect_value = true;
         } else {
-            pi.add_cstr = "noop_add_cstr";
-            pi.add_num = "noop_add_num";
-            pi.add_value = "noop_add_value";
+            pi.add = oj.noopAdd;
             pi.expect_value = false;
         }
 
@@ -605,8 +628,10 @@ public class RubyOj extends RubyModule {
         if (input instanceof RubyString) {
             return Parse.oj_pi_parse(context, newArgs, pi, null, 0, true, block);
         } else {
-            return oj_pi_sparse(newArgs, pi, 0);
+            // FIXME:
+//            return oj_pi_sparse(newArgs, pi, 0);
         }
+        return null;
     }
 
     public static ByteList getInput(ThreadContext context, IRubyObject input) {

@@ -17,7 +17,7 @@ public class Val {
     short clen;
 
     NextItem next; // ValNext
-    char		k1;   // first original character in the key
+    int		k1;   // first original character in the key
     char		kalloc;
 
     public Val(IRubyObject val, NextItem next) {
