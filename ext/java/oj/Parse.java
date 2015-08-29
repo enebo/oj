@@ -29,12 +29,13 @@ public class Parse {
 
     static void non_white(ParseInfo pi) {
         while (true) {
-            switch(pi.advance(1)) {
+            switch(pi.current()) {
             case ' ':
             case '\t':
             case '\f':
             case '\n':
             case '\r':
+                pi.advance(1);
                 break;
             default:
                 return;
@@ -102,7 +103,7 @@ public class Parse {
     }
 
     static void read_null(ParseInfo pi) {
-        if ('u' == pi.advance(1) && 'l' == pi.advance(1) && 'l' == pi.advance(1)) {
+        if ('u' == pi.current() && 'l' == pi.advance(1) && 'l' == pi.advance(1)) {
             pi.add.addValue(pi, pi.nilValue());
         } else {
             pi.setError("expected null");
@@ -110,15 +111,16 @@ public class Parse {
     }
     
     static void read_true(ParseInfo pi) {
-        if ('r' == pi.advance(1) && 'u' == pi.advance(1) && 'e' == pi.advance(1)) {
+        if ('r' == pi.current() && 'u' == pi.advance(1) && 'e' == pi.advance(1)) {
             pi.add.addValue(pi, pi.trueValue());
+            pi.advance(1);
         } else {
             pi.setError("expected true");
         }
     }
 
     static void read_false(ParseInfo pi) {
-        if ('a' == pi.advance(1) && 'l' == pi.advance(1) && 's' == pi.advance(1) && 'e' == pi.advance(1)) {
+        if ('a' == pi.current() && 'l' == pi.advance(1) && 's' == pi.advance(1) && 'e' == pi.advance(1)) {
             pi.add.addValue(pi, pi.falseValue());
         } else {
             pi.setError("expected false");
@@ -298,7 +300,6 @@ public class Parse {
             }
         }
         if (null == parent) { // simple add
-            System.out.println("HERE: " + pi.getRuntime().newString(pi.subStr(str, pi.offset() - str)));
             pi.add.addCStr(pi, pi.subStr(str, pi.offset() - str));
         } else {
             switch (parent.next) {

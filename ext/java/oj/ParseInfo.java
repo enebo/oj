@@ -63,6 +63,11 @@ public class ParseInfo {
 
     public int advance(int amount) {
         cur += amount;
+
+        if (cur >= json.getRealSize()) {
+            return 0;
+        }
+
         return json.get(cur);
     }
 
