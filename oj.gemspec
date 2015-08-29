@@ -15,7 +15,12 @@ Gem::Specification.new do |s|
 
   s.files = Dir["{lib,ext,test}/**/*.{rb,h,c}"] + ['LICENSE', 'README.md']
 
-  s.extensions = ["ext/oj/extconf.rb"]
+  if defined? JRUBY_VERSION
+    s.files << "lib/oj.jar"
+    s.platform = "java"
+  else
+    s.extensions = ["ext/oj/extconf.rb"]
+  end
 
   s.require_paths = ["lib", "ext"]
 

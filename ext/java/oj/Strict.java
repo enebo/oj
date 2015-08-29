@@ -5,7 +5,7 @@ package oj;
  */
 public class Strict {
 
-    static void oj_set_strict_callbacks(ParseInfo pi, RubyOj oj) {
+    static void oj_set_strict_callbacks(ParseInfo pi, OjLibrary oj) {
         // FIXME:
         /*
         pi.start_hash = start_hash;

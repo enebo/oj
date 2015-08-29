@@ -4,7 +4,7 @@ package oj;
  * Created by enebo on 8/28/15.
  */
 public class Object {
-    static void oj_set_object_callbacks(ParseInfo pi, RubyOj oj) {
+    static void oj_set_object_callbacks(ParseInfo pi, OjLibrary oj) {
         Strict.oj_set_strict_callbacks(pi, oj);
         /*
         pi->end_hash = end_hash;

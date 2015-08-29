@@ -72,7 +72,7 @@ public class Parse {
     }
 
     static void add_value(ParseInfo pi, IRubyObject rval) {
-        Val parent = pi.stack.peek();
+        Val parent = pi.stack_peek();
 
         if (parent == null) { // simple add
             pi.add.addValue(pi, rval);
@@ -185,7 +185,7 @@ public class Parse {
         ByteList buf = new ByteList();
         int	cnt = pi.offset();  // was cur - start
         int	code;
-        Val parent = pi.stack.peek();
+        Val parent = pi.stack_peek();
 
         if (0 < cnt) {
             pi.appendTo(buf);
@@ -283,7 +283,7 @@ public class Parse {
 
     static void read_str(ParseInfo pi) {
         int str = pi.offset();
-        Val parent = pi.stack.peek();
+        Val parent = pi.stack_peek();
 
         for (; '"' != pi.current(); pi.advance(1)) {
             if (pi.length() <= pi.offset()) {
@@ -298,6 +298,7 @@ public class Parse {
             }
         }
         if (null == parent) { // simple add
+            System.out.println("HERE: " + pi.getRuntime().newString(pi.subStr(str, pi.offset() - str)));
             pi.add.addCStr(pi, pi.subStr(str, pi.offset() - str));
         } else {
             switch (parent.next) {
@@ -334,7 +335,7 @@ public class Parse {
 
     static void read_num(ParseInfo pi) {
         NumInfo	ni = new NumInfo();
-        Val	parent = pi.stack.peek();
+        Val	parent = pi.stack_peek();
         int zero_cnt = 0;
         int start = pi.offset();
 
@@ -468,7 +469,7 @@ public class Parse {
     }
 
     static void hash_end(ParseInfo pi) {
-        Val	hash = pi.stack.peek();
+        Val	hash = pi.stack_peek();
 
         // leave hash on stack until just before
         if (null == hash) {
@@ -483,7 +484,7 @@ public class Parse {
     }
 
     static void comma(ParseInfo pi) {
-        Val	parent = pi.stack.peek();
+        Val	parent = pi.stack_peek();
 
         if (null == parent) {
             pi.setError("unexpected comma");
@@ -497,7 +498,7 @@ public class Parse {
     }
 
     static void colon(ParseInfo pi) {
-        Val	parent = pi.stack.peek();
+        Val	parent = pi.stack_peek();
 
         if (null != parent && HASH_COLON == parent.next) {
             parent.next =  HASH_VALUE;
@@ -511,79 +512,82 @@ public class Parse {
 
         pi.err_init();
         while (true) {
-        non_white(pi);
-        if (!first && '\0' != pi.current()) {
-            pi.setError("unexpected characters after the JSON document");
-        }
-        switch (pi.advance(1)) {
-            case '{':
-                hash_start(pi);
-                break;
-            case '}':
-                hash_end(pi);
-                break;
-            case ':':
-                colon(pi);
-                break;
-            case '[':
-                array_start(pi);
-                break;
-            case ']':
-                array_end(pi);
-                break;
-            case ',':
-                comma(pi);
-                break;
-            case '"':
-                read_str(pi);
-                break;
-            case '+':
-            case '-':
-            case '0':
-            case '1':
-            case '2':
-            case '3':
-            case '4':
-            case '5':
-            case '6':
-            case '7':
-            case '8':
-            case '9':
-            case 'I':
-            case 'N':
-                pi.advance(-1);
-                read_num(pi);
-                break;
-            case 't':
-                read_true(pi);
-                break;
-            case 'f':
-                read_false(pi);
-                break;
-            case 'n':
-                if ('u' == pi.current()) {
-                    read_null(pi);
-                } else {
+            non_white(pi);
+            if (!first && '\0' != pi.current()) {
+                pi.setError("unexpected characters after the JSON document");
+            }
+
+            int c = pi.current();
+            pi.advance(1);
+            switch (c) {
+                case '{':
+                    hash_start(pi);
+                    break;
+                case '}':
+                    hash_end(pi);
+                    break;
+                case ':':
+                    colon(pi);
+                    break;
+                case '[':
+                    array_start(pi);
+                    break;
+                case ']':
+                    array_end(pi);
+                    break;
+                case ',':
+                    comma(pi);
+                    break;
+                case '"':
+                    read_str(pi);
+                    break;
+                case '+':
+                case '-':
+                case '0':
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7':
+                case '8':
+                case '9':
+                case 'I':
+                case 'N':
                     pi.advance(-1);
                     read_num(pi);
-                }
-                break;
-            case '/':
-                skip_comment(pi);
-                break;
-            case '\0':
-                pi.advance(-1);
+                    break;
+                case 't':
+                    read_true(pi);
+                    break;
+                case 'f':
+                    read_false(pi);
+                    break;
+                case 'n':
+                    if ('u' == pi.current()) {
+                        read_null(pi);
+                    } else {
+                        pi.advance(-1);
+                        read_num(pi);
+                    }
+                    break;
+                case '/':
+                    skip_comment(pi);
+                    break;
+                case '\0':
+                    pi.advance(-1);
+                    return;
+                default:
+                    pi.setError("unexpected character");
+                    return;
+            }
+            if (pi.err_has()) {
                 return;
-            default:
-                pi.setError("unexpected character");
-                return;
-        }
-        if (pi.err_has()) {
-            return;
-        }
-        if (pi.stack.isEmpty()) {
-            if (pi.proc.isGiven()) {
-                pi.proc.yield(pi.getContext(), pi.stack.firstElement().val);
+            }
+            if (pi.stack.isEmpty()) {
+                if (pi.proc.isGiven()) {
+                    pi.proc.yield(pi.getContext(), pi.stack.firstElement().val);
 /*                } else {
                     if (HAS_PROC_WITH_BLOCK) {
                         Object[] args= new Object[] { pi.stack.firstElement() };
@@ -592,14 +596,14 @@ public class Parse {
                         throw pi.getRuntime().newNotImplementedError("Calling a Proc with a block not supported in this version. Use func() {|x| } syntax instead.");
                     }
                 }*/
-            } else {
-                first = false;
+                } else {
+                    first = false;
+                }
             }
         }
     }
-}
 
-Object  oj_num_as_value(ParseInfo pi, NumInfo ni) {
+IRubyObject oj_num_as_value(ParseInfo pi, NumInfo ni) {
     IRubyObject rnum;
 
     if (ni.infinity) {
@@ -626,9 +630,9 @@ Object  oj_num_as_value(ParseInfo pi, NumInfo ni) {
         }
     } else { // decimal
 	if (ni.big) {
-        rnum = pi.newBigDecimal(pi.newString(ni.str));
+        rnum = pi.newBigDecimal(pi.getRuntime().newString(ni.str));
 	    if (ni.no_big) {
-            rnum = rnum.callMethod(pi.getRuntime().getCurrentContext(), "to_f");
+            rnum = rnum.callMethod(pi.getContext(), "to_f");
 	    }
 	} else {
 	    double	d = (double)ni.i + (double)ni.num * (1.0 / ni.div);
@@ -655,7 +659,7 @@ Object  oj_num_as_value(ParseInfo pi, NumInfo ni) {
         }
 }
 
-    static Object protect_parse(ParseInfo pip) {
+    static IRubyObject protect_parse(ParseInfo pip) {
         oj_parse2(pip);
 
         return pip.nilValue();
@@ -697,6 +701,7 @@ Object  oj_num_as_value(ParseInfo pi, NumInfo ni) {
             } else if (!Platform.IS_WINDOWS && runtime.getFile() == clas && 0 == input.callMethod(context, "pos").convertToInteger().getLongValue()) {
                 input = ((RubyFile) input).read(context);
             } else if (input.respondsTo("read")) {
+                throw new IllegalArgumentException();
                 // use stream parser instead
                 // FIXME:
                 //return oj_pi_sparse(args, pi, 0);
@@ -718,12 +723,14 @@ Object  oj_num_as_value(ParseInfo pi, NumInfo ni) {
             pi.circ_array = null;
         }*/
 
+        protect_parse(pi);
+
         result = pi.stack.firstElement().val;
         if (!pi.err_has()) {
             // If the stack is not empty then the JSON terminated early.
             Val	v;
 
-            if (null != (v = pi.stack.peek())) {
+            if (null != (v = pi.stack_peek())) {
                 switch (v.next) {
                     case ARRAY_NEW:
                     case ARRAY_ELEMENT:

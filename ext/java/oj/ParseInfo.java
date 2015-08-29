@@ -49,6 +49,14 @@ public class ParseInfo {
         this.undef = new RubyBasicObject(null);
     }
 
+    public Val stack_peek() {
+        if (stack.empty()) {
+            return null;
+        }
+
+        return stack.peek();
+    }
+
     public void appendTo(ByteList buf) {
         buf.append(json, 0, cur);
     }

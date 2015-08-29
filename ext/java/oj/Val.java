@@ -10,7 +10,7 @@ public class Val {
     IRubyObject val;
     ByteList key;
     char[]		karray;//[32];
-    Object key_val;
+    IRubyObject key_val;
     String classname;
     Object oddArgs;
 

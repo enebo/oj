@@ -3,8 +3,15 @@ require 'bundler/gem_tasks'
 require 'rake/extensiontask'
 require 'rake/testtask'
 
-Rake::ExtensionTask.new('oj') do |ext|
-  ext.lib_dir = 'lib/oj'
+if defined? JRUBY_VERSION
+  require 'rake/javaextensiontask'
+  Rake::JavaExtensionTask.new('oj') do |ext|
+    ext.ext_dir = 'ext/java'
+  end
+else
+  Rake::ExtensionTask.new('oj') do |ext|
+    ext.lib_dir = 'lib/oj'
+  end
 end
 
 Rake::TestTask.new(:test) do |test|
@@ -28,3 +35,5 @@ task :test_all => [:compile] do
 end
 
 task :default => :test_all
+
+

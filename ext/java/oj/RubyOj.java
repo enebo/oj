@@ -28,6 +28,7 @@ import org.jruby.anno.JRubyMethod;
 import org.jruby.anno.JRubyModule;
 import org.jruby.platform.Platform;
 import org.jruby.runtime.Block;
+import org.jruby.runtime.ObjectAllocator;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
@@ -42,51 +43,17 @@ import static oj.Options.*;
 public class RubyOj extends RubyModule {
     public static final int MAX_ODD_ARGS = 10;
 
-    // FIXME: This should be internal variable
-    public Options default_options;
-
-    public PICall endArrayDispatch;
-    public PICall endHashDispatch;
-    public PICall startArrayDispatch;
-    public PICall startHashDispatch;
-    public PICall hashKeyDispatch;
-    public PICall noopPICall;
-    public HashSetPICall scpHashSetDispatch;
-    public HashSetPICall hashSetNoop;
-    public ArrayAppendPICall scpArrayAppendDispatch;
-    public ArrayAppendPICall arrayAppendNoop;
-    public AddPICall scpAddDispatch;
-    public AddPICall noopAdd;
-
     public RubyOj(Ruby runtime) {
         super(runtime);
-        
-        default_options = new Options();
-        endHashDispatch = new DispatchPICall("end_hash");
-        endArrayDispatch = new DispatchPICall("end_array");
-        startHashDispatch = new DispatchPICall("start_hash");
-        startArrayDispatch = new DispatchPICall("start_array");
-        hashKeyDispatch = new DispatchPICall("hash_key");
-        noopPICall = new NoopPICall();
-        scpHashSetDispatch = new DispatchHashSetPICall();
-        hashSetNoop = new NoopHashSetPICall();
-        scpArrayAppendDispatch = new DispatchArrayAppendPICall();
-        arrayAppendNoop = new NoopArrayAppendPICall();
-        scpAddDispatch = new DispatchAddPICall();
-        noopAdd = new NoopAddPICall();
     }
 
-    private static RubyOj resolveOj(IRubyObject self) {
-        if (!(self instanceof RubyOj)) {
-            throw self.getRuntime().newArgumentError("self is not an instance of Oj");
-        }
-        
-        return (RubyOj) self;
+    private static OjLibrary resolveOj(IRubyObject self) {
+        return (OjLibrary) self.getInternalVariables().getInternalVariable("_oj");
     }
     
     @JRubyMethod(module = true)
     public static IRubyObject default_options(ThreadContext context, IRubyObject self) {
-        RubyOj oj = resolveOj(self);
+        OjLibrary oj = resolveOj(self);
         Ruby runtime = context.runtime;
         RubyHash opts = RubyHash.newHash(runtime);
         IRubyObject Qtrue = runtime.getTrue();
@@ -170,9 +137,9 @@ public class RubyOj extends RubyModule {
         return opts;
     }
 
-    @JRubyMethod(name = "default_options=")
+    @JRubyMethod(name = "default_options=", module = true)
     public static IRubyObject set_def_opts(ThreadContext context, IRubyObject self, IRubyObject roptsArg) {
-        RubyOj oj = resolveOj(self);
+        OjLibrary oj = resolveOj(self);
 
         if (roptsArg instanceof RubyHash) oj_parse_options(context, roptsArg, oj.default_options);
 
@@ -323,9 +290,9 @@ public class RubyOj extends RubyModule {
         return null;
     }
 
-    @JRubyMethod(module = true)
+    @JRubyMethod(module = true, rest = true)
     public static IRubyObject load(ThreadContext context, IRubyObject self, IRubyObject[] args) {
-        RubyOj oj = resolveOj(self);
+        OjLibrary oj = resolveOj(self);
         Ruby runtime = context.runtime;
         char mode = oj.default_options.mode;
 
@@ -374,9 +341,9 @@ public class RubyOj extends RubyModule {
 
 
  /*
-    @JRubyMethod(module = true)
+    @JRubyMethod(module = true, rest = true)
     public static IRubyObject load_file(ThreadContext context, IRubyObject self, IRubyObject[] args) {
-        RubyOj oj = resolveOj(self);
+        OjLibrary oj = resolveOj(self);
         Ruby runtime = context.runtime;
         char		mode = oj.default_options.mode;
         ParseInfo	pi = new ParseInfo(context);
@@ -445,7 +412,7 @@ public class RubyOj extends RubyModule {
 
     @JRubyMethod(module = true)
     public static IRubyObject safe_load(ThreadContext context, IRubyObject self, IRubyObject doc, Block block) {
-        RubyOj oj = resolveOj(self);
+        OjLibrary oj = resolveOj(self);
         ParseInfo pi = new ParseInfo(context);
 
         pi.options = oj.default_options;
@@ -460,7 +427,7 @@ public class RubyOj extends RubyModule {
     /*
     @JRubyMethod(alias = {"compat_load", "object_load"}, module = true, required = 1, rest = true)
     public static IRubyObject strict_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
-        RubyOj oj = resolveOj(self);
+        OjLibrary oj = resolveOj(self);
         ParseInfo pi = new ParseInfo(context);
 
         pi.options = oj.default_options;
@@ -478,9 +445,9 @@ public class RubyOj extends RubyModule {
 // FIXME:
     /*
 
-    @JRubyMethod(module = true)
+    @JRubyMethod(module = true, rest = true)
     public static IRubyObject dump(ThreadContext context, IRubyObject self, IRubyObject[] args) {
-        RubyOj oj = resolveOj(self);
+        OjLibrary oj = resolveOj(self);
         ByteList		buf = new ByteList();
         Out		out;
         Options	copts = oj.default_options;
@@ -502,9 +469,9 @@ public class RubyOj extends RubyModule {
     */
 
     /*
-    @JRubyMethod(module = true, required=2)
+    @JRubyMethod(module = true, required=2, rest = true)
     public static IRubyObject to_file(ThreadContext context, IRubyObject self, IRubyObject[] args) {
-        RubyOj oj = resolveOj(self);
+        OjLibrary oj = resolveOj(self);
         Options copts = oj.default_options;
 
         if (3 == args.length) {
@@ -518,9 +485,9 @@ public class RubyOj extends RubyModule {
     }*/
 
     /*
-    @JRubyMethod(module = true)
+    @JRubyMethod(module = true, rest = true)
     public static IRubyObject to_stream(ThreadContext context, IRubyObject self, IRubyObject[] args) {
-        RubyOj oj = resolveOj(self);
+        OjLibrary oj = resolveOj(self);
         Options copts = oj.default_options;
 
         if (3 == args.length) {
@@ -533,9 +500,9 @@ public class RubyOj extends RubyModule {
     */
 
     /*
-    @JRubyMethod(module = true)
+    @JRubyMethod(module = true, rest = true)
     public static IRubyObject register_odd(ThreadContext context, IRubyObject self, IRubyObject[] args) {
-        RubyOj oj = resolveOj(self);
+        OjLibrary oj = resolveOj(self);
         if (3 > args.length) {
             throw context.runtime.newArgumentError("incorrect number of arguments.");
         }
@@ -561,7 +528,7 @@ public class RubyOj extends RubyModule {
     */
 
     /*
-    @JRubyMethod(module = true)
+    @JRubyMethod(module = true, rest = true)
     public static IRubyObject saj_parse(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         Ruby runtime = context.runtime;
         ByteList json = null;
@@ -582,9 +549,9 @@ public class RubyOj extends RubyModule {
     }
     */
 
-    @JRubyMethod(module = true)
+    @JRubyMethod(module = true, rest = true)
     public static IRubyObject sc_parse(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
-        RubyOj oj = resolveOj(self);
+        OjLibrary oj = resolveOj(self);
         ParseInfo pi = new ParseInfo(context);
         IRubyObject input = args[1];
 

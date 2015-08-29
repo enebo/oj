@@ -41,7 +41,7 @@ require 'oj/schandler'
 
 if RUBY_ENGINE == 'jruby'
   require 'oj.jar'
-  oj.OjLibrary.new.load(JRuby.runtime, false)
+  Java::oj.OjLibrary.new.load(JRuby.runtime, false)
 else
   require 'oj/oj'
 end
