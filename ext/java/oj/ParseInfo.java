@@ -49,6 +49,14 @@ public class ParseInfo {
         this.undef = new RubyBasicObject(null);
     }
 
+    public IRubyObject stack_head_val() {
+        if (stack.empty()) {
+            return context.nil;
+        }
+
+        return stack.firstElement().val;
+    }
+
     public Val stack_peek() {
         if (stack.empty()) {
             return null;
@@ -80,10 +88,18 @@ public class ParseInfo {
     }
 
     public int current() {
+        if (cur >= json.getRealSize()) {
+            return 0;
+        }
+
         return json.get(cur);
     }
 
     public int current(int amount) {
+        if (cur >= json.getRealSize()) {
+            return 0;
+        }
+
         return json.get(cur + amount);
     }
 

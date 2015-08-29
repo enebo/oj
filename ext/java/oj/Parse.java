@@ -86,7 +86,6 @@ public class Parse {
                 break;
                 case HASH_VALUE:
                     pi.hash_set.setValue(pi, parent, rval);
-                    // FIXME: key is offset in contiguous pointer.  cur < key must be recorded another way
                     parent.next = HASH_COMMA;
                     break;
                 case HASH_NEW:
@@ -104,7 +103,7 @@ public class Parse {
 
     static void read_null(ParseInfo pi) {
         if ('u' == pi.current() && 'l' == pi.advance(1) && 'l' == pi.advance(1)) {
-            pi.add.addValue(pi, pi.nilValue());
+            add_value(pi, pi.nilValue());
         } else {
             pi.setError("expected null");
         }
@@ -112,7 +111,7 @@ public class Parse {
     
     static void read_true(ParseInfo pi) {
         if ('r' == pi.current() && 'u' == pi.advance(1) && 'e' == pi.advance(1)) {
-            pi.add.addValue(pi, pi.trueValue());
+            add_value(pi, pi.trueValue());
             pi.advance(1);
         } else {
             pi.setError("expected true");
@@ -121,7 +120,7 @@ public class Parse {
 
     static void read_false(ParseInfo pi) {
         if ('a' == pi.current() && 'l' == pi.advance(1) && 's' == pi.advance(1) && 'e' == pi.advance(1)) {
-            pi.add.addValue(pi, pi.falseValue());
+            add_value(pi, pi.falseValue());
         } else {
             pi.setError("expected false");
         }
@@ -726,7 +725,7 @@ IRubyObject oj_num_as_value(ParseInfo pi, NumInfo ni) {
 
         protect_parse(pi);
 
-        result = pi.stack.firstElement().val;
+        result = pi.stack_head_val();
         if (!pi.err_has()) {
             // If the stack is not empty then the JSON terminated early.
             Val	v;
