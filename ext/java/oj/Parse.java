@@ -222,6 +222,7 @@ public abstract class Parse {
     void read_null() {
         if ('u' == current() && 'l' == advance(1) && 'l' == advance(1)) {
             add_value(nilValue());
+            advance(1);
         } else {
             setError("expected null");
         }
@@ -239,6 +240,7 @@ public abstract class Parse {
     void read_false() {
         if ('a' == current() && 'l' == advance(1) && 's' == advance(1) && 'e' == advance(1)) {
             add_value(falseValue());
+            advance(1);
         } else {
             setError("expected false");
         }
@@ -706,7 +708,7 @@ public abstract class Parse {
             }
             if (stack.isEmpty()) {
                 if (proc.isGiven()) {
-                    proc.yield(getContext(), stack.firstElement().val);
+                    proc.yield(getContext(), stack_head_val());
 /*                } else {
                     if (HAS_PROC_WITH_BLOCK) {
                         Object[] args= new Object[] { stack.firstElement() };

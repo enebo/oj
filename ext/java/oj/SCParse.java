@@ -78,7 +78,7 @@ public class SCParse extends Parse {
             } else if (!Platform.IS_WINDOWS && runtime.getFile() == clas && 0 == input.callMethod(context, "pos").convertToInteger().getLongValue()) {
                 input = ((RubyFile) input).read(context);
             } else if (input.respondsTo("read")) {
-                throw new IllegalArgumentException();
+                throw runtime.newArgumentError("FIXME: No streaming parser");
                 // use stream parser instead
                 // FIXME:
                 //return oj_pi_sparse(args, pi, 0);

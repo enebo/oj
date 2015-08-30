@@ -139,14 +139,14 @@ public class RubyOj extends RubyModule {
         IRubyObject Qnil = runtime.getNil();
         IRubyObject v;
 
-        if (Qnil != (v = ropts.fastARef(runtime.newSymbol("indent")))) {
+        if (null != (v = ropts.fastARef(runtime.newSymbol("indent")))) {
             if (!(v instanceof RubyFixnum)) {
                 throw runtime.newArgumentError(":indent must be a Fixnum.");
             }
             copts.indent = RubyNumeric.num2int(v);
         }
 
-        if (Qnil != (v = ropts.fastARef(runtime.newSymbol("float_prec")))) {
+        if (null != (v = ropts.fastARef(runtime.newSymbol("float_prec")))) {
             if (!(v instanceof RubyFixnum)) {
                 throw runtime.newArgumentError(":float_precision must be a Fixnum.");
             }
@@ -165,7 +165,7 @@ public class RubyOj extends RubyModule {
             }
         }
 
-        if (Qnil != (v = ropts.fastARef(runtime.newSymbol("sec_prec")))) {
+        if (null != (v = ropts.fastARef(runtime.newSymbol("sec_prec")))) {
             if (!(v instanceof RubyFixnum)) {
                 throw runtime.newArgumentError(":second_precision must be a Fixnum.");
             }
@@ -178,7 +178,7 @@ public class RubyOj extends RubyModule {
             copts.sec_prec = n;
         }
 
-        if (Qnil != (v = ropts.fastARef(runtime.newSymbol("mode")))) {
+        if (null != (v = ropts.fastARef(runtime.newSymbol("mode")))) {
             if (runtime.newSymbol("object") == v) {
                 copts.mode = ObjectMode;
             } else if (runtime.newSymbol("strict") == v) {
@@ -191,7 +191,7 @@ public class RubyOj extends RubyModule {
                 throw runtime.newArgumentError(":mode must be :object, :strict, :compat, or :null.");
             }
         }
-        if (Qnil != (v = ropts.fastARef(runtime.newSymbol("time_format")))) {
+        if (null != (v = ropts.fastARef(runtime.newSymbol("time_format")))) {
             if (runtime.newSymbol("unix") == v) {
                 copts.time_format = UnixTime;
             } else if (runtime.newSymbol("unix_zone") == v) {
@@ -204,7 +204,7 @@ public class RubyOj extends RubyModule {
                 throw runtime.newArgumentError(":time_format must be :unix, :unix_zone, :xmlschema, or :ruby.");
             }
         }
-        if (Qnil != (v = ropts.fastARef(runtime.newSymbol("escape_mode")))) {
+        if (null != (v = ropts.fastARef(runtime.newSymbol("escape_mode")))) {
             if (runtime.newSymbol("newline") == v) {
                 copts.escape_mode = NLEsc;
             } else if (runtime.newSymbol("json") == v) {
@@ -217,7 +217,7 @@ public class RubyOj extends RubyModule {
                 throw runtime.newArgumentError(":encoding must be :newline, :json, :xss_safe, or :ascii.");
             }
         }
-        if (Qnil != (v = ropts.fastARef(runtime.newSymbol("bigdecimal_load")))) {
+        if (null != (v = ropts.fastARef(runtime.newSymbol("bigdecimal_load")))) {
             if (runtime.newSymbol("bigdecimal") == v || Qtrue == v) {
                 copts.bigdec_load = BigDec;
             } else if (runtime.newSymbol("float") == v) {
