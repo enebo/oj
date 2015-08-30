@@ -1,10 +1,6 @@
 package oj;
 
 import java.util.Stack;
-import oj.handlers.AddPICall;
-import oj.handlers.ArrayAppendPICall;
-import oj.handlers.HashSetPICall;
-import oj.handlers.PICall;
 import org.jruby.Ruby;
 import org.jruby.RubyBasicObject;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;
@@ -26,16 +22,6 @@ public class ParseInfo {
     public String error = null;
     public Options options;
     public IRubyObject handler;
-
-    public PICall start_hash;
-    public PICall end_hash;
-    public PICall start_array;
-    public PICall hash_key;
-    public PICall end_array;
-    public HashSetPICall hash_set;
-    public ArrayAppendPICall array_append;
-    public boolean expect_value;
-    public AddPICall add;
 
     public void setJSON(ByteList json) {
         this.json = json;

@@ -1,41 +1,159 @@
 package oj;
 
+import java.util.Stack;
 import org.jruby.Ruby;
-import org.jruby.RubyBignum;
-import org.jruby.RubyBoolean;
-import org.jruby.RubyFile;
-import org.jruby.RubyFixnum;
-import org.jruby.RubyFloat;
-import org.jruby.RubyModule;
-import org.jruby.RubyNil;
+import org.jruby.RubyBasicObject;
 import org.jruby.RubyString;
-import org.jruby.RubySymbol;
-import org.jruby.platform.Platform;
 import org.jruby.runtime.Block;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
-import org.jruby.util.ConvertBytes;
 
 import static oj.NextItem.*;
 import static oj.Options.*;
 
-public class Parse {
+public abstract class Parse {
 //    static final boolean HAS_PROC_WITH_BLOCK = false;
     static final int DEC_MAX = 15;
     static final int EXP_MAX = 100000;
-    static final double OJ_INFINITY = Double.POSITIVE_INFINITY; // This was div by 0.0 in oj C src
     static final ByteList INFINITY = new ByteList(new byte[] { 'I', 'n', 'f', 'i', 'n', 'i', 't', 'y'});
 
-    static void non_white(ParseInfo pi) {
+    protected ThreadContext context;
+    public ByteList json;
+    public int cur;
+    public Stack<Val> stack;
+    public Block proc;
+    public IRubyObject undef;
+    public String error = null;
+    public Options options;
+    public IRubyObject handler;
+
+    public Parse(ThreadContext context, Options options, IRubyObject handler) {
+        this.context = context;
+        this.stack = new Stack<Val>();
+        this.proc = null;
+        // FIXME: This should only get made once per runtime not per parse
+        this.undef = new RubyBasicObject(null);
+        this.options = options;
+        this.handler = handler;
+    }
+
+    public void setJSON(ByteList json) {
+        this.json = json;
+        this.cur = 0;
+    }
+
+    public IRubyObject stack_head_val() {
+        if (stack.empty()) {
+            return context.nil;
+        }
+
+        return stack.firstElement().val;
+    }
+
+    public Val stack_peek() {
+        if (stack.empty()) {
+            return null;
+        }
+
+        return stack.peek();
+    }
+
+    public void appendTo(ByteList buf) {
+        buf.append(json, 0, cur);
+    }
+
+    public int advance(int amount) {
+        cur += amount;
+
+        if (cur >= json.getRealSize()) {
+            return 0;
+        }
+
+        return json.get(cur);
+    }
+
+    public ByteList subStr(int offset, int length) {
+        return json.makeShared(offset, length);
+    }
+
+    public boolean startsWith(ByteList str) {
+        return json.startsWith(str, cur);
+    }
+
+    public int current() {
+        if (cur >= json.getRealSize()) {
+            return 0;
+        }
+
+        return json.get(cur);
+    }
+
+    public int current(int amount) {
+        if (cur >= json.getRealSize()) {
+            return 0;
+        }
+
+        return json.get(cur + amount);
+    }
+
+    public int offset() {
+        return cur;
+    }
+
+    public int length() {
+        return json.getRealSize();
+    }
+
+    public void err_init() {
+        error = null;
+    }
+
+    public boolean err_has() {
+        return error != null;
+    }
+
+    public void setError(String error) {
+        this.error = error;
+    }
+
+    public IRubyObject nilValue() {
+        return context.runtime.getNil();
+    }
+
+    public IRubyObject trueValue() {
+        return context.runtime.getTrue();
+    }
+
+    public IRubyObject falseValue() {
+        return context.runtime.getFalse();
+    }
+
+    public IRubyObject undefValue() {
+        return undef;
+    }
+
+    public IRubyObject newString(Object stringValue) {
+        return null;
+    }
+
+    public ThreadContext getContext() {
+        return context;
+    }
+
+    public Ruby getRuntime() {
+        return context.runtime;
+    }
+
+    void non_white() {
         while (true) {
-            switch(pi.current()) {
+            switch(current()) {
             case ' ':
             case '\t':
             case '\f':
             case '\n':
             case '\r':
-                pi.advance(1);
+                advance(1);
                 break;
             default:
                 return;
@@ -43,21 +161,21 @@ public class Parse {
         }
     }
 
-    static void skip_comment(ParseInfo pi) {
-        if ('*' == pi.current()) {
-            pi.advance(1);
-            for (; pi.offset() < pi.length(); pi.advance(1)) {
-                if ('*' == pi.current() && '/' == pi.current(1)) {
-                    pi.advance(2);
+    void skip_comment() {
+        if ('*' == current()) {
+            advance(1);
+            for (; offset() < length(); advance(1)) {
+                if ('*' == current() && '/' == current(1)) {
+                    advance(2);
                     return;
-                } else if (pi.length() <= pi.offset()) {
-                    pi.setError("comment not terminated");
+                } else if (length() <= offset()) {
+                    setError("comment not terminated");
                     return;
                 }
             }
-        } else if ('/' == pi.current()) {
-            for (; true; pi.advance(1)) {
-                switch (pi.current()) {
+        } else if ('/' == current()) {
+            for (; true; advance(1)) {
+                switch (current()) {
                 case '\n':
                 case '\r':
                 case '\f':
@@ -68,24 +186,24 @@ public class Parse {
                 }
             }
         } else {
-            pi.setError("invalid comment format");
+            setError("invalid comment format");
         }
     }
 
-    static void add_value(ParseInfo pi, IRubyObject rval) {
-        Val parent = pi.stack_peek();
+    void add_value(IRubyObject rval) {
+        Val parent = stack_peek();
 
         if (parent == null) { // simple add
-            pi.add.addValue(pi, rval);
+            addValue(rval);
         } else {
             switch (parent.next) {
             case ARRAY_NEW:
             case ARRAY_ELEMENT:
-                pi.array_append.appendValue(pi, rval);
+                appendValue(rval);
                 parent.next = ARRAY_COMMA;
                 break;
                 case HASH_VALUE:
-                    pi.hash_set.setValue(pi, parent, rval);
+                    setValue(parent, rval);
                     parent.next = HASH_COMMA;
                     break;
                 case HASH_NEW:
@@ -95,43 +213,43 @@ public class Parse {
                 case ARRAY_COMMA:
                 case HASH_COLON:
                 default:
-                    pi.setError("expected " + parent.next);
+                    setError("expected " + parent.next);
                     break;
             }
         }
     }
 
-    static void read_null(ParseInfo pi) {
-        if ('u' == pi.current() && 'l' == pi.advance(1) && 'l' == pi.advance(1)) {
-            add_value(pi, pi.nilValue());
+    void read_null() {
+        if ('u' == current() && 'l' == advance(1) && 'l' == advance(1)) {
+            add_value(nilValue());
         } else {
-            pi.setError("expected null");
+            setError("expected null");
         }
     }
     
-    static void read_true(ParseInfo pi) {
-        if ('r' == pi.current() && 'u' == pi.advance(1) && 'e' == pi.advance(1)) {
-            add_value(pi, pi.trueValue());
-            pi.advance(1);
+    void read_true() {
+        if ('r' == current() && 'u' == advance(1) && 'e' == advance(1)) {
+            add_value(trueValue());
+            advance(1);
         } else {
-            pi.setError("expected true");
+            setError("expected true");
         }
     }
 
-    static void read_false(ParseInfo pi) {
-        if ('a' == pi.current() && 'l' == pi.advance(1) && 's' == pi.advance(1) && 'e' == pi.advance(1)) {
-            add_value(pi, pi.falseValue());
+    void read_false() {
+        if ('a' == current() && 'l' == advance(1) && 's' == advance(1) && 'e' == advance(1)) {
+            add_value(falseValue());
         } else {
-            pi.setError("expected false");
+            setError("expected false");
         }
     }
 
     // FIXME: Uses String.  Should get swapped to bytelist eventually or byte[]
-    static int read_hex(ParseInfo pi) {
+    int read_hex() {
         int	b = 0;
 
         for (int i = 0; i < 4; i++) {
-            int h = pi.current(i);
+            int h = current(i);
             b = b << 4;
             if ('0' <= h && h <= '9') {
                 b += h - '0';
@@ -140,14 +258,14 @@ public class Parse {
             } else if ('a' <= h && h <= 'f') {
                 b += h - 'a' + 10;
             } else {
-                pi.setError("invalid hex character");
+                setError("invalid hex character");
                 return 0;
             }
         }
         return b;
     }
 
-    static void unicode_to_chars(ParseInfo pi, ByteList buf, int code) {
+    void unicode_to_chars(ByteList buf, int code) {
         // FIXME: I think this will not work as written with signed ints (we should use jcodings
         if (0x0000007F >= code) {
             buf.append((char) code);
@@ -177,27 +295,27 @@ public class Parse {
             buf.append(0x80 | ((code >> 6) & 0x3F));
             buf.append(0x80 | (0x3F & code));
         } else {
-            pi.setError("invalid Unicode character");
+            setError("invalid Unicode character");
         }
     }
 
 // entered at /
-    static void read_escaped_str(ParseInfo pi, int start) {
+    void read_escaped_str(int start) {
         ByteList buf = new ByteList();
-        int	cnt = pi.offset();  // was cur - start
+        int	cnt = offset();  // was cur - start
         int	code;
-        Val parent = pi.stack_peek();
+        Val parent = stack_peek();
 
         if (0 < cnt) {
-            pi.appendTo(buf);
+            appendTo(buf);
         }
 
-        for (int s = pi.current(); '"' != s; s = pi.advance(1)) {
-            if (pi.offset() >= pi.length()) {
-                pi.setError("quoted string not terminated");
+        for (int s = current(); '"' != s; s = advance(1)) {
+            if (offset() >= length()) {
+                setError("quoted string not terminated");
                 return;
             } else if ('\\' == s) {
-                pi.advance(1);
+                advance(1);
                 switch (s) {
                 case 'n':	buf.append('\n');	break;
                 case 'r':	buf.append('\r');	break;
@@ -208,37 +326,37 @@ public class Parse {
                 case '/':	buf.append('/');	break;
                 case '\\':	buf.append('\\');	break;
                 case 'u':
-                    pi.advance(1);
-                    if (0 == (code = read_hex(pi)) && pi.err_has()) {
+                    advance(1);
+                    if (0 == (code = read_hex()) && err_has()) {
                         return;
                     }
-                    pi.advance(3);
+                    advance(3);
                     if (0x0000D800 <= code && code <= 0x0000DFFF) {
                         int	c1 = (code - 0x0000D800) & 0x000003FF;
                         int	c2;
 
-                        pi.advance(1);
-                        if ('\\' != s || 'u' != pi.current(1)) {
-                            pi.advance(-1);
-                            pi.setError("invalid escaped character");
+                        advance(1);
+                        if ('\\' != s || 'u' != current(1)) {
+                            advance(-1);
+                            setError("invalid escaped character");
                             return;
                         }
-                        pi.advance(2);
-                        if (0 == (c2 = read_hex(pi)) && pi.err_has()) {
+                        advance(2);
+                        if (0 == (c2 = read_hex()) && err_has()) {
                             return;
                         }
-                        pi.advance(3);
+                        advance(3);
                         c2 = (c2 - 0x0000DC00) & 0x000003FF;
                         code = ((c1 << 10) | c2) + 0x00010000;
                     }
-                    unicode_to_chars(pi, buf, code);
-                    if (pi.err_has()) {
+                    unicode_to_chars(buf, code);
+                    if (err_has()) {
                         return;
                     }
                     break;
                     default:
-                        pi.advance(-1);
-                        pi.setError("invalid escaped character");
+                        advance(-1);
+                        setError("invalid escaped character");
                         return;
                 }
             } else {
@@ -247,17 +365,17 @@ public class Parse {
         }
 
         if (null == parent) {
-            pi.add.addCStr(pi, buf);
+            addCStr(buf);
         } else {
             switch (parent.next) {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
-                    pi.array_append.appendCStr(pi, buf);
+                    appendCStr(buf);
                     parent.next =  ARRAY_COMMA;
                     break;
                 case HASH_NEW:
                 case HASH_KEY:
-                    if (pi.undefValue() == (parent.key_val = pi.hash_key.call(pi, pi.getRuntime().newString(buf)))) {
+                    if (undefValue() == (parent.key_val = hashKey(getRuntime().newString(buf)))) {
                     parent.key = buf.dup();
                 } else {
                     parent.key = new ByteList();
@@ -266,7 +384,7 @@ public class Parse {
                 parent.next =  HASH_COLON;
                 break;
                 case HASH_VALUE:
-                    pi.hash_set.setCStr(pi, parent, buf);
+                    setCStr(parent, buf);
                     parent.next =  HASH_COMMA;
                     break;
                 case HASH_COMMA:
@@ -274,43 +392,43 @@ public class Parse {
                 case ARRAY_COMMA:
                 case HASH_COLON:
                 default:
-                    pi.setError("expected " + parent.next + ", not a string");
+                    setError("expected " + parent.next + ", not a string");
                     break;
             }
         }
         // Do I advance or is it advanced at this potin
-        //pi.cur = s + 1;
+        //cur = s + 1;
     }
 
-    static void read_str(ParseInfo pi) {
-        int str = pi.offset();
-        Val parent = pi.stack_peek();
+    void read_str() {
+        int str = offset();
+        Val parent = stack_peek();
 
-        for (; '"' != pi.current(); pi.advance(1)) {
-            if (pi.length() <= pi.offset()) {
-                pi.setError("quoted string not terminated");
+        for (; '"' != current(); advance(1)) {
+            if (length() <= offset()) {
+                setError("quoted string not terminated");
                 return;
-            } else if ('\0' == pi.current()) {
-                pi.setError("NULL byte in string");
+            } else if ('\0' == current()) {
+                setError("NULL byte in string");
                 return;
-            } else if ('\\' == pi.current()) {
-                read_escaped_str(pi, str);
+            } else if ('\\' == current()) {
+                read_escaped_str(str);
                 return;
             }
         }
         if (null == parent) { // simple add
-            pi.add.addCStr(pi, pi.subStr(str, pi.offset() - str));
+            addCStr(subStr(str, offset() - str));
         } else {
             switch (parent.next) {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
-                    pi.array_append.appendCStr(pi, pi.subStr(str, pi.offset() - str));
+                    appendCStr(subStr(str, offset() - str));
                     parent.next =  ARRAY_COMMA;
                     break;
                 case HASH_NEW:
                 case HASH_KEY:
-                    if (pi.undefValue() == (parent.key_val = pi.hash_key.call(pi, pi.getRuntime().newString(pi.subStr(str, pi.offset() - str))))) {
-                        parent.key = pi.subStr(str, pi.offset() - str);
+                    if (undefValue() == (parent.key_val = hashKey(getRuntime().newString(subStr(str, offset() - str))))) {
+                        parent.key = subStr(str, offset() - str);
                     } else {
                         parent.key = new ByteList(new byte[] {});
                     }
@@ -318,7 +436,7 @@ public class Parse {
                     parent.next =  HASH_COLON;
                     break;
                 case HASH_VALUE:
-                    pi.hash_set.setCStr(pi, parent, pi.subStr(str, pi.offset() - str));
+                    setCStr(parent, subStr(str, offset() - str));
                     parent.next =  HASH_COMMA;
                     break;
                 case HASH_COMMA:
@@ -326,48 +444,49 @@ public class Parse {
                 case ARRAY_COMMA:
                 case HASH_COLON:
                 default:
-                    pi.setError("expected " + parent.next + ", not a string");
+                    setError("expected " + parent.next + ", not a string");
                     break;
             }
         }
-        pi.advance(1); // move past "
+        advance(1); // move past "
     }
 
-    static void read_num(ParseInfo pi) {
+    void read_num() {
+        // FIXME: Nums cannot be nested in nums so we can share this as single reset instance
         NumInfo	ni = new NumInfo();
-        Val	parent = pi.stack_peek();
+        Val	parent = stack_peek();
         int zero_cnt = 0;
-        int start = pi.offset();
+        int start = offset();
 
-        ni.no_big = (FloatDec == pi.options.bigdec_load);
+        ni.no_big = (FloatDec == options.bigdec_load);
 
-        if ('-' == pi.current()) {
-            pi.advance(1);
+        if ('-' == current()) {
+            advance(1);
             ni.neg = true;
-        } else if ('+' == pi.current()) {
-            pi.advance(1);
+        } else if ('+' == current()) {
+            advance(1);
         }
-        if ('I' == pi.current()) {
-            if (!pi.startsWith(INFINITY)) {
-                pi.setError("not a number or other Object");
+        if ('I' == current()) {
+            if (!startsWith(INFINITY)) {
+                setError("not a number or other Object");
                 return;
             }
-            pi.advance(8);
+            advance(8);
             ni.infinity = true;
-        } else if ('N' == pi.current() || 'n' == pi.current()) {
-            if ('a' != pi.current(1) || ('N' != pi.current(2) && 'n' != pi.current(2))) {
-                pi.setError("not a number or other Object");
+        } else if ('N' == current() || 'n' == current()) {
+            if ('a' != current(1) || ('N' != current(2) && 'n' != current(2))) {
+                setError("not a number or other Object");
                 return;
             }
-            pi.advance(3);
+            advance(3);
             ni.nan = true;
         } else {
-            for (; '0' <= pi.current() && pi.current() <= '9'; pi.advance(1)) {
+            for (; '0' <= current() && current() <= '9'; advance(1)) {
                 ni.dec_cnt++;
                 if (ni.big) {
                     //ni.big++; // What is this for?
                 } else {
-                    int	d = (pi.current() - '0');
+                    int	d = (current() - '0');
 
                     if (0 == d) {
                         zero_cnt++;
@@ -381,10 +500,10 @@ public class Parse {
                     }
                 }
             }
-            if ('.' == pi.current()) {
-                pi.advance(1);
-                for (; '0' <= pi.current() && pi.current() <= '9'; pi.advance(1)) {
-                    int	d = (pi.current() - '0');
+            if ('.' == current()) {
+                advance(1);
+                for (; '0' <= current() && current() <= '9'; advance(1)) {
+                    int	d = (current() - '0');
 
                     if (0 == d) {
                         zero_cnt++;
@@ -400,19 +519,19 @@ public class Parse {
                     }
                 }
             }
-            if ('e' == pi.current() || 'E' == pi.current()) {
+            if ('e' == current() || 'E' == current()) {
                 boolean	eneg = false;
 
                 ni.hasExp = true;
-                pi.advance(1);
-                if ('-' == pi.current()) {
-                    pi.advance(1);
+                advance(1);
+                if ('-' == current()) {
+                    advance(1);
                     eneg = true;
-                } else if ('+' == pi.current()) {
-                    pi.advance(1);
+                } else if ('+' == current()) {
+                    advance(1);
                 }
-                for (; '0' <= pi.current() && pi.current() <= '9'; pi.advance(1)) {
-                    ni.exp = ni.exp * 10 + (pi.current() - '0');
+                for (; '0' <= current() && current() <= '9'; advance(1)) {
+                    ni.exp = ni.exp * 10 + (current() - '0');
                     if (EXP_MAX <= ni.exp) {
                         ni.big = true;
                     }
@@ -422,124 +541,124 @@ public class Parse {
                 }
             }
             ni.dec_cnt -= zero_cnt;
-            ni.str = pi.subStr(start, pi.offset() - start);
+            ni.str = subStr(start, offset() - start);
         }
-        if (BigDec == pi.options.bigdec_load) {
+        if (BigDec == options.bigdec_load) {
             ni.big = true;
         }
         if (null == parent) {
-            pi.add.addNum(pi, ni);
+            addNum(ni);
         } else {
             switch (parent.next) {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
-                    pi.array_append.appendNum(pi, ni);
+                    appendNum(ni);
                     parent.next =  ARRAY_COMMA;
                     break;
                 case HASH_VALUE:
-                    pi.hash_set.setNum(pi, parent, ni);
+                    setNum(parent, ni);
                     parent.next =  HASH_COMMA;
                     break;
                 default:
-                    pi.setError("expected " + parent.next);
+                    setError("expected " + parent.next);
                     break;
             }
         }
     }
 
-    static void array_start(ParseInfo pi) {
-        pi.stack.push(new Val(pi.start_array.call(pi), ARRAY_NEW));
+    void array_start() {
+        stack.push(new Val(startArray(), ARRAY_NEW));
     }
 
-    static void array_end(ParseInfo pi) {
-        Val	array = pi.stack.pop();
+    void array_end() {
+        Val	array = stack.pop();
 
         if (null == array) {
-            pi.setError("unexpected array close");
+            setError("unexpected array close");
         } else if (ARRAY_COMMA != array.next && ARRAY_NEW != array.next) {
-            pi.setError("expected " + array.next + ", not an array close");
+            setError("expected " + array.next + ", not an array close");
         } else {
-            pi.end_array.call(pi);
-            add_value(pi, array.val);
+            endArray();
+            add_value(array.val);
         }
     }
 
-    static void hash_start(ParseInfo pi) {
-        pi.stack.push(new Val(pi.start_hash.call(pi), HASH_NEW));
+    void hash_start() {
+        stack.push(new Val(startHash(), HASH_NEW));
     }
 
-    static void hash_end(ParseInfo pi) {
-        Val	hash = pi.stack_peek();
+    void hash_end() {
+        Val	hash = stack_peek();
 
         // leave hash on stack until just before
         if (null == hash) {
-            pi.setError("unexpected hash close");
+            setError("unexpected hash close");
         } else if (HASH_COMMA != hash.next && HASH_NEW != hash.next) {
-            pi.setError("expected " + hash.next + ", not a hash close");
+            setError("expected " + hash.next + ", not a hash close");
         } else {
-            pi.end_hash.call(pi);
-            pi.stack.pop();
-            add_value(pi, hash.val);
+            endHash();
+            stack.pop();
+            add_value(hash.val);
         }
     }
 
-    static void comma(ParseInfo pi) {
-        Val	parent = pi.stack_peek();
+    void comma() {
+        Val	parent = stack_peek();
 
         if (null == parent) {
-            pi.setError("unexpected comma");
+            setError("unexpected comma");
         } else if (ARRAY_COMMA == parent.next) {
             parent.next =  ARRAY_ELEMENT;
         } else if (HASH_COMMA == parent.next) {
             parent.next =  HASH_KEY;
         } else {
-            pi.setError("unexpected comma");
+            setError("unexpected comma");
         }
     }
 
-    static void colon(ParseInfo pi) {
-        Val	parent = pi.stack_peek();
+    void colon() {
+        Val	parent = stack_peek();
 
         if (null != parent && HASH_COLON == parent.next) {
             parent.next =  HASH_VALUE;
         } else {
-            pi.setError("unexpected colon");
+            setError("unexpected colon");
         }
     }
 
-    static void oj_parse2(ParseInfo pi) {
+    void oj_parse2() {
         boolean first = true;
 
-        pi.err_init();
+        err_init();
         while (true) {
-            non_white(pi);
-            if (!first && '\0' != pi.current()) {
-                pi.setError("unexpected characters after the JSON document");
+            non_white();
+            if (!first && '\0' != current()) {
+                setError("unexpected characters after the JSON document");
             }
 
-            int c = pi.current();
-            pi.advance(1);
+            int c = current();
+            advance(1);
             switch (c) {
                 case '{':
-                    hash_start(pi);
+                    hash_start();
                     break;
                 case '}':
-                    hash_end(pi);
+                    hash_end();
                     break;
                 case ':':
-                    colon(pi);
+                    colon();
                     break;
                 case '[':
-                    array_start(pi);
+                    array_start();
                     break;
                 case ']':
-                    array_end(pi);
+                    array_end();
                     break;
                 case ',':
-                    comma(pi);
+                    comma();
                     break;
                 case '"':
-                    read_str(pi);
+                    read_str();
                     break;
                 case '+':
                 case '-':
@@ -555,45 +674,45 @@ public class Parse {
                 case '9':
                 case 'I':
                 case 'N':
-                    pi.advance(-1);
-                    read_num(pi);
+                    advance(-1);
+                    read_num();
                     break;
                 case 't':
-                    read_true(pi);
+                    read_true();
                     break;
                 case 'f':
-                    read_false(pi);
+                    read_false();
                     break;
                 case 'n':
-                    if ('u' == pi.current()) {
-                        read_null(pi);
+                    if ('u' == current()) {
+                        read_null();
                     } else {
-                        pi.advance(-1);
-                        read_num(pi);
+                        advance(-1);
+                        read_num();
                     }
                     break;
                 case '/':
-                    skip_comment(pi);
+                    skip_comment();
                     break;
                 case '\0':
-                    pi.advance(-1);
+                    advance(-1);
                     return;
                 default:
-                    pi.setError("unexpected character");
+                    setError("unexpected character");
                     return;
             }
-            if (pi.err_has()) {
+            if (err_has()) {
                 return;
             }
-            if (pi.stack.isEmpty()) {
-                if (pi.proc.isGiven()) {
-                    pi.proc.yield(pi.getContext(), pi.stack.firstElement().val);
+            if (stack.isEmpty()) {
+                if (proc.isGiven()) {
+                    proc.yield(getContext(), stack.firstElement().val);
 /*                } else {
                     if (HAS_PROC_WITH_BLOCK) {
-                        Object[] args= new Object[] { pi.stack.firstElement() };
-                        pi.proc.call(args);
+                        Object[] args= new Object[] { stack.firstElement() };
+                        proc.call(args);
                     } else {
-                        throw pi.getRuntime().newNotImplementedError("Calling a Proc with a block not supported in this version. Use func() {|x| } syntax instead.");
+                        throw getRuntime().newNotImplementedError("Calling a Proc with a block not supported in this version. Use func() {|x| } syntax instead.");
                     }
                 }*/
                 } else {
@@ -603,170 +722,82 @@ public class Parse {
         }
     }
 
-IRubyObject oj_num_as_value(ParseInfo pi, NumInfo ni) {
-    IRubyObject rnum;
-
-    if (ni.infinity) {
-	if (ni.neg) {
-	    rnum = pi.newFloat(-OJ_INFINITY);
-	} else {
-	    rnum = pi.newFloat(OJ_INFINITY);
-	}
-    } else if (ni.nan) {
-        rnum = pi.newFloat(Double.NaN);
-    } else if (1 == ni.div && 0 == ni.exp) { // fixnum
-        if (ni.big) {
-            if (256 > ni.len) {
-                rnum = ConvertBytes.byteListToInum19(pi.getRuntime(), ni.str, 10, true);
-            } else {
-                rnum = ConvertBytes.byteListToInum19(pi.getRuntime(), ni.str, 10, true);
-            }
-        } else {
-            if (ni.neg) {
-                rnum = RubyBignum.bignorm(pi.getRuntime(), RubyBignum.long2big(-ni.i));
-            } else {
-                rnum = RubyBignum.bignorm(pi.getRuntime(), RubyBignum.long2big(ni.i));
-            }
-        }
-    } else { // decimal
-	if (ni.big) {
-        rnum = pi.newBigDecimal(pi.getRuntime().newString(ni.str));
-	    if (ni.no_big) {
-            rnum = rnum.callMethod(pi.getContext(), "to_f");
-	    }
-	} else {
-	    double	d = (double)ni.i + (double)ni.num * (1.0 / ni.div);
-
-	    if (ni.neg) {
-            d = -d;
-	    }
-	    if (0 != ni.exp) {
-            d *= Math.pow(10.0, ni.exp);
-	    }
-	    rnum = pi.newFloat(d);
-	}
-    }
-    return rnum;
-}
-
-    static void oj_set_error_at(ParseInfo pi, Object err_clas, String file, int line, String format, String... data) {
-        if (null == pi.json) {
+    void oj_set_error_at(Object err_clas, String file, int line, String format, String... data) {
+        if (null == json) {
             // FIXME:
-            //oj_err_set(pi.err, err_clas, "%s at line %d, column %d [%s:%d]", msg, pi.rd.line, pi.rd.col, file, line);
+            //oj_err_set(err, err_clas, "%s at line %d, column %d [%s:%d]", msg, rd.line, rd.col, file, line);
         } else {
             // FIXME:
-            //_oj_err_set_with_location(pi.err, err_clas, msg, pi.json, pi.cur - 1, file, line);
+            //_oj_err_set_with_location(err, err_clas, msg, json, cur - 1, file, line);
         }
 }
 
-    static IRubyObject protect_parse(ParseInfo pip) {
-        oj_parse2(pip);
+    IRubyObject protect_parse() {
+        oj_parse2();
 
-        return pip.nilValue();
+        return nilValue();
     }
 
-    static void oj_pi_set_input_str(ParseInfo pi, ByteList input) {
-        pi.json = input;
+    void oj_pi_set_input_str(ByteList input) {
+        json = input;
     }
 
-    static IRubyObject oj_pi_parse(ThreadContext context, IRubyObject[] args, ParseInfo pi, ByteList json, int len, boolean yieldOk, Block block) {
-        Ruby runtime = context.runtime;
-        IRubyObject	input;
-        IRubyObject result;
-        int			line = 0;
-
-        if (args.length < 1) {
-            throw pi.getRuntime().newArgumentError("Wrong number of arguments to parse.");
-        }
-        input = args[0];
-        if (2 == args.length) {
-            RubyOj.oj_parse_options(context, args[1], pi.options);
-        }
-        if (yieldOk && block.isGiven()) {
-            pi.proc = block;
-        } else {
-            pi.proc = Block.NULL_BLOCK;
-        }
-        if (null != json) {
-            pi.json = json;
-        } else if (input instanceof RubyString) {
-            oj_pi_set_input_str(pi, ((RubyString) input).getByteList());
-        } else if (pi.nilValue() == input && Yes == pi.options.nilnil) {
-            return pi.nilValue();
-        } else {
-            RubyModule clas = input.getMetaClass();
-
-            if (runtime.getClass("StringIO") == clas) {
-                input = input.callMethod(context, "string");
-            } else if (!Platform.IS_WINDOWS && runtime.getFile() == clas && 0 == input.callMethod(context, "pos").convertToInteger().getLongValue()) {
-                input = ((RubyFile) input).read(context);
-            } else if (input.respondsTo("read")) {
-                throw new IllegalArgumentException();
-                // use stream parser instead
-                // FIXME:
-                //return oj_pi_sparse(args, pi, 0);
-            } else {
-                throw runtime.newArgumentError("strict_parse() expected a String or IO Object.");
-            }
-
-            if (!(input instanceof RubyString)) {
-                throw runtime.newArgumentError("strict_parse() expected a String or IO Object.");
-            }
-            pi.json = ((RubyString) input).getByteList();
-        }
-
-        // FIXME:
-        /*
-        if (Yes == pi.options.circular) {
-            pi.circ_array = oj_circ_array_new();
-        } else {
-            pi.circ_array = null;
-        }*/
-
-        protect_parse(pi);
-
-        result = pi.stack_head_val();
-        if (!pi.err_has()) {
-            // If the stack is not empty then the JSON terminated early.
-            Val	v;
-
-            if (null != (v = pi.stack_peek())) {
-                switch (v.next) {
-                    case ARRAY_NEW:
-                    case ARRAY_ELEMENT:
-                    case ARRAY_COMMA:
-                        pi.setError("Array not terminated");
-                        break;
-                    case HASH_NEW:
-                    case HASH_KEY:
-                    case HASH_COLON:
-                    case HASH_VALUE:
-                    case HASH_COMMA:
-                        pi.setError("Hash/Object not terminated");
-                        break;
-                    default:
-                        pi.setError("not terminated");
-                }
-            }
-        }
-        // proceed with cleanup
-        if (0 != line) {
-            // FIXME:
-            //rb_jump_tag(line);
-        }
-
-        if (pi.err_has()) {
-            // FIXME: Should be JSon::ParseError but we need mimic for this impld
-            throw context.runtime.newArgumentError(pi.error);
-        }
-
-        if (pi.options.quirks_mode == No) {
-            if (result instanceof RubyNil || result instanceof RubyBoolean || result instanceof RubyFixnum ||
-                    result instanceof RubyFloat || result instanceof RubyModule || result instanceof RubySymbol) {
-                // FIXME: Should be JSon::ParseError but we need mimic for this impld
-                throw context.runtime.newArgumentError("unexpected non-document Object");
-            }
-        }
-        return result;
+    RubyString oj_encode(RubyString str) {
+        // FIXME: Add 1.9 + 1.8 ability to convert to UTF-8
+        return str;
     }
+
+    public abstract IRubyObject parse(IRubyObject[] args, ByteList json, boolean yieldOk, Block block);
+
+    // Equivalent to C-callbacks in C impl.  Look to Parse subclasses for specific overrides.
+    // Java naming conventions used for call back to avoid naming conflicts with the recursive
+    // descent parser method names.
+
+    public void addCStr(ByteList value) {
+    }
+
+    public void appendCStr(ByteList value) {
+    }
+
+    public void setCStr(Val parent, ByteList value) {
+    }
+
+    public void addValue(IRubyObject value) {
+    }
+
+    public void appendValue(IRubyObject value) {
+    }
+
+    public void setValue(Val parent, IRubyObject value) {
+    }
+
+    public void addNum(NumInfo value) {
+    }
+
+    public void appendNum(NumInfo value) {
+    }
+
+    public void setNum(Val parent, NumInfo value) {
+    }
+
+    public IRubyObject endArray() {
+        return context.nil;
+    }
+
+    public IRubyObject startArray() {
+        return context.nil;
+    }
+
+    public IRubyObject endHash() {
+        return context.nil;
+    }
+
+    public IRubyObject startHash() {
+        return context.nil;
+    }
+
+    public IRubyObject hashKey(RubyString key) {
+        return context.nil;
+    }
+
 }

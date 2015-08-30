@@ -1,38 +1,19 @@
 package oj;
 
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import oj.handlers.AddPICall;
-import oj.handlers.ArrayAppendPICall;
-import oj.handlers.DispatchAddPICall;
-import oj.handlers.DispatchArrayAppendPICall;
-import oj.handlers.DispatchHashSetPICall;
-import oj.handlers.DispatchPICall;
-import oj.handlers.HashSetPICall;
-import oj.handlers.NoopAddPICall;
-import oj.handlers.NoopArrayAppendPICall;
-import oj.handlers.NoopHashSetPICall;
-import oj.handlers.NoopPICall;
-import oj.handlers.PICall;
 import org.jruby.Ruby;
-import org.jruby.RubyClass;
 import org.jruby.RubyFile;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyNumeric;
 import org.jruby.RubyString;
-import org.jruby.RubySymbol;
 import org.jruby.anno.JRubyMethod;
 import org.jruby.anno.JRubyModule;
 import org.jruby.platform.Platform;
 import org.jruby.runtime.Block;
-import org.jruby.runtime.ObjectAllocator;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
-import org.jruby.util.TypeConverter;
 
 import static oj.Options.*;
 
@@ -410,6 +391,7 @@ public class RubyOj extends RubyModule {
     }
     */
 
+    /*
     @JRubyMethod(module = true)
     public static IRubyObject safe_load(ThreadContext context, IRubyObject self, IRubyObject doc, Block block) {
         OjLibrary oj = resolveOj(self);
@@ -421,8 +403,10 @@ public class RubyOj extends RubyModule {
         pi.options.mode = StrictMode;
         Strict.oj_set_strict_callbacks(pi, oj);
 
-        return Parse.oj_pi_parse(context, new IRubyObject[] { doc }, pi, null, 0, true, block);
-    }
+        // FIXME:
+        //return Parse.parse(context, new IRubyObject[] { doc }, pi, null, 0, true, block);
+        return null;
+    }*/
 
     /*
     @JRubyMethod(alias = {"compat_load", "object_load"}, module = true, required = 1, rest = true)
@@ -549,51 +533,21 @@ public class RubyOj extends RubyModule {
     }
     */
 
-    @JRubyMethod(module = true, rest = true)
+    @JRubyMethod(module = true, required = 2, rest = true)
     public static IRubyObject sc_parse(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
-        OjLibrary oj = resolveOj(self);
-        ParseInfo pi = new ParseInfo(context);
         IRubyObject input = args[1];
 
-        pi.options = oj.default_options;
+        // FIXME: We should be cloning this I think?
+        Options copts = resolveOj(self).default_options;
         if (3 == args.length) {
-            oj_parse_options(context, args[2], pi.options);
-        }
-
-        pi.proc = block;
-        pi.handler = args[0];
-
-        pi.start_hash = pi.handler.respondsTo("hash_start") ? oj.startHashDispatch : oj.noopPICall;
-        pi.end_hash = pi.handler.respondsTo("hash_end") ? oj.endHashDispatch : oj.noopPICall;
-        pi.hash_key = pi.handler.respondsTo("hash_key") ? oj.hashKeyDispatch : oj.noopPICall;
-        pi.start_array = pi.handler.respondsTo("array_start") ? oj.startArrayDispatch : oj.noopPICall;
-        pi.end_array = pi.handler.respondsTo("array_end") ? oj.endArrayDispatch : oj.noopPICall;
-        if (pi.handler.respondsTo("hash_set")) {
-            pi.hash_set = oj.scpHashSetDispatch;
-            pi.expect_value = true;
-        } else {
-            pi.hash_set = oj.hashSetNoop;
-            pi.expect_value = false;
-        }
-        if (pi.handler.respondsTo("array_append")) {
-            pi.array_append = oj.scpArrayAppendDispatch;
-            pi.expect_value = true;
-        } else {
-            pi.array_append = oj.arrayAppendNoop;
-            pi.expect_value = false;
-        }
-        if (pi.handler.respondsTo("add_value")) {
-            pi.add = oj.scpAddDispatch;
-            pi.expect_value = true;
-        } else {
-            pi.add = oj.noopAdd;
-            pi.expect_value = false;
+            oj_parse_options(context, args[2], copts);
         }
 
         IRubyObject[] newArgs = new IRubyObject[args.length - 1];
         System.arraycopy(args, 1, newArgs, 0, newArgs.length);
         if (input instanceof RubyString) {
-            return Parse.oj_pi_parse(context, newArgs, pi, null, 0, true, block);
+            // FIXME: non-port (re-dicing and rechecking input and args here is double checking some stuff).
+            return new SCParse(context, copts, args[0]).parse(newArgs, null, true, block);
         } else {
             // FIXME:
 //            return oj_pi_sparse(newArgs, pi, 0);
