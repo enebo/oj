@@ -3,7 +3,15 @@ package oj;
 import java.util.Stack;
 import org.jruby.Ruby;
 import org.jruby.RubyBasicObject;
+import org.jruby.RubyBoolean;
+import org.jruby.RubyFile;
+import org.jruby.RubyFixnum;
+import org.jruby.RubyFloat;
+import org.jruby.RubyModule;
+import org.jruby.RubyNil;
 import org.jruby.RubyString;
+import org.jruby.RubySymbol;
+import org.jruby.platform.Platform;
 import org.jruby.runtime.Block;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
@@ -724,7 +732,11 @@ public abstract class Parse {
         }
     }
 
-    void oj_set_error_at(Object err_clas, String file, int line, String format, String... data) {
+    void oj_set_error_at(String format, String... data) {
+        //RubyModule errorClass = getRuntime().getClass("Oj").getClass("ParseError");
+        String file = context.getFile();
+        int line = context.getLine();
+
         if (null == json) {
             // FIXME:
             //oj_err_set(err, err_clas, "%s at line %d, column %d [%s:%d]", msg, rd.line, rd.col, file, line);
@@ -744,12 +756,128 @@ public abstract class Parse {
         json = input;
     }
 
+    IRubyObject calc_hash_key(Val kval) {
+        RubyString rkey;
+
+        if (undefValue() == kval.key_val) {
+            rkey = getRuntime().newString(kval.key);
+        } else {
+            rkey = (RubyString) kval.key_val;
+        }
+
+        rkey = oj_encode(rkey);
+        if (Yes == options.sym_key) {
+            return rkey.intern19(); // I this will still be ok for 1.8 mode.
+        }
+
+        return rkey;
+    }
+
     RubyString oj_encode(RubyString str) {
         // FIXME: Add 1.9 + 1.8 ability to convert to UTF-8
         return str;
     }
 
-    public abstract IRubyObject parse(IRubyObject[] args, ByteList json, boolean yieldOk, Block block);
+    public IRubyObject parse(IRubyObject[] args, ByteList json, boolean yieldOk, Block block) {
+        Ruby runtime = context.runtime;
+        IRubyObject	input;
+        IRubyObject result;
+        int			line = 0;
+
+        if (args.length < 1) {
+            throw getRuntime().newArgumentError("Wrong number of arguments to parse.");
+        }
+        input = args[0];
+        if (2 == args.length) {
+            RubyOj.oj_parse_options(context, args[1], options);
+        }
+        if (yieldOk && block.isGiven()) {
+            proc = block;
+        } else {
+            proc = Block.NULL_BLOCK;
+        }
+        if (null != json) {
+            this.json = json;
+        } else if (input instanceof RubyString) {
+            oj_pi_set_input_str(((RubyString) input).getByteList());
+        } else if (nilValue() == input && Yes == options.nilnil) {
+            return nilValue();
+        } else {
+            RubyModule clas = input.getMetaClass();
+
+            if (runtime.getClass("StringIO") == clas) {
+                input = input.callMethod(context, "string");
+            } else if (!Platform.IS_WINDOWS && runtime.getFile() == clas && 0 == input.callMethod(context, "pos").convertToInteger().getLongValue()) {
+                input = ((RubyFile) input).read(context);
+            } else if (input.respondsTo("read")) {
+                throw runtime.newArgumentError("FIXME: No streaming parser");
+                // use stream parser instead
+                // FIXME:
+                //return oj_pi_sparse(args, pi, 0);
+            } else {
+                throw runtime.newArgumentError("strict_parse() expected a String or IO Object.");
+            }
+
+            if (!(input instanceof RubyString)) {
+                throw runtime.newArgumentError("strict_parse() expected a String or IO Object.");
+            }
+            this.json = ((RubyString) input).getByteList();
+        }
+
+        // FIXME:
+        /*
+        if (Yes == options.circular) {
+            circ_array = oj_circ_array_new();
+        } else {
+            circ_array = null;
+        }*/
+
+        protect_parse();
+
+        result = stack_head_val();
+        if (!err_has()) {
+            // If the stack is not empty then the JSON terminated early.
+            Val	v;
+
+            if (null != (v = stack_peek())) {
+                switch (v.next) {
+                    case ARRAY_NEW:
+                    case ARRAY_ELEMENT:
+                    case ARRAY_COMMA:
+                        setError("Array not terminated");
+                        break;
+                    case HASH_NEW:
+                    case HASH_KEY:
+                    case HASH_COLON:
+                    case HASH_VALUE:
+                    case HASH_COMMA:
+                        setError("Hash/Object not terminated");
+                        break;
+                    default:
+                        setError("not terminated");
+                }
+            }
+        }
+        // proceed with cleanup
+        if (0 != line) {
+            // FIXME:
+            //rb_jump_tag(line);
+        }
+
+        if (err_has()) {
+            // FIXME: Should be JSon::ParseError but we need mimic for this impld
+            throw context.runtime.newArgumentError(error);
+        }
+
+        if (options.quirks_mode == No) {
+            if (result instanceof RubyNil || result instanceof RubyBoolean || result instanceof RubyFixnum ||
+                    result instanceof RubyFloat || result instanceof RubyModule || result instanceof RubySymbol) {
+                // FIXME: Should be JSon::ParseError but we need mimic for this impld
+                throw context.runtime.newArgumentError("unexpected non-document Object");
+            }
+        }
+        return result;
+    }
 
     // Equivalent to C-callbacks in C impl.  Look to Parse subclasses for specific overrides.
     // Java naming conventions used for call back to avoid naming conflicts with the recursive

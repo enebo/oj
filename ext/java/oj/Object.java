@@ -5,7 +5,7 @@ package oj;
  */
 public class Object {
     static void oj_set_object_callbacks(ParseInfo pi, OjLibrary oj) {
-        Strict.oj_set_strict_callbacks(pi, oj);
+        //StrictParse.oj_set_strict_callbacks(pi, oj);
         /*
         pi->end_hash = end_hash;
         pi->start_hash = start_hash;

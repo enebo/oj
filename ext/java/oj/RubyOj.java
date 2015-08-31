@@ -272,7 +272,7 @@ public class RubyOj extends RubyModule {
     }
 
     @JRubyMethod(module = true, rest = true)
-    public static IRubyObject load(ThreadContext context, IRubyObject self, IRubyObject[] args) {
+    public static IRubyObject load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = resolveOj(self);
         Ruby runtime = context.runtime;
         char mode = oj.default_options.mode;
@@ -303,18 +303,18 @@ public class RubyOj extends RubyModule {
                 }
             }
         }
-        // FIXME:
-        /*
         switch (mode) {
             case StrictMode:
-                return oj_strict_parse(args, self);
+                return (new StrictParse(context, oj.default_options)).parse(args, null, true, block);
             case NullMode:
             case CompatMode:
-                return oj_compat_parse(args, self);
+                // FIXME:
+//                return oj_compat_parse(args, self);
             case ObjectMode:
             default:
                 break;
         }
+        /*
         return oj_object_parse(argc, argv, self);
         */
         return null;
@@ -408,22 +408,18 @@ public class RubyOj extends RubyModule {
         return null;
     }*/
 
-    /*
-    @JRubyMethod(alias = {"compat_load", "object_load"}, module = true, required = 1, rest = true)
+    @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject strict_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = resolveOj(self);
         ParseInfo pi = new ParseInfo(context);
 
-        pi.options = oj.default_options;
-        pi.handler = context.nil;
-        Strict.oj_set_strict_callbacks(pi, oj);
-
         if (args[0] instanceof RubyString) {
-            return Parse.oj_pi_parse(context, args, pi, null, 0, true, block);
+            return new StrictParse(context, oj.default_options).parse(args, null, true, block);
         } else {
-            return oj_pi_sparse(args, pi, 0);
+            //return oj_pi_sparse(args, pi, 0);
+            return null;
         }
-    }*/
+    }
 
 
 // FIXME:
