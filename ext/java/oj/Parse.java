@@ -35,6 +35,7 @@ public abstract class Parse {
     public String error = null;
     public Options options;
     public IRubyObject handler;
+    public NumInfo ni;
 
     public Parse(ThreadContext context, Options options, IRubyObject handler) {
         this.context = context;
@@ -44,6 +45,7 @@ public abstract class Parse {
         this.undef = new RubyBasicObject(null);
         this.options = options;
         this.handler = handler;
+        this.ni = new NumInfo(this);
     }
 
     public void setJSON(ByteList json) {
@@ -385,7 +387,7 @@ public abstract class Parse {
                     break;
                 case HASH_NEW:
                 case HASH_KEY:
-                    if (undefValue() == (parent.key_val = hashKey(getRuntime().newString(buf)))) {
+                    if (undefValue() == (parent.key_val = hashKey(buf))) {
                     parent.key = buf.dup();
                 } else {
                     parent.key = new ByteList();
@@ -436,17 +438,18 @@ public abstract class Parse {
                     parent.next =  ARRAY_COMMA;
                     break;
                 case HASH_NEW:
-                case HASH_KEY:
-                    if (undefValue() == (parent.key_val = hashKey(getRuntime().newString(subStr(str, offset() - str))))) {
-                        parent.key = subStr(str, offset() - str);
+                case HASH_KEY: {
+                    if (undefValue() == (parent.key_val = hashKey(str, offset()))) {
+                        parent.key = subStr(str, offset());
                     } else {
-                        parent.key = new ByteList(new byte[] {});
+                        parent.key = new ByteList();
                     }
                     parent.k1 = str;
-                    parent.next =  HASH_COLON;
+                    parent.next = HASH_COLON;
                     break;
+                }
                 case HASH_VALUE:
-                    setCStr(parent, subStr(str, offset() - str));
+                    setCStr(parent, str, offset() - str);
                     parent.next =  HASH_COMMA;
                     break;
                 case HASH_COMMA:
@@ -462,8 +465,6 @@ public abstract class Parse {
     }
 
     void read_num() {
-        // FIXME: Nums cannot be nested in nums so we can share this as single reset instance
-        NumInfo	ni = new NumInfo();
         Val	parent = stack_peek();
         int zero_cnt = 0;
         int start = offset();
@@ -551,7 +552,8 @@ public abstract class Parse {
                 }
             }
             ni.dec_cnt -= zero_cnt;
-            ni.str = subStr(start, offset() - start);
+            ni.str_start = start;
+            ni.str_length = offset() - start;
         }
         if (BigDec == options.bigdec_load) {
             ni.big = true;
@@ -889,6 +891,9 @@ public abstract class Parse {
     public void appendCStr(ByteList value) {
     }
 
+    public void setCStr(Val parent, int start, int length) {
+    }
+
     public void setCStr(Val parent, ByteList value) {
     }
 
@@ -926,7 +931,12 @@ public abstract class Parse {
         return context.nil;
     }
 
-    public IRubyObject hashKey(RubyString key) {
+    // For hash keys which came in with no escape characters.
+    public IRubyObject hashKey(int start, int length) {
+        return context.nil;
+    }
+
+    public IRubyObject hashKey(ByteList key) {
         return context.nil;
     }
 

@@ -7,8 +7,6 @@ import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
-import static oj.Options.Yes;
-
 /**
  * Created by enebo on 8/28/15.
  */
@@ -52,6 +50,11 @@ public class StrictParse extends Parse {
     }
 
     @Override
+    public void setCStr(Val kval, int start, int length) {
+        setCStr(kval, subStr(start, length));
+    }
+
+    @Override
     public void setCStr(Val kval, ByteList value) {
         RubyString rstr = getRuntime().newString(value);
 
@@ -73,7 +76,12 @@ public class StrictParse extends Parse {
     }
 
     @Override
-    public IRubyObject hashKey(RubyString key) {
+    public IRubyObject hashKey(int start, int length) {
+        return context.nil;
+    }
+
+    @Override
+    public IRubyObject hashKey(ByteList key) {
         return context.nil;
     }
 

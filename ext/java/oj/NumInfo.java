@@ -15,7 +15,9 @@ import org.jruby.util.ConvertBytes;
 public class NumInfo {
     static final double OJ_INFINITY = Double.POSITIVE_INFINITY; // This was div by 0.0 in oj C src
 
-    public ByteList str;
+    private Parse parse;
+    public int str_start;
+    public int str_length;
     public boolean infinity = false;
     public boolean neg = false;
     public boolean nan = false;
@@ -28,6 +30,10 @@ public class NumInfo {
     public int len = 0;
     public int dec_cnt = 0;
     public boolean hasExp = false;
+
+    public NumInfo(Parse parse) {
+        this.parse = parse;
+    }
 
 
     // FIXME: This could potentially use an access point which directly consumed a bytelist (although JRuby needs to add one).
@@ -50,9 +56,9 @@ public class NumInfo {
             } else if (1 == div && 0 == exp) { // fixnum
                 if (big) {
                     if (256 > len) {
-                        rnum = ConvertBytes.byteListToInum19(runtime, str, 10, true);
+                        rnum = ConvertBytes.byteListToInum19(runtime, parse.subStr(str_start, str_length), 10, true);
                     } else {
-                        rnum = ConvertBytes.byteListToInum19(runtime, str, 10, true);
+                        rnum = ConvertBytes.byteListToInum19(runtime, parse.subStr(str_start, str_length), 10, true);
                     }
                 } else {
                     if (neg) {
@@ -63,7 +69,7 @@ public class NumInfo {
                 }
         } else { // decimal
             if (big) {
-                    rnum = newBigDecimal(runtime, runtime.newString(str));
+                    rnum = newBigDecimal(runtime, runtime.newString(parse.subStr(str_start, str_length)));
                     if (no_big) {
                         rnum = rnum.callMethod(context, "to_f");
                     }

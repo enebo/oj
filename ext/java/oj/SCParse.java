@@ -1,7 +1,7 @@
 package oj;
 
 
-import org.jruby.RubyString;
+import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
@@ -38,8 +38,8 @@ public class SCParse extends Parse {
     @Override
     public void appendCStr(ByteList value) {
         if (dispatchArrayAppend) {
-            handler.callMethod(context, "array_append",
-                    new IRubyObject[] {stack_head_val(), oj_encode(getRuntime().newString(value)) });
+            Helpers.invoke(context, handler, "array_append",
+                    stack_head_val(), oj_encode(getRuntime().newString(value)));
         }
     }
 
@@ -47,84 +47,95 @@ public class SCParse extends Parse {
     public void appendNum(NumInfo ni) {
         if (dispatchArrayAppend) {
             IRubyObject value = ni.toNumber(context);
-            handler.callMethod(context, "array_append", new IRubyObject[] {stack_head_val(), value});
+            Helpers.invoke(context, handler, "array_append", stack_head_val(), value);
         }
     }
 
     @Override
     public void appendValue(IRubyObject value) {
         if (dispatchArrayAppend) {
-            handler.callMethod(context, "array_append", new IRubyObject[] {stack_head_val(), value});
+            Helpers.invoke(context, handler, "array_append", stack_head_val(), value);
         }
     }
 
     @Override
     public void addCStr(ByteList value) {
         if (dispatchValueAdd) {
-            handler.callMethod(context, "add_value", oj_encode(getRuntime().newString(value)));
+            Helpers.invoke(context, handler, "add_value", oj_encode(getRuntime().newString(value)));
         }
     }
 
     @Override
     public void addNum(NumInfo ni) {
         if (dispatchValueAdd) {
-            handler.callMethod(context, "add_value", ni.toNumber(context));
+            Helpers.invoke(context, handler, "add_value", ni.toNumber(context));
         }
     }
 
     @Override
     public void addValue(IRubyObject value) {
         if (dispatchValueAdd) {
-            handler.callMethod(context, "add_value", value);
+            Helpers.invoke(context, handler, "add_value", value);
+        }
+    }
+
+    public void setCStr(Val parent, int start, int length) {
+        if (dispatchHashSet) {
+            setCStr(parent, subStr(start, length));
         }
     }
 
     @Override
     public void setCStr(Val kval, ByteList value) {
         if (dispatchHashSet) {
-            handler.callMethod(context, "hash_set",
-                    new IRubyObject[] { stack_head_val(), calc_hash_key(kval), oj_encode(getRuntime().newString(value)) });
+            Helpers.invoke(context, handler, "hash_set",
+                    stack_head_val(), calc_hash_key(kval), oj_encode(getRuntime().newString(value)));
         }
     }
 
     @Override
     public void setNum(Val kval, NumInfo ni) {
         if (dispatchHashSet) {
-            handler.callMethod(context, "hash_set",
-                    new IRubyObject[] { stack_head_val(), calc_hash_key(kval), ni.toNumber(context) });
+            Helpers.invoke(context, handler, "hash_set",
+                    stack_head_val(), calc_hash_key(kval), ni.toNumber(context));
         }
     }
 
     @Override
     public void setValue(Val kval, IRubyObject value) {
         if (dispatchHashSet) {
-            handler.callMethod(context, "hash_set",
-                    new IRubyObject[] { stack_head_val(), calc_hash_key(kval), value });
+            Helpers.invoke(context, handler, "hash_set",
+                     stack_head_val(), calc_hash_key(kval), value);
         }
     }
 
     @Override
-    public IRubyObject hashKey(RubyString key) {
-        return dispatchHashKey ? handler.callMethod(context, "hash_key", key) : context.nil;
+    public IRubyObject hashKey(int start, int length) {
+        return dispatchHashKey ? hashKey(subStr(start, length)) : context.nil;
+    }
+
+    @Override
+    public IRubyObject hashKey(ByteList key) {
+        return dispatchHashKey ? Helpers.invoke(context, handler, "hash_key", getRuntime().newString(key)) : context.nil;
     }
 
     @Override
     public IRubyObject endArray() {
-        return dispatchEndArray ? handler.callMethod(context, "array_end") : context.nil;
+        return dispatchEndArray ? Helpers.invoke(context, handler, "array_end") : context.nil;
     }
 
     @Override
     public IRubyObject startArray() {
-        return dispatchStartArray ? handler.callMethod(context, "array_start") : context.nil;
+        return dispatchStartArray ? Helpers.invoke(context, handler, "array_start") : context.nil;
     }
 
     @Override
     public IRubyObject endHash() {
-        return dispatchEndHash ? handler.callMethod(context, "hash_end") : context.nil;
+        return dispatchEndHash ? Helpers.invoke(context, handler, "hash_end") : context.nil;
     }
 
     @Override
     public IRubyObject startHash() {
-        return dispatchStartHash ? handler.callMethod(context, "hash_start") : context.nil;
+        return dispatchStartHash ? Helpers.invoke(context, handler, "hash_start") : context.nil;
     }
 }
