@@ -14,9 +14,11 @@ import org.jruby.RubyString;
 import org.jruby.RubySymbol;
 import org.jruby.platform.Platform;
 import org.jruby.runtime.Block;
+import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
+import org.jruby.util.TypeConverter;
 
 import static oj.NextItem.*;
 import static oj.Options.*;
@@ -127,8 +129,7 @@ public abstract class Parse {
     }
 
     public void setError(String error) {
-        throw new IllegalArgumentException(error);
-        //this.error = error;
+        this.error = error;
     }
 
     public IRubyObject nilValue() {
@@ -444,7 +445,7 @@ public abstract class Parse {
                     break;
                 case HASH_NEW:
                 case HASH_KEY: {
-                    if (undefValue() == (parent.key_val = hashKey(str, currentOffset))) {
+                    if (undefValue() == (parent.key_val = hashKey(str, currentOffset - str))) {
                         parent.key = subStr(str, currentOffset - str);
                     } else {
                         parent.key = new ByteList();
@@ -469,6 +470,7 @@ public abstract class Parse {
     }
 
     void read_num() {
+        ni.reset();
         Val	parent = stack_peek();
         int zero_cnt = 0;
         int start = currentOffset;
@@ -763,23 +765,28 @@ public abstract class Parse {
     }
 
     IRubyObject calc_hash_key(Val kval) {
-        RubyString rkey;
+        IRubyObject rkey;
 
         if (undefValue() == kval.key_val) {
             rkey = getRuntime().newString(kval.key);
         } else {
-            rkey = (RubyString) kval.key_val;
+            rkey = kval.key_val;
         }
 
         rkey = oj_encode(rkey);
         if (Yes == options.sym_key) {
-            return rkey.intern19(); // I this will still be ok for 1.8 mode.
+            // FIXME: JRuby has no symbol converter and I doubt this is 100% correct.
+            if (rkey instanceof RubyString) {
+                ((RubyString) rkey).intern19(); // I this will still be ok for 1.8 mode on 1.7.x.
+            } else if (!(rkey instanceof RubySymbol) && rkey.respondsTo("to_sym")) {
+                return Helpers.invoke(context, rkey, "to_sym");
+            }
         }
 
         return rkey;
     }
 
-    RubyString oj_encode(RubyString str) {
+    IRubyObject oj_encode(IRubyObject str) {
         // FIXME: Add 1.9 + 1.8 ability to convert to UTF-8
         return str;
     }

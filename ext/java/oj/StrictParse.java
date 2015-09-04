@@ -2,7 +2,6 @@ package oj;
 
 import org.jruby.RubyArray;
 import org.jruby.RubyHash;
-import org.jruby.RubyString;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
@@ -60,9 +59,8 @@ public class StrictParse extends Parse {
 
     @Override
     public void setCStr(Val kval, ByteList value) {
-        RubyString rstr = getRuntime().newString(value);
+        IRubyObject rstr = oj_encode(getRuntime().newString(value));
 
-        rstr = oj_encode(rstr);
         ((RubyHash) stack_peek().val).fastASet(calc_hash_key(kval), rstr);
     }
 

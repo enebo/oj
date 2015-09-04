@@ -26,7 +26,7 @@ public class CompatParse extends StrictParse {
         if (undef == rkey && options.create_id != null && options.create_id.equals(key)) {
             parent.classname = str.dup();
         } else {
-            RubyString rstr = getRuntime().newString(str);
+            IRubyObject rstr = getRuntime().newString(str);
 
             if (undef == rkey) {
                 rkey = getRuntime().newString(key);

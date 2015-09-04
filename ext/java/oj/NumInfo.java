@@ -35,6 +35,24 @@ public class NumInfo {
         this.parse = parse;
     }
 
+    public void reset() {
+        str_start = 0;
+        str_length = 0;
+        infinity = false;
+        neg = false;
+        nan = false;
+        big = false;
+        no_big = false;
+        exp = 0;
+        div = 1;
+        i = 0;
+        num = 0;
+        len = 0;
+        dec_cnt = 0;
+        hasExp = false;
+
+    }
+
 
     // FIXME: This could potentially use an access point which directly consumed a bytelist (although JRuby needs to add one).
     private IRubyObject newBigDecimal(Ruby runtime, IRubyObject string) {
