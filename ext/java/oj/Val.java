@@ -11,8 +11,8 @@ public class Val {
     ByteList key;
     char[]		karray;//[32];
     IRubyObject key_val;
-    String classname;
-    Object oddArgs;
+    ByteList classname;
+    ObjectParse oddArgs;
 
     short clen;
 

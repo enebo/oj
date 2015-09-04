@@ -22,6 +22,10 @@ public class StrictParse extends Parse {
 
     @Override
     public void appendNum(NumInfo ni) {
+        if (ni.infinity || ni.nan) {
+            oj_set_error_at("not a number or other value");
+        }
+
         ((RubyArray) stack_peek().val).append(ni.toNumber(context));
     }
 
@@ -97,6 +101,7 @@ public class StrictParse extends Parse {
 
     @Override
     public IRubyObject endHash() {
+
         return context.nil;
     }
 

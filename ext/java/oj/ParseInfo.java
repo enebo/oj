@@ -137,7 +137,7 @@ public class ParseInfo {
         return RubyBigDecimal.newBigDecimal(context.runtime.getBasicObject(), new IRubyObject[]{string}, Block.NULL_BLOCK);
     }
 
-    public IRubyObject newString(Object stringValue) {
+    public IRubyObject newString(ObjectParse stringValue) {
         return null;
     }
 

@@ -1,5 +1,6 @@
 package oj;
 
+import java.io.InputStream;
 import java.util.Stack;
 import org.jruby.Ruby;
 import org.jruby.RubyBasicObject;
@@ -28,7 +29,8 @@ public abstract class Parse {
 
     protected ThreadContext context;
     public ByteList json;
-    public int cur;
+    public int currentOffset;
+    public int current;
     public Stack<Val> stack;
     public Block proc;
     public IRubyObject undef;
@@ -46,11 +48,12 @@ public abstract class Parse {
         this.options = options;
         this.handler = handler;
         this.ni = new NumInfo(this);
+        this.currentOffset = 0;
     }
 
     public void setJSON(ByteList json) {
         this.json = json;
-        this.cur = 0;
+        this.currentOffset = 0;
     }
 
     public IRubyObject stack_head_val() {
@@ -70,17 +73,29 @@ public abstract class Parse {
     }
 
     public void appendTo(ByteList buf) {
-        buf.append(json, 0, cur);
+        buf.append(json, 0, currentOffset);
     }
 
-    public int advance(int amount) {
-        cur += amount;
+    public int advance() {
+        currentOffset += 1;
 
-        if (cur >= json.getRealSize()) {
-            return 0;
+        if (currentOffset >= json.getRealSize()) {
+            current = 0;
+        } else {
+            current = json.get(currentOffset);
         }
+        return current;
+    }
+    
+    public int advance(int amount) {
+        currentOffset += amount;
 
-        return json.get(cur);
+        if (currentOffset >= json.getRealSize()) {
+            current = 0;
+        } else {
+            current = json.get(currentOffset);
+        }
+        return current;
     }
 
     public ByteList subStr(int offset, int length) {
@@ -88,27 +103,15 @@ public abstract class Parse {
     }
 
     public boolean startsWith(ByteList str) {
-        return json.startsWith(str, cur);
+        return json.startsWith(str, currentOffset);
     }
 
-    public int current() {
-        if (cur >= json.getRealSize()) {
+    public int peek(int amount) {
+        if (currentOffset >= json.getRealSize()) {
             return 0;
         }
 
-        return json.get(cur);
-    }
-
-    public int current(int amount) {
-        if (cur >= json.getRealSize()) {
-            return 0;
-        }
-
-        return json.get(cur + amount);
-    }
-
-    public int offset() {
-        return cur;
+        return json.get(currentOffset + amount);
     }
 
     public int length() {
@@ -124,7 +127,8 @@ public abstract class Parse {
     }
 
     public void setError(String error) {
-        this.error = error;
+        throw new IllegalArgumentException(error);
+        //this.error = error;
     }
 
     public IRubyObject nilValue() {
@@ -143,7 +147,7 @@ public abstract class Parse {
         return undef;
     }
 
-    public IRubyObject newString(Object stringValue) {
+    public IRubyObject newString(ObjectParse stringValue) {
         return null;
     }
 
@@ -157,13 +161,13 @@ public abstract class Parse {
 
     void non_white() {
         while (true) {
-            switch(current()) {
+            switch(current) {
             case ' ':
             case '\t':
             case '\f':
             case '\n':
             case '\r':
-                advance(1);
+                advance();
                 break;
             default:
                 return;
@@ -172,20 +176,21 @@ public abstract class Parse {
     }
 
     void skip_comment() {
-        if ('*' == current()) {
-            advance(1);
-            for (; offset() < length(); advance(1)) {
-                if ('*' == current() && '/' == current(1)) {
+        if ('*' == current) {
+            advance();
+            int length = length();
+            for (; currentOffset < length; advance()) {
+                if ('*' == current && '/' == peek(1)) {
                     advance(2);
                     return;
-                } else if (length() <= offset()) {
+                } else if (length <= currentOffset) {
                     setError("comment not terminated");
                     return;
                 }
             }
-        } else if ('/' == current()) {
-            for (; true; advance(1)) {
-                switch (current()) {
+        } else if ('/' == current) {
+            for (; true; advance()) {
+                switch (current) {
                 case '\n':
                 case '\r':
                 case '\f':
@@ -230,27 +235,24 @@ public abstract class Parse {
     }
 
     void read_null() {
-        if ('u' == current() && 'l' == advance(1) && 'l' == advance(1)) {
+        if ('u' == advance() && 'l' == advance() && 'l' == advance()) {
             add_value(nilValue());
-            advance(1);
         } else {
             setError("expected null");
         }
     }
     
     void read_true() {
-        if ('r' == current() && 'u' == advance(1) && 'e' == advance(1)) {
+        if ('r' == advance() && 'u' == advance() && 'e' == advance()) {
             add_value(trueValue());
-            advance(1);
         } else {
             setError("expected true");
         }
     }
 
     void read_false() {
-        if ('a' == current() && 'l' == advance(1) && 's' == advance(1) && 'e' == advance(1)) {
+        if ('a' == advance() && 'l' == advance() && 's' == advance() && 'e' == advance()) {
             add_value(falseValue());
-            advance(1);
         } else {
             setError("expected false");
         }
@@ -261,7 +263,7 @@ public abstract class Parse {
         int	b = 0;
 
         for (int i = 0; i < 4; i++) {
-            int h = current(i);
+            int h = peek(i);
             b = b << 4;
             if ('0' <= h && h <= '9') {
                 b += h - '0';
@@ -314,7 +316,7 @@ public abstract class Parse {
 // entered at /
     void read_escaped_str(int start) {
         ByteList buf = new ByteList();
-        int	cnt = offset();  // was cur - start
+        int	cnt = currentOffset;
         int	code;
         Val parent = stack_peek();
 
@@ -322,12 +324,13 @@ public abstract class Parse {
             appendTo(buf);
         }
 
-        for (int s = current(); '"' != s; s = advance(1)) {
-            if (offset() >= length()) {
+        int length = length();
+        for (int s = current; '"' != s; s = advance()) {
+            if (currentOffset >= length) {
                 setError("quoted string not terminated");
                 return;
             } else if ('\\' == s) {
-                advance(1);
+                advance();
                 switch (s) {
                 case 'n':	buf.append('\n');	break;
                 case 'r':	buf.append('\r');	break;
@@ -338,7 +341,7 @@ public abstract class Parse {
                 case '/':	buf.append('/');	break;
                 case '\\':	buf.append('\\');	break;
                 case 'u':
-                    advance(1);
+                    advance();
                     if (0 == (code = read_hex()) && err_has()) {
                         return;
                     }
@@ -347,8 +350,8 @@ public abstract class Parse {
                         int	c1 = (code - 0x0000D800) & 0x000003FF;
                         int	c2;
 
-                        advance(1);
-                        if ('\\' != s || 'u' != current(1)) {
+                        advance();
+                        if ('\\' != s || 'u' != peek(1)) {
                             advance(-1);
                             setError("invalid escaped character");
                             return;
@@ -409,38 +412,40 @@ public abstract class Parse {
             }
         }
         // Do I advance or is it advanced at this potin
-        //cur = s + 1;
+        //currentOffset = s + 1;
     }
 
     void read_str() {
-        int str = offset();
+        advance();
+        int str = currentOffset;
         Val parent = stack_peek();
 
-        for (; '"' != current(); advance(1)) {
-            if (length() <= offset()) {
+        int length = length();
+        for (; '"' != current; advance()) {
+            if (length <= currentOffset) {
                 setError("quoted string not terminated");
                 return;
-            } else if ('\0' == current()) {
+            } else if ('\0' == current) {
                 setError("NULL byte in string");
                 return;
-            } else if ('\\' == current()) {
+            } else if ('\\' == current) {
                 read_escaped_str(str);
                 return;
             }
         }
         if (null == parent) { // simple add
-            addCStr(subStr(str, offset() - str));
+            addCStr(subStr(str, currentOffset - str));
         } else {
             switch (parent.next) {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
-                    appendCStr(subStr(str, offset() - str));
+                    appendCStr(subStr(str, currentOffset - str));
                     parent.next =  ARRAY_COMMA;
                     break;
                 case HASH_NEW:
                 case HASH_KEY: {
-                    if (undefValue() == (parent.key_val = hashKey(str, offset()))) {
-                        parent.key = subStr(str, offset());
+                    if (undefValue() == (parent.key_val = hashKey(str, currentOffset))) {
+                        parent.key = subStr(str, currentOffset - str);
                     } else {
                         parent.key = new ByteList();
                     }
@@ -449,7 +454,7 @@ public abstract class Parse {
                     break;
                 }
                 case HASH_VALUE:
-                    setCStr(parent, str, offset() - str);
+                    setCStr(parent, str, currentOffset - str);
                     parent.next =  HASH_COMMA;
                     break;
                 case HASH_COMMA:
@@ -461,43 +466,42 @@ public abstract class Parse {
                     break;
             }
         }
-        advance(1); // move past "
     }
 
     void read_num() {
         Val	parent = stack_peek();
         int zero_cnt = 0;
-        int start = offset();
+        int start = currentOffset;
 
         ni.no_big = (FloatDec == options.bigdec_load);
 
-        if ('-' == current()) {
-            advance(1);
+        if ('-' == current) {
+            advance();
             ni.neg = true;
-        } else if ('+' == current()) {
-            advance(1);
+        } else if ('+' == current) {
+            advance();
         }
-        if ('I' == current()) {
+        if ('I' == current) {
             if (!startsWith(INFINITY)) {
                 setError("not a number or other Object");
                 return;
             }
             advance(8);
             ni.infinity = true;
-        } else if ('N' == current() || 'n' == current()) {
-            if ('a' != current(1) || ('N' != current(2) && 'n' != current(2))) {
+        } else if ('N' == current || 'n' == current) {
+            if ('a' != peek(1) || ('N' != peek(2) && 'n' != peek(2))) {
                 setError("not a number or other Object");
                 return;
             }
             advance(3);
             ni.nan = true;
         } else {
-            for (; '0' <= current() && current() <= '9'; advance(1)) {
+            for (; '0' <= current && current <= '9'; advance()) {
                 ni.dec_cnt++;
                 if (ni.big) {
                     //ni.big++; // What is this for?
                 } else {
-                    int	d = (current() - '0');
+                    int	d = (current - '0');
 
                     if (0 == d) {
                         zero_cnt++;
@@ -511,10 +515,10 @@ public abstract class Parse {
                     }
                 }
             }
-            if ('.' == current()) {
-                advance(1);
-                for (; '0' <= current() && current() <= '9'; advance(1)) {
-                    int	d = (current() - '0');
+            if ('.' == current) {
+                advance();
+                for (; '0' <= current && current <= '9'; advance()) {
+                    int	d = (current - '0');
 
                     if (0 == d) {
                         zero_cnt++;
@@ -530,19 +534,19 @@ public abstract class Parse {
                     }
                 }
             }
-            if ('e' == current() || 'E' == current()) {
+            if ('e' == current || 'E' == current) {
                 boolean	eneg = false;
 
                 ni.hasExp = true;
-                advance(1);
-                if ('-' == current()) {
-                    advance(1);
+                advance();
+                if ('-' == current) {
+                    advance();
                     eneg = true;
-                } else if ('+' == current()) {
-                    advance(1);
+                } else if ('+' == current) {
+                    advance();
                 }
-                for (; '0' <= current() && current() <= '9'; advance(1)) {
-                    ni.exp = ni.exp * 10 + (current() - '0');
+                for (; '0' <= current && current <= '9'; advance()) {
+                    ni.exp = ni.exp * 10 + (current - '0');
                     if (EXP_MAX <= ni.exp) {
                         ni.big = true;
                     }
@@ -553,8 +557,9 @@ public abstract class Parse {
             }
             ni.dec_cnt -= zero_cnt;
             ni.str_start = start;
-            ni.str_length = offset() - start;
+            ni.str_length = currentOffset - start;
         }
+        advance(-1);
         if (BigDec == options.bigdec_load) {
             ni.big = true;
         }
@@ -642,15 +647,15 @@ public abstract class Parse {
         boolean first = true;
 
         err_init();
-        while (true) {
+        for (advance(0); true; advance()) {
+            //System.out.println("CURBEG: " + (char) current);
             non_white();
-            if (!first && '\0' != current()) {
+
+            if (!first && '\0' != current) {
                 setError("unexpected characters after the JSON document");
             }
 
-            int c = current();
-            advance(1);
-            switch (c) {
+            switch (current) {
                 case '{':
                     hash_start();
                     break;
@@ -686,7 +691,6 @@ public abstract class Parse {
                 case '9':
                 case 'I':
                 case 'N':
-                    advance(-1);
                     read_num();
                     break;
                 case 't':
@@ -696,10 +700,9 @@ public abstract class Parse {
                     read_false();
                     break;
                 case 'n':
-                    if ('u' == current()) {
+                    if ('u' == peek(1)) {
                         read_null();
                     } else {
-                        advance(-1);
                         read_num();
                     }
                     break;
@@ -716,6 +719,7 @@ public abstract class Parse {
             if (err_has()) {
                 return;
             }
+            //System.out.println("CUREND: " + (char) current);
             if (stack.isEmpty()) {
                 if (proc.isGiven()) {
                     proc.yield(getContext(), stack_head_val());
@@ -744,7 +748,7 @@ public abstract class Parse {
             //oj_err_set(err, err_clas, "%s at line %d, column %d [%s:%d]", msg, rd.line, rd.col, file, line);
         } else {
             // FIXME:
-            //_oj_err_set_with_location(err, err_clas, msg, json, cur - 1, file, line);
+            //_oj_err_set_with_location(err, err_clas, msg, json, currentOffset - 1, file, line);
         }
 }
 
@@ -778,6 +782,11 @@ public abstract class Parse {
     RubyString oj_encode(RubyString str) {
         // FIXME: Add 1.9 + 1.8 ability to convert to UTF-8
         return str;
+    }
+
+    // FIXME:
+    public IRubyObject sparse(IRubyObject[] args, InputStream fd, Block block) {
+        return null;
     }
 
     public IRubyObject parse(IRubyObject[] args, ByteList json, boolean yieldOk, Block block) {

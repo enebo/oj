@@ -1,5 +1,8 @@
 package oj;
 
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import org.jruby.Ruby;
 import org.jruby.RubyFile;
 import org.jruby.RubyFixnum;
@@ -16,6 +19,8 @@ import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
 import static oj.Options.*;
+
+// FIXME: I think all default_options need to clone for every parse.
 
 /**
  * Created by enebo on 8/25/15.
@@ -305,42 +310,34 @@ public class RubyOj extends RubyModule {
         }
         switch (mode) {
             case StrictMode:
-                return (new StrictParse(context, oj.default_options)).parse(args, null, true, block);
+                return new StrictParse(context, oj.default_options).parse(args, null, true, block);
             case NullMode:
             case CompatMode:
-                // FIXME:
-//                return oj_compat_parse(args, self);
+                return new CompatParse(context, oj.default_options).parse(args, null, true, block);
             case ObjectMode:
             default:
                 break;
         }
-        /*
-        return oj_object_parse(argc, argv, self);
-        */
-        return null;
+
+        return new ObjectParse(context, oj.default_options).parse(args, null, true, block);
     }
 
 
- /*
     @JRubyMethod(module = true, rest = true)
-    public static IRubyObject load_file(ThreadContext context, IRubyObject self, IRubyObject[] args) {
-        OjLibrary oj = resolveOj(self);
+    public static IRubyObject load_file(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
+        Options options = resolveOj(self).default_options;
         Ruby runtime = context.runtime;
-        char		mode = oj.default_options.mode;
-        ParseInfo	pi = new ParseInfo(context);
 
         if (1 > args.length) {
             throw runtime.newArgumentError("Wrong number of arguments to load().");
         }
 
-        // FIXME: This should be Check_Type equivalent but 1.7 does not have it directly.
         if (!(args[0] instanceof RubyString)) {
             throw runtime.newArgumentError("Expected String");
         }
 
         IRubyObject Qnil = runtime.getNil();
-        pi.options = oj.default_options;
-        pi.handler = Qnil;
+        char mode = options.mode;
 
         if (2 <= args.length) {
             RubyHash	ropts = (RubyHash) args[1];
@@ -360,27 +357,25 @@ public class RubyOj extends RubyModule {
                 }
             }
         }
-        String path = args[0].asJavaString();
 
+        String path = args[0].asJavaString();
         InputStream fd = null;
+
         try {
             fd = new FileInputStream(path);
 
             switch (mode) {
                 case StrictMode:
-                    Strict.oj_set_strict_callbacks(pi, oj);
-                    return oj_pi_sparse(args, pi, fd);
+                    return new StrictParse(context, options).sparse(args, fd, block);
                 case NullMode:
                 case CompatMode:
-                    Compat.oj_set_compat_callbacks(pi, oj);
-                    return oj_pi_sparse(args, pi, fd);
+                    return new CompatParse(context, options).sparse(args, fd, block);
                 case ObjectMode:
                 default:
                     break;
             }
-            Object.oj_set_object_callbacks(pi, oj);
 
-            return oj_pi_sparse(args, pi, fd);
+            return new ObjectParse(context, options).sparse(args, fd, block);
         } catch (IOException e) {
             throw runtime.newIOError(e.getMessage());
         } finally {
@@ -389,36 +384,40 @@ public class RubyOj extends RubyModule {
             }
         }
     }
-    */
 
-    /*
     @JRubyMethod(module = true)
     public static IRubyObject safe_load(ThreadContext context, IRubyObject self, IRubyObject doc, Block block) {
-        OjLibrary oj = resolveOj(self);
-        ParseInfo pi = new ParseInfo(context);
+        Options options = resolveOj(self).default_options;
 
-        pi.options = oj.default_options;
-        pi.options.auto_define = No;
-        pi.options.sym_key = No;
-        pi.options.mode = StrictMode;
-        Strict.oj_set_strict_callbacks(pi, oj);
+        options.auto_define = No;
+        options.sym_key = No;
+        options.mode = StrictMode;
 
-        // FIXME:
-        //return Parse.parse(context, new IRubyObject[] { doc }, pi, null, 0, true, block);
-        return null;
-    }*/
+        // FIXME: can remove boxing if we are making or already know some of these arguments.
+        return new StrictParse(context, options).parse(new IRubyObject[] { doc }, null, true, block);
+    }
 
     @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject strict_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
-        OjLibrary oj = resolveOj(self);
-        ParseInfo pi = new ParseInfo(context);
+        return loadInternal(new StrictParse(context, resolveOj(self).default_options), args, block);
+    }
 
+    @JRubyMethod(module = true, required = 1, rest = true)
+    public static IRubyObject compat_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
+        return loadInternal(new CompatParse(context, resolveOj(self).default_options), args, block);
+    }
+
+    @JRubyMethod(module = true, required = 1, rest = true)
+    public static IRubyObject object_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
+        return loadInternal(new ObjectParse(context, resolveOj(self).default_options), args, block);
+    }
+
+    private static IRubyObject loadInternal(Parse parser, IRubyObject[] args, Block block) {
         if (args[0] instanceof RubyString) {
-            return new StrictParse(context, oj.default_options).parse(args, null, true, block);
-        } else {
-            //return oj_pi_sparse(args, pi, 0);
-            return null;
+            return parser.parse(args, null, true, block);
         }
+
+        return parser.sparse(args, parser.getRuntime().getIn(), block);
     }
 
 
@@ -545,10 +544,8 @@ public class RubyOj extends RubyModule {
             // FIXME: non-port (re-dicing and rechecking input and args here is double checking some stuff).
             return new SCParse(context, copts, args[0]).parse(newArgs, null, true, block);
         } else {
-            // FIXME:
-//            return oj_pi_sparse(newArgs, pi, 0);
+            return new SCParse(context, copts, args[0]).sparse(newArgs, context.runtime.getIn(), block);
         }
-        return null;
     }
 
     public static ByteList getInput(ThreadContext context, IRubyObject input) {
