@@ -111,7 +111,7 @@ public class SCParse extends Parse {
 
     @Override
     public IRubyObject hashKey(int start, int length) {
-        return dispatchHashKey ? hashKey(subStr(start, length)) : context.nil;
+        return dispatchHashKey ? hashKey(subStr(start, length)) : undef;
     }
 
     @Override

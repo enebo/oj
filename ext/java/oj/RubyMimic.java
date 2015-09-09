@@ -4,6 +4,7 @@ import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyClass;
 import org.jruby.RubyGlobal;
+import org.jruby.RubyHash;
 import org.jruby.RubyKernel;
 import org.jruby.RubyModule;
 import org.jruby.RubyObject;
@@ -31,15 +32,15 @@ public class RubyMimic {
 
         RubyModule mimic = runtime.getOrCreateModule("JSON");
         RubyModule ext = mimic.defineOrGetModuleUnder("Ext");
-        IRubyObject dummy = ext.getConstant("Parser");
+        IRubyObject dummy = ext.getConstantNoConstMissing("Parser");
 
         if (dummy == null) {
-            dummy = ext.defineClassUnder("Parser", runtime.getObject(), OBJECT_ALLOCATOR);
+            ext.defineClassUnder("Parser", runtime.getObject(), OBJECT_ALLOCATOR);
         }
 
-        dummy = ext.getConstant("Generator");
+        dummy = ext.getConstantNoConstMissing("Generator");
         if (dummy == null) {
-            dummy = ext.defineClassUnder("Generator", runtime.getObject(), OBJECT_ALLOCATOR);
+            ext.defineClassUnder("Generator", runtime.getObject(), OBJECT_ALLOCATOR);
         }
 
         dummy = runtime.getGlobalVariables().get("$LOADED_FEATURES");
@@ -49,7 +50,7 @@ public class RubyMimic {
 
             ary.append(runtime.newString("json"));
 
-            RubyModule oj = runtime.getClass("Oj");
+            RubyModule oj = runtime.getModule("Oj");
             if (args.length > 0) {
                 Helpers.invoke(context, oj, "mimic_loaded", args[1]);
             } else {
@@ -59,18 +60,20 @@ public class RubyMimic {
 
         runtime.getGlobalVariables().set("$VERBOSE", runtime.getFalse());
 
+        mimic.setInternalVariable("_oj", ojLibrary);
         mimic.defineAnnotatedMethods(RubyMimic.class);
 
-        //rb_define_module_function(rb_cObject, "JSON", mimic_dump_loadThreadContext context, IRubyObject[] args) {}
+
+        //rb_define_module_function(rb_cObject, "JSON", mimic_dump_loadThreadContext context, IRubyObject self, IRubyObject[] args) {}
         //rb_define_method(rb_cObject, "to_json", mimic_object_to_json, -1);
 
 
-        if (mimic.getConstant("ParseError") != null) {
+        if (mimic.getConstantNoConstMissing("ParseError") != null) {
             mimic.remove_const(context, runtime.newSymbol("ParseError"));
         }
         mimic.setConstant("ParseError", ojLibrary.getParseError());
 
-        if (mimic.getConstant("State") == null) {
+        if (mimic.getConstantNoConstMissing("State") == null) {
             mimic.defineClassUnder("State", runtime.getObject(), OBJECT_ALLOCATOR);
         }
 
@@ -81,80 +84,120 @@ public class RubyMimic {
     }
 
     @JRubyMethod(module = true, name = "parser=", rest = true) 
-    public static IRubyObject parser_set(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject parser_set(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
     
     @JRubyMethod(module = true, name = "generator=", rest = true)
-    public static IRubyObject generator_set() {
+    public static IRubyObject generator_set(ThreadContext context, IRubyObject self, IRubyObject IRubyObject) {
         return null;
     }
     
     @JRubyMethod(module = true, name = "create_id=", rest = true)
-    public static IRubyObject create_id_set() {
+    public static IRubyObject create_id_set(ThreadContext context, IRubyObject self, IRubyObject IRubyObject) {
         return null;
     }
 
     @JRubyMethod(module = true, rest = true)
-    public static IRubyObject dump(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject dump(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
 
     @JRubyMethod(module = true, rest = true)
-    public static IRubyObject load(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
+        OjLibrary oj = RubyOj.resolveOj(self);
+        Options options = oj.default_options;
+
+        IRubyObject obj = new CompatParse(context, options).parse(oj, args, null, false, Block.NULL_BLOCK);
+
+        // FIXME: We need to make some common logic to extract explicit proc arg with implicit block.
+        /*
+        if (args.length >= 2) {
+            p = args[1];
+        } else {
+            p = context.nil;
+        }*/
+
+        mimic_walk(context, context.nil, obj, block);
+
+        return obj;
+    }
+    
+    @JRubyMethod(module = true, rest = true)
+    public static IRubyObject restore(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
     @JRubyMethod(module = true, rest = true)
-    public static IRubyObject restore(ThreadContext context, IRubyObject[] args) {
-        return null;
-    }
-    @JRubyMethod(module = true, rest = true)
-    public static IRubyObject recurse_proc(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject recurse_proc(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
 
     @JRubyMethod(module = true, name = "[]", rest = true)
-    public static IRubyObject aref(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject aref(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
 
     @JRubyMethod(module = true, rest = true)
-    public static IRubyObject generate(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject generate(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
 
     @JRubyMethod(module = true, rest = true)
-    public static IRubyObject fast_generate(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject fast_generate(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
 
     @JRubyMethod(module = true, rest = true)
-    public static IRubyObject pretty_generate(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject pretty_generate(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
 
     /* for older versions of JSON, the deprecated unparse methods */
     @JRubyMethod(module = true, rest = true)
-    public static IRubyObject unparse(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject unparse(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
 
     @JRubyMethod(module = true, rest = true)
-    public static IRubyObject fast_unparse(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject fast_unparse(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
     @JRubyMethod(module = true, rest = true)
-    public static IRubyObject pretty_unparse(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject pretty_unparse(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
 
     @JRubyMethod(module = true, rest = true)
-    public static IRubyObject parse(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject parse(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
 
     @JRubyMethod(module = true, name = "parse!", rest = true)
-    public static IRubyObject parse_bang(ThreadContext context, IRubyObject[] args) {
+    public static IRubyObject parse_bang(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return null;
     }
+    
+    private static void mimic_walk(final ThreadContext context, IRubyObject key, IRubyObject obj, final Block proc) {
+        if (obj instanceof RubyHash) {
+            RubyHash hash = (RubyHash) obj;
+            // FIXME: Make inner class instead of anonymous
+            hash.visitAll(new RubyHash.Visitor() {
+                @Override
+                public void visit(IRubyObject hashKey, IRubyObject hashValue) {
+                    mimic_walk(context, hashKey, hashValue, proc);
+                }
+            });
+        } else if (obj instanceof RubyArray) {
+            RubyArray ary = (RubyArray) obj;
+            int cnt = ary.getLength();
+            for (int i = 0; i < cnt; i++) {
+                mimic_walk(context, context.nil, ary.entry(i), proc);
+            }
+        }
+
+        if (proc.isGiven()) {
+            proc.yield(context, obj);
+        }
+    }
+
 }

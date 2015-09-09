@@ -35,7 +35,7 @@ public class StrictParse extends Parse {
 
     @Override
     public void addCStr(ByteList value) {
-        stack_peek().val = oj_encode(getRuntime().newString(value));
+        lastValue = oj_encode(getRuntime().newString(value));
     }
 
     @Override
@@ -44,12 +44,12 @@ public class StrictParse extends Parse {
             oj_set_error_at("not a number or other value");
         }
 
-        stack_peek().val = ni.toNumber(context);
+        lastValue = ni.toNumber(context);
     }
 
     @Override
     public void addValue(IRubyObject value) {
-        stack_peek().val = value;
+        lastValue = value;
     }
 
     @Override
@@ -79,12 +79,12 @@ public class StrictParse extends Parse {
 
     @Override
     public IRubyObject hashKey(int start, int length) {
-        return context.nil;
+        return undef;
     }
 
     @Override
     public IRubyObject hashKey(ByteList key) {
-        return context.nil;
+        return undef;
     }
 
     @Override

@@ -58,7 +58,7 @@ public class CompatParse extends StrictParse {
 
     @Override
     public void addNum(NumInfo ni) {
-        stack_peek().val = ni.toNumber(context);
+        lastValue = ni.toNumber(context);
     }
 
     @Override

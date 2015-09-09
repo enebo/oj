@@ -5,7 +5,6 @@ import java.util.Stack;
 import org.jruby.Ruby;
 import org.jruby.RubyBasicObject;
 import org.jruby.RubyBoolean;
-import org.jruby.RubyException;
 import org.jruby.RubyFile;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyFloat;
@@ -40,6 +39,7 @@ public abstract class Parse {
     public Options options;
     public IRubyObject handler;
     public NumInfo ni;
+    public IRubyObject lastValue; // To work around reusing empty stacks first frame for return value.
 
     public Parse(ThreadContext context, Options options, IRubyObject handler) {
         this.context = context;
@@ -142,10 +142,6 @@ public abstract class Parse {
 
     public IRubyObject falseValue() {
         return context.runtime.getFalse();
-    }
-
-    public IRubyObject undefValue() {
-        return undef;
     }
 
     public IRubyObject newString(ObjectParse stringValue) {
@@ -391,7 +387,7 @@ public abstract class Parse {
                     break;
                 case HASH_NEW:
                 case HASH_KEY:
-                    if (undefValue() == (parent.key_val = hashKey(buf))) {
+                    if (undef == (parent.key_val = hashKey(buf))) {
                     parent.key = buf.dup();
                 } else {
                     parent.key = new ByteList();
@@ -445,7 +441,7 @@ public abstract class Parse {
                     break;
                 case HASH_NEW:
                 case HASH_KEY: {
-                    if (undefValue() == (parent.key_val = hashKey(str, currentOffset - str))) {
+                    if (undef == (parent.key_val = hashKey(str, currentOffset - str))) {
                         parent.key = subStr(str, currentOffset - str);
                     } else {
                         parent.key = new ByteList();
@@ -627,9 +623,9 @@ public abstract class Parse {
         if (null == parent) {
             setError("unexpected comma");
         } else if (ARRAY_COMMA == parent.next) {
-            parent.next =  ARRAY_ELEMENT;
+            parent.next = ARRAY_ELEMENT;
         } else if (HASH_COMMA == parent.next) {
-            parent.next =  HASH_KEY;
+            parent.next = HASH_KEY;
         } else {
             setError("unexpected comma");
         }
@@ -639,7 +635,7 @@ public abstract class Parse {
         Val	parent = stack_peek();
 
         if (null != parent && HASH_COLON == parent.next) {
-            parent.next =  HASH_VALUE;
+            parent.next = HASH_VALUE;
         } else {
             setError("unexpected colon");
         }
@@ -767,7 +763,7 @@ public abstract class Parse {
     IRubyObject calc_hash_key(Val kval) {
         IRubyObject rkey;
 
-        if (undefValue() == kval.key_val) {
+        if (undef == kval.key_val) {
             rkey = getRuntime().newString(kval.key);
         } else {
             rkey = kval.key_val;
@@ -852,7 +848,7 @@ public abstract class Parse {
 
         protect_parse();
 
-        result = stack_head_val();
+        result = lastValue;
         if (!err_has()) {
             // If the stack is not empty then the JSON terminated early.
             Val	v;
@@ -889,8 +885,7 @@ public abstract class Parse {
         if (options.quirks_mode == No) {
             if (result instanceof RubyNil || result instanceof RubyBoolean || result instanceof RubyFixnum ||
                     result instanceof RubyFloat || result instanceof RubyModule || result instanceof RubySymbol) {
-                // FIXME: Should be JSon::ParseError but we need mimic for this impld
-                throw context.runtime.newArgumentError("unexpected non-document Object");
+                throw runtime.newRaiseException(oj.getParseError(), "unexpected non-document Object");
             }
         }
         return result;
@@ -948,11 +943,11 @@ public abstract class Parse {
 
     // For hash keys which came in with no escape characters.
     public IRubyObject hashKey(int start, int length) {
-        return context.nil;
+        return undef;
     }
 
     public IRubyObject hashKey(ByteList key) {
-        return context.nil;
+        return undef;
     }
 
 }
