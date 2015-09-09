@@ -270,10 +270,9 @@ public class RubyOj extends RubyModule {
         }
     }
 
-    @JRubyMethod(module = true)
-    public static IRubyObject mimic_JSON(ThreadContext context, IRubyObject self) {
-        // FIXME:
-        return null;
+    @JRubyMethod(module = true, rest = true)
+    public static IRubyObject mimic_JSON(ThreadContext context, IRubyObject self, IRubyObject[] args) {
+        return RubyMimic.defineMimic(context, resolveOj(self), args);
     }
 
     @JRubyMethod(module = true, rest = true)
@@ -310,16 +309,16 @@ public class RubyOj extends RubyModule {
         }
         switch (mode) {
             case StrictMode:
-                return new StrictParse(context, oj.default_options).parse(args, null, true, block);
+                return new StrictParse(context, oj.default_options).parse(oj, args, null, true, block);
             case NullMode:
             case CompatMode:
-                return new CompatParse(context, oj.default_options).parse(args, null, true, block);
+                return new CompatParse(context, oj.default_options).parse(oj, args, null, true, block);
             case ObjectMode:
             default:
                 break;
         }
 
-        return new ObjectParse(context, oj.default_options).parse(args, null, true, block);
+        return new ObjectParse(context, oj.default_options).parse(oj, args, null, true, block);
     }
 
 
@@ -387,34 +386,41 @@ public class RubyOj extends RubyModule {
 
     @JRubyMethod(module = true)
     public static IRubyObject safe_load(ThreadContext context, IRubyObject self, IRubyObject doc, Block block) {
-        Options options = resolveOj(self).default_options;
+        OjLibrary oj = resolveOj(self);
+        Options options = oj.default_options;
 
         options.auto_define = No;
         options.sym_key = No;
         options.mode = StrictMode;
 
         // FIXME: can remove boxing if we are making or already know some of these arguments.
-        return new StrictParse(context, options).parse(new IRubyObject[] { doc }, null, true, block);
+        return new StrictParse(context, options).parse(oj, new IRubyObject[] { doc }, null, true, block);
     }
 
     @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject strict_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
-        return loadInternal(new StrictParse(context, resolveOj(self).default_options), args, block);
+        OjLibrary oj = resolveOj(self);
+
+        return loadInternal(oj, new StrictParse(context, resolveOj(self).default_options), args, block);
     }
 
     @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject compat_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
-        return loadInternal(new CompatParse(context, resolveOj(self).default_options), args, block);
+        OjLibrary oj = resolveOj(self);
+
+        return loadInternal(oj, new CompatParse(context, resolveOj(self).default_options), args, block);
     }
 
     @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject object_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
-        return loadInternal(new ObjectParse(context, resolveOj(self).default_options), args, block);
+        OjLibrary oj = resolveOj(self);
+
+        return loadInternal(oj, new ObjectParse(context, oj.default_options), args, block);
     }
 
-    private static IRubyObject loadInternal(Parse parser, IRubyObject[] args, Block block) {
+    private static IRubyObject loadInternal(OjLibrary oj, Parse parser, IRubyObject[] args, Block block) {
         if (args[0] instanceof RubyString) {
-            return parser.parse(args, null, true, block);
+            return parser.parse(oj, args, null, true, block);
         }
 
         return parser.sparse(args, parser.getRuntime().getIn(), block);
@@ -533,7 +539,8 @@ public class RubyOj extends RubyModule {
         IRubyObject input = args[1];
 
         // FIXME: We should be cloning this I think?
-        Options copts = resolveOj(self).default_options;
+        OjLibrary oj = resolveOj(self);
+        Options copts = oj.default_options;
         if (3 == args.length) {
             oj_parse_options(context, args[2], copts);
         }
@@ -542,7 +549,7 @@ public class RubyOj extends RubyModule {
         System.arraycopy(args, 1, newArgs, 0, newArgs.length);
         if (input instanceof RubyString) {
             // FIXME: non-port (re-dicing and rechecking input and args here is double checking some stuff).
-            return new SCParse(context, copts, args[0]).parse(newArgs, null, true, block);
+            return new SCParse(context, copts, args[0]).parse(oj, newArgs, null, true, block);
         } else {
             return new SCParse(context, copts, args[0]).sparse(newArgs, context.runtime.getIn(), block);
         }

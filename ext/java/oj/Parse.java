@@ -5,6 +5,7 @@ import java.util.Stack;
 import org.jruby.Ruby;
 import org.jruby.RubyBasicObject;
 import org.jruby.RubyBoolean;
+import org.jruby.RubyException;
 import org.jruby.RubyFile;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyFloat;
@@ -18,7 +19,6 @@ import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
-import org.jruby.util.TypeConverter;
 
 import static oj.NextItem.*;
 import static oj.Options.*;
@@ -796,7 +796,7 @@ public abstract class Parse {
         return null;
     }
 
-    public IRubyObject parse(IRubyObject[] args, ByteList json, boolean yieldOk, Block block) {
+    public IRubyObject parse(OjLibrary oj, IRubyObject[] args, ByteList json, boolean yieldOk, Block block) {
         Ruby runtime = context.runtime;
         IRubyObject	input;
         IRubyObject result;
@@ -883,8 +883,7 @@ public abstract class Parse {
         }
 
         if (err_has()) {
-            // FIXME: Should be JSon::ParseError but we need mimic for this impld
-            throw context.runtime.newArgumentError(error);
+            throw runtime.newRaiseException(oj.getParseError(), error);
         }
 
         if (options.quirks_mode == No) {

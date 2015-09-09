@@ -79,4 +79,20 @@ public class Options {
         float_prec = 15;			// float_prec
         float_fmt = "%0.15g";		// float_fmt
     }
+
+    public static Options mimicOptions() {
+        Options options =  new Options();
+
+        options.mode = CompatMode;
+        options.class_cache = No;
+        options.time_format = RubyTime;
+        options.bigdec_as_num = No;
+        options.bigdec_load = FloatDec;
+        options.to_json = No;
+        options.nilnil = Yes;
+        options.float_prec = 16;			// float_prec
+        options.float_fmt = "%0.16g";		// float_fmt
+
+        return options;
+    }
 }
