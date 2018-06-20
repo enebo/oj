@@ -13,7 +13,7 @@ import org.jruby.util.ConvertBytes;
  * Created by enebo on 8/24/15.
  */
 public class NumInfo {
-    static final double OJ_INFINITY = Double.POSITIVE_INFINITY; // This was div by 0.0 in oj C src
+    public static final double OJ_INFINITY = Double.POSITIVE_INFINITY; // This was div by 0.0 in oj C src
 
     private Parse parse;
     public int str_start;

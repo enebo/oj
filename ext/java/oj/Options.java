@@ -27,11 +27,6 @@ public class Options {
     public static final char FloatDec = 'f';
     public static final char AutoDec = 'a';
 
-    public static final char ArrayNew = 'A';
-    public static final char ArrayType = 'a';
-    public static final char ObjectNew = 'O';
-    public static final char ObjectType = 'o';
-
     public static final char STRING_IO = 'c';
     public static final char STREAM_IO = 's';
     public static final char FILE_IO = 'f';
