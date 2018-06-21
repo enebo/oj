@@ -12,4 +12,5 @@ public class Leaf {
     public ByteList str;
     public IRubyObject value;
     public Leaf[] elements;
+    public String key;
 }
