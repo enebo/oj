@@ -803,7 +803,7 @@ public abstract class Parse {
         }
         input = args[0];
         if (2 == args.length) {
-            RubyOj.oj_parse_options(context, args[1], options);
+            RubyOj.parse_options(context, args[1], options);
         }
         if (yieldOk && block.isGiven()) {
             proc = block;

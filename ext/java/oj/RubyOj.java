@@ -3,6 +3,8 @@ package oj;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+
+import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyFile;
 import org.jruby.RubyFixnum;
@@ -127,12 +129,12 @@ public class RubyOj extends RubyModule {
     public static IRubyObject set_def_opts(ThreadContext context, IRubyObject self, IRubyObject roptsArg) {
         OjLibrary oj = resolveOj(self);
 
-        if (roptsArg instanceof RubyHash) oj_parse_options(context, roptsArg, oj.default_options);
+        if (roptsArg instanceof RubyHash) parse_options(context, roptsArg, oj.default_options);
 
         return context.nil;
     }
 
-    public static void oj_parse_options(ThreadContext context, IRubyObject roptsArg, Options copts) {
+    public static void parse_options(ThreadContext context, IRubyObject roptsArg, Options copts) {
         if (!(roptsArg instanceof RubyHash)) {
             // FIXME: I think this should be a raise.
             return;
@@ -290,22 +292,8 @@ public class RubyOj extends RubyModule {
             }
 
             RubyHash	ropts = (RubyHash) args[1];
-            IRubyObject	v;
             IRubyObject Qnil = runtime.getNil();
-
-            if (Qnil != (v = ropts.fastARef(runtime.newSymbol("mode")))) {
-                if (runtime.newSymbol("object") == v) {
-                    mode = ObjectMode;
-                } else if (runtime.newSymbol("strict") == v) {
-                    mode = StrictMode;
-                } else if (runtime.newSymbol("compat") == v) {
-                    mode = CompatMode;
-                } else if (runtime.newSymbol("null") == v) {
-                    mode = NullMode;
-                } else {
-                    throw runtime.newArgumentError(":mode must be :object, :strict, :compat, or :null.");
-                }
-            }
+            mode = getMode(runtime, mode, ropts, Qnil);
         }
         switch (mode) {
             case StrictMode:
@@ -319,6 +307,24 @@ public class RubyOj extends RubyModule {
         }
 
         return new ObjectParse(context, oj.default_options).parse(oj, args, null, true, block);
+    }
+
+    private static char getMode(Ruby runtime, char mode, RubyHash ropts, IRubyObject qnil) {
+        IRubyObject v;
+        if (qnil != (v = ropts.fastARef(runtime.newSymbol("mode")))) {
+            if (runtime.newSymbol("object") == v) {
+                mode = ObjectMode;
+            } else if (runtime.newSymbol("strict") == v) {
+                mode = StrictMode;
+            } else if (runtime.newSymbol("compat") == v) {
+                mode = CompatMode;
+            } else if (runtime.newSymbol("null") == v) {
+                mode = NullMode;
+            } else {
+                throw runtime.newArgumentError(":mode must be :object, :strict, :compat, or :null.");
+            }
+        }
+        return mode;
     }
 
 
@@ -340,21 +346,7 @@ public class RubyOj extends RubyModule {
 
         if (2 <= args.length) {
             RubyHash	ropts = (RubyHash) args[1];
-            IRubyObject	v;
-
-            if (Qnil != (v = ropts.fastARef(runtime.newSymbol("mode")))) {
-                if (runtime.newSymbol("object") == v) {
-                    mode = ObjectMode;
-                } else if (runtime.newSymbol("strict") == v) {
-                    mode = StrictMode;
-                } else if (runtime.newSymbol("compat") == v) {
-                    mode = CompatMode;
-                } else if (runtime.newSymbol("null") == v) {
-                    mode = NullMode;
-                } else {
-                    throw runtime.newArgumentError(":mode must be :object, :strict, :compat, or :null.");
-                }
-            }
+            mode = getMode(runtime, mode, ropts, Qnil);
         }
 
         String path = args[0].asJavaString();
@@ -426,32 +418,25 @@ public class RubyOj extends RubyModule {
         return parser.sparse(args, parser.getRuntime().getIn(), block);
     }
 
-
-// FIXME:
-    /*
-
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject dump(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         OjLibrary oj = resolveOj(self);
         ByteList		buf = new ByteList();
-        Out		out;
+        Out		out = new Out();
         Options	copts = oj.default_options;
         IRubyObject		rstr;
 
         if (2 == args.length) {
-            oj_parse_options(context, args[1], copts);
+            parse_options(context, args[1], copts);
         }
         out.buf = buf;
-        out.end = buf + sizeof(buf) - 10;
-        out.allocated = 0;
-        oj_dump_obj_to_json(args[0], copts, out);
-        if (0 == out.buf) {
-            rb_raise(rb_eNoMemError, "Not enough memory.");
-        }
 
-        return oj_encode(context.runtime.newString(out.buf));
+        Dump.obj_to_json(context, args[0], copts, out);
+
+        RubyString string = out.asString(context);
+        string.setEncoding(UTF8Encoding.INSTANCE);
+        return string;
     }
-    */
 
     /*
     @JRubyMethod(module = true, required=2, rest = true)
@@ -460,7 +445,7 @@ public class RubyOj extends RubyModule {
         Options copts = oj.default_options;
 
         if (3 == args.length) {
-            oj_parse_options(context, args[2], copts);
+            parse_options(context, args[2], copts);
         }
 
         TypeConverter.checkStringType(context.runtime, args[0]);
@@ -476,7 +461,7 @@ public class RubyOj extends RubyModule {
         Options copts = oj.default_options;
 
         if (3 == args.length) {
-            oj_parse_options(context, args[2], oj.default_options);
+            parse_options(context, args[2], oj.default_options);
         }
         oj_write_obj_to_stream(args[1], args, copts);
 
@@ -542,7 +527,7 @@ public class RubyOj extends RubyModule {
         OjLibrary oj = resolveOj(self);
         Options copts = oj.default_options;
         if (3 == args.length) {
-            oj_parse_options(context, args[2], copts);
+            parse_options(context, args[2], copts);
         }
 
         IRubyObject[] newArgs = new IRubyObject[args.length - 1];

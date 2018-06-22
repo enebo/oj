@@ -134,7 +134,7 @@ public class ParseInfo {
 
     // FIXME: This could potentially use an access point which directly consumed a bytelist (although JRuby needs to add one).
     public IRubyObject newBigDecimal(IRubyObject string) {
-        return RubyBigDecimal.newBigDecimal(context.runtime.getBasicObject(), new IRubyObject[]{string}, Block.NULL_BLOCK);
+        return RubyBigDecimal.newInstance(context, context.runtime.getClass("BigDecimal"), string);
     }
 
     public IRubyObject newString(ObjectParse stringValue) {

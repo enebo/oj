@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.jruby.RubyString;
+import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
@@ -18,7 +20,7 @@ public class Out {
     public int hash_cnt = 0;
     public int circ_cnt = 0;
     public Map<Object,Integer> circ_cache = null;
-    public ByteList buf = new ByteList();
+    public ByteList buf = new ByteList(); // FIXME: likely this should be UTF8
 
     public void append(int aByte) {
         buf.append(aByte);
@@ -41,7 +43,7 @@ public class Out {
     }
 
     public int get(int offset) {
-        return buf.get(offset);
+        return buf.get(buf.realSize()+offset);
     }
 
 
@@ -51,7 +53,7 @@ public class Out {
     }
 
     public void pop() {
-        buf.delete(buf.realSize() - 1, 1);
+        buf.realSize(buf.realSize() - 1);
     }
 
     public int size() {
@@ -69,5 +71,13 @@ public class Out {
 
     public void delete_circ_cache() {
         circ_cache = null;
+    }
+
+    public void reset() {
+        buf = new ByteList();
+    }
+
+    public RubyString asString(ThreadContext context) {
+        return context.runtime.newString(buf);
     }
 }

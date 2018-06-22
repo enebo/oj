@@ -26,6 +26,8 @@ public class OjLibrary implements Library {
 
         // FIXME: Can crash
         parseError = (RubyClass) ojModule.getConstant("ParseError");
+
+        StringWriter.createStringWriterClass(runtime, ojModule);
     }
 
     public RubyClass getParseError() {

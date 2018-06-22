@@ -283,7 +283,7 @@ public class Dump {
 
     static void dump_fixnum(RubyFixnum obj, Out out) {
         byte buf[] = new byte[32];
-        int	b = 0;
+        int	b = buf.length - 1;
         long num = obj.getLongValue();
         boolean neg = false;
 
@@ -299,10 +299,13 @@ public class Dump {
                 buf[b] = (byte) ((num % 10) + '0');
             }
             if (neg) {
-                buf[b--] = '-';
+                buf[b] = '-';
+                b--;
             }
         }
-        out.append(buf, b + 1, 32 - b);
+
+        int size = buf.length - 1 - b;
+        out.append(buf, b, size);
     }
 
     static void dump_bignum(ThreadContext context, RubyBignum obj, Out out) {
@@ -415,8 +418,8 @@ public class Dump {
             if (is_sym) {
                 out.append(':');
             }
-            // FIXME: I do not think we will see \0
-            for (; '\0' != str.get(str_i); str_i++) {
+
+            for (; str_i < cnt; str_i++) {
                 out.append(str.get(str_i));
             }
             out.append('"');
@@ -683,7 +686,7 @@ public class Dump {
         out.append(',');
     }
 
-    static void dump_hash(ThreadContext context, IRubyObject obj, RubyClass clas, int depth, int mode, Out out) {
+    static void dump_hash(final ThreadContext context, IRubyObject obj, RubyClass clas, int depth, int mode, Out out) {
         int		cnt;
 
         if (null != clas && !(obj instanceof RubyHash) && ObjectMode == mode) {
@@ -867,7 +870,7 @@ public class Dump {
         }
         b++;
 
-        int size = buf.length - b;
+        int size = buf.length - 1 - b;
         out.append(buf, b, size);
     }
 
@@ -1390,13 +1393,11 @@ public class Dump {
         }
     }
 
-    void
-    oj_dump_obj_to_json(ThreadContext context, IRubyObject obj, Options copts, Out out) {
-        oj_dump_obj_to_json_using_params(context, obj, copts, out, null);
+    static void obj_to_json(ThreadContext context, IRubyObject obj, Options copts, Out out) {
+        obj_to_json_using_params(context, obj, copts, out, IRubyObject.NULL_ARRAY);
     }
 
-    void
-    oj_dump_obj_to_json_using_params(ThreadContext context, IRubyObject obj, Options copts, Out out, IRubyObject[] argv) {
+    static void obj_to_json_using_params(ThreadContext context, IRubyObject obj, Options copts, Out out, IRubyObject[] argv) {
         out.circ_cnt = 0;
         out.opts = copts;
         out.hash_cnt = 0;
@@ -1423,7 +1424,7 @@ public class Dump {
         Out out = new Out();
         FileOutputStream f = null;
 
-        oj_dump_obj_to_json(context, obj, copts, out);
+        obj_to_json(context, obj, copts, out);
 
         try {
             f = new FileOutputStream(path);
@@ -1443,7 +1444,7 @@ public class Dump {
     void oj_write_obj_to_stream(ThreadContext context, IRubyObject obj, IRubyObject stream, Options copts) {
         Out out = new Out();
 
-        oj_dump_obj_to_json(context, obj, copts, out);
+        obj_to_json(context, obj, copts, out);
 
         // Note: Removed Windows path as it called native write on fileno and JRuby does work the same way.
         if (obj instanceof StringIO) {
@@ -1637,8 +1638,7 @@ public class Dump {
         }
     }
 
-    void
-    oj_str_writer_push_key(ThreadContext context, StrWriter sw, ByteList key) {
+    static void push_key(ThreadContext context, StrWriter sw, ByteList key) {
         DumpType type = sw.types.peek();
 
         if (sw.keyWritten) {
@@ -1657,30 +1657,29 @@ public class Dump {
         sw.keyWritten = true;
     }
 
-    void oj_str_writer_push_object(ThreadContext context, StrWriter sw, ByteList key) {
+    static void push_object(ThreadContext context, StrWriter sw, ByteList key) {
         dump_key(context, sw, key);
         sw.out.append('{');
         push_type(sw, ObjectNew);
     }
 
-    void
-    oj_str_writer_push_array(ThreadContext context, StrWriter sw, ByteList key) {
+    static void push_array(ThreadContext context, StrWriter sw, ByteList key) {
         dump_key(context, sw, key);
         sw.out.append('[');
         push_type(sw, ArrayNew);
     }
 
-    void oj_str_writer_push_value(ThreadContext context, StrWriter sw, IRubyObject val, ByteList key) {
+    static void push_value(ThreadContext context, StrWriter sw, IRubyObject val, ByteList key) {
         dump_key(context, sw, key);
         dump_val(context, val, sw.types.size(), sw.out, null);
     }
 
-    void oj_str_writer_push_json(ThreadContext context, StrWriter sw, ByteList json, ByteList key) {
+    static void push_json(ThreadContext context, StrWriter sw, ByteList json, ByteList key) {
         dump_key(context, sw, key);
         dump_raw(json, sw.out);
     }
 
-    private void dump_key(ThreadContext context, StrWriter sw, ByteList key) {
+    private static void dump_key(ThreadContext context, StrWriter sw, ByteList key) {
         if (sw.keyWritten) {
             sw.keyWritten = false;
         } else {
@@ -1696,8 +1695,7 @@ public class Dump {
         }
     }
 
-    void
-    oj_str_writer_pop(ThreadContext context, StrWriter sw) {
+    static void pop(ThreadContext context, StrWriter sw) {
         DumpType type = sw.types.pop();
 
         if (sw.keyWritten) {
@@ -1725,9 +1723,9 @@ public class Dump {
         }
     }
 
-    void oj_str_writer_pop_all(ThreadContext context, StrWriter sw) {
+    static void pop_all(ThreadContext context, StrWriter sw) {
         while (!sw.types.empty()) {
-            oj_str_writer_pop(context, sw);
+            pop(context, sw);
         }
     }
 

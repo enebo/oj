@@ -7,6 +7,8 @@ if defined? JRUBY_VERSION
   require 'rake/javaextensiontask'
   Rake::JavaExtensionTask.new('oj') do |ext|
     ext.ext_dir = 'ext/java'
+    ext.source_version = '1.7'
+    ext.target_version = '1.7'
   end
 else
   Rake::ExtensionTask.new('oj') do |ext|
