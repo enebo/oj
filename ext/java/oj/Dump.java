@@ -383,7 +383,6 @@ public class Dump {
         int[] cmap;
         int str_i = 0;
 
-        System.out.println("DUMPING:" + str.toString() + ", ESCAPE_MODE: " + out.opts.escape_mode);
         switch (out.opts.escape_mode) {
             case NLEsc:
                 cmap = newline_friendly_chars;
