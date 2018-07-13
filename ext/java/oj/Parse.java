@@ -71,6 +71,10 @@ public abstract class Parse {
 
     public IRubyObject stack_head_val() {
         if (stack.empty()) {
+            if (value != null) {
+                return value;
+            }
+
             return context.nil;
         }
 
@@ -575,11 +579,11 @@ public abstract class Parse {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
                     appendNum(ni);
-                    parent.next =  ARRAY_COMMA;
+                    parent.next = ARRAY_COMMA;
                     break;
                 case HASH_VALUE:
                     setNum(parent, ni);
-                    parent.next =  HASH_COMMA;
+                    parent.next = HASH_COMMA;
                     break;
                 default:
                     setError("expected " + parent.next);
@@ -726,7 +730,7 @@ public abstract class Parse {
             }
             //System.out.println("CUREND: " + (char) current);
             if (stack.isEmpty()) {
-                if (proc.isGiven()) {
+                if (proc != null) {
                     proc.yield(getContext(), stack_head_val());
 /*                } else {
                     if (HAS_PROC_WITH_BLOCK) {
@@ -822,7 +826,7 @@ public abstract class Parse {
         if (yieldOk && block.isGiven()) {
             proc = block;
         } else {
-            proc = Block.NULL_BLOCK;
+            proc = null;
         }
         if (null != json) {
             this.json = json;
