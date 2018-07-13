@@ -9,16 +9,11 @@ import org.jruby.util.ByteList;
 public class Val {
     IRubyObject val;
     ByteList key;
-    char[]		karray;//[32];
     IRubyObject key_val;
     ByteList classname;
-    ObjectParse oddArgs;
-
-    short clen;
-
+    OddArgs oddArgs;
     NextItem next; // ValNext
-    int		k1;   // first original character in the key
-    char		kalloc;
+    int k1;   // index of first original character in the key
 
     public Val(IRubyObject val, NextItem next) {
         this.val = val;

@@ -1,6 +1,8 @@
 package oj;
 
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Stack;
 import org.jruby.Ruby;
 import org.jruby.RubyBasicObject;
@@ -22,6 +24,11 @@ import org.jruby.util.ByteList;
 import static oj.NextItem.*;
 import static oj.Options.*;
 
+/**
+ * Base class for all the parser types.
+ *
+ * Note: add_value() is common top-level method and addValue is pi-&gt;add_value.
+ */
 public abstract class Parse {
 //    static final boolean HAS_PROC_WITH_BLOCK = false;
     static final int DEC_MAX = 15;
@@ -39,7 +46,11 @@ public abstract class Parse {
     public Options options;
     public IRubyObject handler;
     public NumInfo ni;
-    public IRubyObject lastValue; // To work around reusing empty stacks first frame for return value.
+    // C version uses head value of stack even when stack is empty.  We are using
+    // Java Stack and we cannot do that.  Store into this field instead.
+    public IRubyObject value;
+    protected OjLibrary oj = null;
+    protected List<IRubyObject> circ_array;
 
     public Parse(ThreadContext context, Options options, IRubyObject handler) {
         this.context = context;
@@ -74,19 +85,12 @@ public abstract class Parse {
         return stack.peek();
     }
 
-    public void appendTo(ByteList buf) {
-        buf.append(json, 0, currentOffset);
+    public void appendTo(ByteList buf, int start) {
+        buf.append(json, start, currentOffset - start);
     }
 
     public int advance() {
-        currentOffset += 1;
-
-        if (currentOffset >= json.getRealSize()) {
-            current = 0;
-        } else {
-            current = json.get(currentOffset);
-        }
-        return current;
+        return advance(1);
     }
     
     public int advance(int amount) {
@@ -98,6 +102,10 @@ public abstract class Parse {
             current = json.get(currentOffset);
         }
         return current;
+    }
+
+    public int at(int offset) {
+        return json.get(offset);
     }
 
     public ByteList subStr(int offset, int length) {
@@ -173,12 +181,13 @@ public abstract class Parse {
     }
 
     void skip_comment() {
+        advance();
         if ('*' == current) {
             advance();
             int length = length();
             for (; currentOffset < length; advance()) {
                 if ('*' == current && '/' == peek(1)) {
-                    advance(2);
+                    advance(1);
                     return;
                 } else if (length <= currentOffset) {
                     setError("comment not terminated");
@@ -193,8 +202,6 @@ public abstract class Parse {
                 case '\f':
                 case '\0':
                     return;
-                default:
-                    break;
                 }
             }
         } else {
@@ -313,12 +320,12 @@ public abstract class Parse {
 // entered at /
     void read_escaped_str(int start) {
         ByteList buf = new ByteList();
-        int	cnt = currentOffset;
+        int	cnt = currentOffset - start;
         int	code;
         Val parent = stack_peek();
 
         if (0 < cnt) {
-            appendTo(buf);
+            appendTo(buf, start);
         }
 
         int length = length();
@@ -327,7 +334,7 @@ public abstract class Parse {
                 setError("quoted string not terminated");
                 return;
             } else if ('\\' == s) {
-                advance();
+                s = advance();
                 switch (s) {
                 case 'n':	buf.append('\n');	break;
                 case 'r':	buf.append('\r');	break;
@@ -382,7 +389,7 @@ public abstract class Parse {
             switch (parent.next) {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
-                    appendCStr(buf);
+                    arrayAppendCStr(buf, start);
                     parent.next =  ARRAY_COMMA;
                     break;
                 case HASH_NEW:
@@ -436,7 +443,7 @@ public abstract class Parse {
             switch (parent.next) {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
-                    appendCStr(subStr(str, currentOffset - str));
+                    arrayAppendCStr(subStr(str, currentOffset - str), str);
                     parent.next =  ARRAY_COMMA;
                     break;
                 case HASH_NEW:
@@ -771,9 +778,8 @@ public abstract class Parse {
 
         rkey = oj_encode(rkey);
         if (Yes == options.sym_key) {
-            // FIXME: JRuby has no symbol converter and I doubt this is 100% correct.
             if (rkey instanceof RubyString) {
-                ((RubyString) rkey).intern19(); // I this will still be ok for 1.8 mode on 1.7.x.
+                return getRuntime().newSymbol(((RubyString) rkey).getByteList());
             } else if (!(rkey instanceof RubySymbol) && rkey.respondsTo("to_sym")) {
                 return Helpers.invoke(context, rkey, "to_sym");
             }
@@ -788,11 +794,19 @@ public abstract class Parse {
     }
 
     // FIXME:
-    public IRubyObject sparse(IRubyObject[] args, InputStream fd, Block block) {
+    public IRubyObject sparse(OjLibrary oj, IRubyObject[] args, InputStream fd, Block block) {
+        this.oj = oj;
+
         return null;
     }
 
+    public IRubyObject parse(OjLibrary oj, IRubyObject[] args, ByteList json) {
+        return parse(oj, args, json, false, Block.NULL_BLOCK);
+    }
+
     public IRubyObject parse(OjLibrary oj, IRubyObject[] args, ByteList json, boolean yieldOk, Block block) {
+        this.oj = oj;
+
         Ruby runtime = context.runtime;
         IRubyObject	input;
         IRubyObject result;
@@ -838,17 +852,15 @@ public abstract class Parse {
             this.json = ((RubyString) input).getByteList();
         }
 
-        // FIXME:
-        /*
         if (Yes == options.circular) {
-            circ_array = oj_circ_array_new();
+            circ_array = new ArrayList<>();
         } else {
             circ_array = null;
-        }*/
+        }
 
         protect_parse();
 
-        result = lastValue;
+        result = value;
         if (!err_has()) {
             // If the stack is not empty then the JSON terminated early.
             Val	v;
@@ -879,13 +891,13 @@ public abstract class Parse {
         }
 
         if (err_has()) {
-            throw runtime.newRaiseException(oj.getParseError(), error);
+            parseError(error);
         }
 
         if (options.quirks_mode == No) {
             if (result instanceof RubyNil || result instanceof RubyBoolean || result instanceof RubyFixnum ||
                     result instanceof RubyFloat || result instanceof RubyModule || result instanceof RubySymbol) {
-                throw runtime.newRaiseException(oj.getParseError(), "unexpected non-document Object");
+                parseError("unexpected non-document Object");
             }
         }
         return result;
@@ -898,7 +910,7 @@ public abstract class Parse {
     public void addCStr(ByteList value) {
     }
 
-    public void appendCStr(ByteList value) {
+    public void arrayAppendCStr(ByteList value, int orig) {
     }
 
     public void setCStr(Val parent, int start, int length) {
@@ -948,6 +960,10 @@ public abstract class Parse {
 
     public IRubyObject hashKey(ByteList key) {
         return undef;
+    }
+
+    public void parseError(String message) {
+        throw context.runtime.newRaiseException(oj.getParseError(), message);
     }
 
 }

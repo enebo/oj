@@ -21,7 +21,7 @@ public class NumInfo {
     public boolean nan = false;
     public boolean big = false;
     public boolean no_big;
-    public double exp = 0;
+    public int exp = 0;
     public double div = 1;
     public int i = 0;
     public int num = 0;
@@ -55,7 +55,8 @@ public class NumInfo {
     private IRubyObject newBigDecimal(Ruby runtime, IRubyObject string) {
         return RubyBigDecimal.newInstance(runtime.getCurrentContext(), runtime.getClass("BigDecimal"), string);
     }
-    
+
+    // C: oj_num_as_value
     public IRubyObject toNumber(ThreadContext context) {
         Ruby runtime = context.runtime;
         IRubyObject rnum;

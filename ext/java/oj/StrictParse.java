@@ -15,7 +15,7 @@ public class StrictParse extends Parse {
     }
 
     @Override
-    public void appendCStr(ByteList value) {
+    public void arrayAppendCStr(ByteList value, int orig) {
         ((RubyArray) stack_peek().val).append(oj_encode(getRuntime().newString(value)));
     }
 
@@ -35,7 +35,7 @@ public class StrictParse extends Parse {
 
     @Override
     public void addCStr(ByteList value) {
-        lastValue = oj_encode(getRuntime().newString(value));
+        this.value = oj_encode(getRuntime().newString(value));
     }
 
     @Override
@@ -44,12 +44,12 @@ public class StrictParse extends Parse {
             oj_set_error_at("not a number or other value");
         }
 
-        lastValue = ni.toNumber(context);
+        value = ni.toNumber(context);
     }
 
     @Override
     public void addValue(IRubyObject value) {
-        lastValue = value;
+        this.value = value;
     }
 
     @Override

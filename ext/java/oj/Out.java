@@ -20,10 +20,23 @@ public class Out {
     public int hash_cnt = 0;
     public int circ_cnt = 0;
     public Map<Object,Integer> circ_cache = null;
-    public ByteList buf = new ByteList(); // FIXME: likely this should be UTF8
+    public ByteList buf;
+
+    public Out() {
+        reset();
+    }
+
+    public Out(Options opts) {
+        reset();
+        circ_cnt = 0;
+        hash_cnt = 0;
+        this.opts = opts;
+        indent = opts.indent;
+        depth = 0;
+    }
 
     public void append(int aByte) {
-        buf.append(aByte);
+        buf.append((byte)aByte);
     }
 
     public void append(byte[] bytes) {

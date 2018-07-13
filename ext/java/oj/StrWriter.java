@@ -18,15 +18,17 @@ public class StrWriter {
     public StrWriter(ThreadContext context) {
         RubyModule oj = context.runtime.getModule("Oj");
         OjLibrary library = RubyOj.resolveOj(oj);
-        this.opts = library.default_options; // FIXME: Clone?
-        this.depth = 0;
-        this.keyWritten = false;
+        opts = library.default_options; // FIXME: Clone?
+        depth = 0;
+        keyWritten = false;
+        out = new Out(opts);
+    }
 
-        this.out.reset();
-        this.out.circ_cnt = 0;
-        this.out.hash_cnt = 0;
-        this.out.opts = this.opts;
-        this.out.indent = this.opts.indent;
-        this.out.depth = 0;        
+    /**
+     * We are using Java standard library Stack which throws on empty stack.  This
+     * method protects against that and returns null instead of an exception.
+     */
+    public DumpType peekTypes() {
+        return types.isEmpty() ? null : types.peek();
     }
 }

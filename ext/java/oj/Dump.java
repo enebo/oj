@@ -118,7 +118,7 @@ public class Dump {
         int	size = 0;
 
         for (int i = 0; 0 < len; i++, len--) {
-            size += newline_friendly_chars[str.get(i)];
+            size += newline_friendly_chars[str.get(i) & 0xff];
         }
         return size - len * (int)'0';
     }
@@ -128,7 +128,7 @@ public class Dump {
         int	size = 0;
 
         for (int i = 0; 0 < len; i++, len--) {
-            size += hibit_friendly_chars[str.get(i)];
+            size += hibit_friendly_chars[str.get(i) & 0xff];
         }
         return size - len * (int)'0';
     }
@@ -138,7 +138,7 @@ public class Dump {
         int	size = 0;
 
         for (int i = 0; 0 < len; i++, len--) {
-            size += ascii_friendly_chars[str.get(i)];
+            size += ascii_friendly_chars[str.get(i) & 0xff];
         }
         return size - len * (int)'0';
     }
@@ -148,7 +148,7 @@ public class Dump {
         int	size = 0;
 
         for (int i = 0; 0 < len; i++, len--) {
-            size += xss_friendly_chars[str.get(i)];
+            size += xss_friendly_chars[str.get(i) & 0xff];
         }
         return size - len * (int)'0';
     }
@@ -204,7 +204,7 @@ public class Dump {
             code = b & 0x0000001F;
         } else if (0xE0 == (0xF0 & b)) {
             cnt = 2;
-            code = str.get(b) & 0x0000000F;
+            code = b & 0x0000000F;
         } else if (0xF0 == (0xF8 & b)) {
             cnt = 3;
             code = b & 0x00000007;
@@ -300,11 +300,12 @@ public class Dump {
             }
             if (neg) {
                 buf[b] = '-';
-                b--;
+            } else {
+                b++;
             }
         }
 
-        int size = buf.length - 1 - b;
+        int size = buf.length - b;
         out.append(buf, b, size);
     }
 
@@ -382,6 +383,7 @@ public class Dump {
         int[] cmap;
         int str_i = 0;
 
+        System.out.println("DUMPING:" + str.toString() + ", ESCAPE_MODE: " + out.opts.escape_mode);
         switch (out.opts.escape_mode) {
             case NLEsc:
                 cmap = newline_friendly_chars;
@@ -409,8 +411,7 @@ public class Dump {
             out.append('0');
             out.append('0');
             dump_hex(str.get(str_i), out);
-            cnt--;
-            size--;
+            // FIXME: removed cnt-- and size-- here but our cnt I think differs from passed in one in C.
             str_i++;
             is_sym = false; // just to make sure
         }
@@ -424,19 +425,17 @@ public class Dump {
             }
             out.append('"');
         } else {
-            int end = str_i + cnt;
-
             if (is_sym) {
                 out.append(':');
             }
-            for (; str_i < end; str_i++) {
-                switch (cmap[(int)str.get(str_i)]) {
-                    case '1':
+            for (; str_i < cnt; str_i++) {
+                switch (cmap[(int)str.get(str_i) & 0xff]) {
+                    case 1:
                         out.append(str.get(str_i));
                         break;
-                    case '2':
+                    case 2:
                         out.append('\\');
-                        switch (str.get(str_i)) {
+                        switch ((byte) str.get(str_i)) {
                         case '\\':	out.append('\\');	break;
                         case '\b':	out.append('b');	break;
                         case '\t':	out.append('t');	break;
@@ -446,10 +445,10 @@ public class Dump {
                         default:	out.append(str.get(str_i));	break;
                     }
                     break;
-                    case '3': // Unicode
-                        str_i = dump_unicode(context, str, str_i, end, out);
+                    case 3: // Unicode
+                        str_i = dump_unicode(context, str, str_i, cnt, out);
                         break;
-                    case '6': // control characters
+                    case 6: // control characters
                         out.append('\\');
                         out.append('u');
                         out.append('0');
@@ -462,7 +461,7 @@ public class Dump {
             }
             out.append('"');
         }
-        }
+    }
 
     static void dump_str_comp(ThreadContext context, RubyString obj, Out out) {
         dump_cstr(context, obj.getByteList(), false, false, out);
@@ -473,9 +472,12 @@ public class Dump {
             dump_obj_attrs(context, obj, clas, 0, depth, out);
         } else {
             ByteList str = ((RubyString) obj).getByteList();
-            int s = str.get(0);
-            int s1 = str.get(1);
-            boolean escape = ':' == s || ('^' == s && ('r' == s1 || 'i' == s1));
+            boolean escape = false;
+            if (str.realSize() >=2 ) {
+                int s = str.get(0);
+                int s1 = str.get(1);
+                escape = ':' == s || ('^' == s && ('r' == s1 || 'i' == s1));
+            }
 
             dump_cstr(context, str, false, escape, out);
         }
@@ -1407,7 +1409,7 @@ public class Dump {
         out.indent = copts.indent;
         dump_val(context, obj, 0, out, argv);
         if (0 < out.indent) {
-            switch (out.peek(-1)) {
+            switch (out.peek(0)) {
                 case ']':
                 case '}':
                     out.append('\n');
@@ -1611,7 +1613,7 @@ public class Dump {
 // string writer functions
 
     static void key_check(ThreadContext context, StrWriter sw, ByteList key) {
-        DumpType type = sw.types.peek();
+        DumpType type = sw.peekTypes();
 
         if (null == key && (ObjectNew == type || ObjectType == type)) {
             throw context.runtime.newStandardError("Can not push onto an Object without a key.");
@@ -1623,7 +1625,7 @@ public class Dump {
     }
 
     static void maybe_comma(StrWriter sw) {
-        switch (sw.types.peek()) {
+        switch (sw.peekTypes()) {
             case ObjectNew:
                 sw.types.set(sw.types.size(), ObjectType);
                 break;
@@ -1639,7 +1641,7 @@ public class Dump {
     }
 
     static void push_key(ThreadContext context, StrWriter sw, ByteList key) {
-        DumpType type = sw.types.peek();
+        DumpType type = sw.peekTypes();
 
         if (sw.keyWritten) {
             throw context.runtime.newStandardError("Can not push more than one key before pushing a non-key.");

@@ -242,7 +242,7 @@ public class RubyOj extends RubyModule {
             } else if (v instanceof RubyString) {
                 String str = v.asJavaString();
 
-                if (!copts.create_id.equals(str)) {
+                if (!str.equals(copts.create_id)) {
                     copts.create_id = str;
                 }
             } else {
@@ -250,6 +250,27 @@ public class RubyOj extends RubyModule {
             }
         }
 
+
+        if (null != (v = ropts.fastARef(runtime.newSymbol("circular")))) {
+            if (v == Qtrue) {
+                copts.circular = Yes;
+            } else if (v == Qfalse) {
+                copts.circular = No;
+            } else {
+                throw runtime.newArgumentError("circular must be true or false.");
+            }
+        }
+        /*
+        { circular_sym, &oj_default_options.circular },
+        { auto_define_sym, &oj_default_options.auto_define },
+        { symbol_keys_sym, &oj_default_options.sym_key },
+        { class_cache_sym, &oj_default_options.class_cache },
+        { bigdecimal_as_decimal_sym, &oj_default_options.bigdec_as_num },
+        { use_to_json_sym, &oj_default_options.to_json },
+        { nilnil_sym, &oj_default_options.nilnil },
+        { allow_gc_sym, &oj_default_options.allow_gc },
+        { quirks_mode_sym, &oj_default_options.quirks_mode },
+        */
         // FIXME:
         /*
         for (o = ynos; 0 != o.attr; o++) {
@@ -302,6 +323,7 @@ public class RubyOj extends RubyModule {
             case CompatMode:
                 return new CompatParse(context, oj.default_options).parse(oj, args, null, true, block);
             case ObjectMode:
+                // is the catch all parser below...
             default:
                 break;
         }
@@ -330,7 +352,8 @@ public class RubyOj extends RubyModule {
 
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject load_file(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
-        Options options = resolveOj(self).default_options;
+        OjLibrary oj = resolveOj(self);
+        Options options = oj.default_options;
         Ruby runtime = context.runtime;
 
         if (1 > args.length) {
@@ -357,16 +380,16 @@ public class RubyOj extends RubyModule {
 
             switch (mode) {
                 case StrictMode:
-                    return new StrictParse(context, options).sparse(args, fd, block);
+                    return new StrictParse(context, options).sparse(oj, args, fd, block);
                 case NullMode:
                 case CompatMode:
-                    return new CompatParse(context, options).sparse(args, fd, block);
+                    return new CompatParse(context, options).sparse(oj, args, fd, block);
                 case ObjectMode:
                 default:
                     break;
             }
 
-            return new ObjectParse(context, options).sparse(args, fd, block);
+            return new ObjectParse(context, options).sparse(oj, args, fd, block);
         } catch (IOException e) {
             throw runtime.newIOError(e.getMessage());
         } finally {
@@ -415,7 +438,7 @@ public class RubyOj extends RubyModule {
             return parser.parse(oj, args, null, true, block);
         }
 
-        return parser.sparse(args, parser.getRuntime().getIn(), block);
+        return parser.sparse(oj, args, parser.getRuntime().getIn(), block);
     }
 
     @JRubyMethod(module = true, rest = true)
@@ -536,7 +559,7 @@ public class RubyOj extends RubyModule {
             // FIXME: non-port (re-dicing and rechecking input and args here is double checking some stuff).
             return new SCParse(context, copts, args[0]).parse(oj, newArgs, null, true, block);
         } else {
-            return new SCParse(context, copts, args[0]).sparse(newArgs, context.runtime.getIn(), block);
+            return new SCParse(context, copts, args[0]).sparse(oj, newArgs, context.runtime.getIn(), block);
         }
     }
 

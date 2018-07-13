@@ -36,7 +36,7 @@ public class SCParse extends Parse {
 
 
     @Override
-    public void appendCStr(ByteList value) {
+    public void arrayAppendCStr(ByteList value, int orig) {
         if (dispatchArrayAppend) {
             Helpers.invoke(context, handler, "array_append",
                     stack_head_val(), oj_encode(getRuntime().newString(value)));
