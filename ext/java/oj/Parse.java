@@ -359,7 +359,7 @@ public abstract class Parse {
                         int	c2;
 
                         advance();
-                        if ('\\' != s || 'u' != peek(1)) {
+                        if ('\\' != current || 'u' != peek(1)) {
                             advance(-1);
                             setError("invalid escaped character");
                             return;

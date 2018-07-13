@@ -291,6 +291,13 @@ public class RubyOj extends RubyModule {
         } else if (Qfalse == v) {
             copts.escape_mode = JSONEsc;
         }
+
+        v = ropts.fastARef(runtime.newSymbol("symbol_keys"));
+        if (Qtrue == v) {
+            copts.sym_key = Yes;
+        } else if (Qfalse == v) {
+            copts.sym_key = No;
+        }
     }
 
     @JRubyMethod(module = true, rest = true)
@@ -416,14 +423,14 @@ public class RubyOj extends RubyModule {
     public static IRubyObject strict_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = resolveOj(self);
 
-        return loadInternal(oj, new StrictParse(context, resolveOj(self).default_options), args, block);
+        return loadInternal(oj, new StrictParse(context, oj.default_options), args, block);
     }
 
     @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject compat_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = resolveOj(self);
 
-        return loadInternal(oj, new CompatParse(context, resolveOj(self).default_options), args, block);
+        return loadInternal(oj, new CompatParse(context, oj.default_options), args, block);
     }
 
     @JRubyMethod(module = true, required = 1, rest = true)
