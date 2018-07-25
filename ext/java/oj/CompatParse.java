@@ -18,7 +18,7 @@ public class CompatParse extends StrictParse {
     }
 
     @Override
-    public void setCStr(Val kval, ByteList str) {
+    public void setCStr(Val kval, ByteList str, int orig) {
         ByteList key = kval.key;
         Val	parent = stack_peek();
         IRubyObject rkey = kval.key_val;

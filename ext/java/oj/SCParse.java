@@ -59,7 +59,7 @@ public class SCParse extends Parse {
     }
 
     @Override
-    public void addCStr(ByteList value) {
+    public void addCStr(ByteList value, int orig) {
         if (dispatchValueAdd) {
             Helpers.invoke(context, handler, "add_value", oj_encode(getRuntime().newString(value)));
         }
@@ -81,12 +81,12 @@ public class SCParse extends Parse {
 
     public void setCStr(Val parent, int start, int length) {
         if (dispatchHashSet) {
-            setCStr(parent, subStr(start, length));
+            setCStr(parent, subStr(start, length), start);
         }
     }
 
     @Override
-    public void setCStr(Val kval, ByteList value) {
+    public void setCStr(Val kval, ByteList value, int orig) {
         if (dispatchHashSet) {
             Helpers.invoke(context, handler, "hash_set",
                     stack_head_val(), calc_hash_key(kval), oj_encode(getRuntime().newString(value)));

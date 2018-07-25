@@ -13,7 +13,7 @@ public class Val {
     ByteList classname;
     OddArgs oddArgs;
     NextItem next; // ValNext
-    int k1;   // index of first original character in the key
+    byte k1;   // first original character in the key
 
     public Val(IRubyObject val, NextItem next) {
         this.val = val;

@@ -451,10 +451,9 @@ public class RubyOj extends RubyModule {
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject dump(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         OjLibrary oj = resolveOj(self);
-        ByteList		buf = new ByteList();
-        Out		out = new Out();
+        ByteList buf = new ByteList();
+        Out out = new Out();
         Options	copts = oj.default_options;
-        IRubyObject		rstr;
 
         if (2 == args.length) {
             parse_options(context, args[1], copts);

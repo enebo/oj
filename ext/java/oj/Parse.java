@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 import org.jruby.Ruby;
+import org.jruby.RubyArray;
 import org.jruby.RubyBasicObject;
 import org.jruby.RubyBoolean;
 import org.jruby.RubyFile;
@@ -388,7 +389,7 @@ public abstract class Parse {
         }
 
         if (null == parent) {
-            addCStr(buf);
+            addCStr(buf, start);
         } else {
             switch (parent.next) {
                 case ARRAY_NEW:
@@ -403,11 +404,11 @@ public abstract class Parse {
                 } else {
                     parent.key = new ByteList();
                 }
-                parent.k1 = start;
+                parent.k1 = (byte) at(start);
                 parent.next =  HASH_COLON;
                 break;
                 case HASH_VALUE:
-                    setCStr(parent, buf);
+                    setCStr(parent, buf, 0);
                     parent.next =  HASH_COMMA;
                     break;
                 case HASH_COMMA:
@@ -442,7 +443,7 @@ public abstract class Parse {
             }
         }
         if (null == parent) { // simple add
-            addCStr(subStr(str, currentOffset - str));
+            addCStr(subStr(str, currentOffset - str), str);
         } else {
             switch (parent.next) {
                 case ARRAY_NEW:
@@ -457,7 +458,7 @@ public abstract class Parse {
                     } else {
                         parent.key = new ByteList();
                     }
-                    parent.k1 = str;
+                    parent.k1 = (byte) at(str);
                     parent.next = HASH_COLON;
                     break;
                 }
@@ -593,10 +594,12 @@ public abstract class Parse {
     }
 
     void array_start() {
+        //System.err.println("array_start");
         stack.push(new Val(startArray(), ARRAY_NEW));
     }
 
     void array_end() {
+        //System.err.println("array_end");
         Val	array = stack.pop();
 
         if (null == array) {
@@ -911,22 +914,25 @@ public abstract class Parse {
     // Java naming conventions used for call back to avoid naming conflicts with the recursive
     // descent parser method names.
 
-    public void addCStr(ByteList value) {
+    public void addCStr(ByteList value, int orig) {
     }
 
     public void arrayAppendCStr(ByteList value, int orig) {
     }
 
-    public void setCStr(Val parent, int start, int length) {
+    public void setCStr(Val kval, int start, int length) {
+        setCStr(kval, subStr(start, length), start);
     }
 
-    public void setCStr(Val parent, ByteList value) {
+    public void setCStr(Val parent, ByteList value, int orig) {
     }
 
     public void addValue(IRubyObject value) {
+        this.value = value;
     }
 
     public void appendValue(IRubyObject value) {
+        ((RubyArray) stack_peek().val).append(value);
     }
 
     public void setValue(Val parent, IRubyObject value) {
@@ -946,7 +952,7 @@ public abstract class Parse {
     }
 
     public IRubyObject startArray() {
-        return context.nil;
+        return getRuntime().newArray();
     }
 
     public IRubyObject endHash() {

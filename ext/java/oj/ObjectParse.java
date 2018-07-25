@@ -19,7 +19,6 @@ import org.jruby.util.ByteList;
 import java.util.HashMap;
 import java.util.Map;
 
-import static oj.LeafType.*;
 import static oj.Options.No;
 import static oj.Options.Yes;
 
@@ -58,10 +57,10 @@ public class ObjectParse extends Parse {
         return n;
     }
 
-    private IRubyObject calc_hash_key(Val kval, int k1) {
+    private IRubyObject calc_hash_key(Val kval, byte k1) {
         IRubyObject	rkey;
 
-        if (':' == kval.key.get(k1)) {
+        if (':' == k1) {
             rkey = keyIsSym(kval.key);
         } else {
             rkey = context.runtime.newString(kval.key);
@@ -316,6 +315,7 @@ public class ObjectParse extends Parse {
             switch (kval.key.get(1)) {
                 case 't': // time as a float
                 {
+                    System.err.println("T: ");
                     double nsec = ni.num * 1000000000L / ni.div;
 
                     if (ni.neg) {
@@ -467,7 +467,8 @@ public class ObjectParse extends Parse {
         ((RubyObject) parent.val).setInstanceVariable(var_id.toString(), value);
     }
 
-    void hash_set_cstr(Val kval, ByteList value, int orig) {
+    @Override
+    public void setCStr(Val kval, ByteList value, int orig) {
         ByteList key = kval.key;
         int klen = kval.key.realSize();
         Val	parent = stack_peek();
@@ -508,11 +509,14 @@ public class ObjectParse extends Parse {
         }
     }
 
-    void hash_set_num(Val kval, NumInfo ni) {
+    @Override
+    public void setNum(Val kval, NumInfo ni) {
     ByteList key = kval.key;
         int		klen = kval.key.realSize();
         Val		parent = stack_peek();
 
+
+        System.out.println("SETNUM");
         while (parent.val != null) {
             if (parent.val instanceof RubyNil) {
                 parent.oddArgs = null; // make sure it is 0 in case not odd
@@ -522,7 +526,7 @@ public class ObjectParse extends Parse {
                 }
             } else if (parent.val instanceof RubyHash) {
                 ((RubyHash) parent.val).op_aset(context, calc_hash_key(kval, parent.k1), ni.toNumber(context));
-
+                break;
             } else if (parent.val instanceof RubyClass) {
                 if (null == parent.oddArgs) {
                     parseError(parent.val.getMetaClass().getName() + " is not an odd class");
@@ -546,7 +550,8 @@ public class ObjectParse extends Parse {
         }
     }
 
-    void hashSetValue(Val kval, IRubyObject value) {
+    @Override
+    public void setValue(Val kval, IRubyObject value) {
         ByteList key = kval.key;
         int		klen = key.length();
         Val		parent = stack_peek();
@@ -654,8 +659,8 @@ public class ObjectParse extends Parse {
     }
 
     @Override
-    public void addCStr(ByteList value) {
-        this.value = oj_encode(getRuntime().newString(value));
+    public void addCStr(ByteList value, int orig) {
+        this.value = str_to_value(value, orig);
     }
 
     @Override

@@ -29,12 +29,7 @@ public class StrictParse extends Parse {
     }
 
     @Override
-    public void appendValue(IRubyObject value) {
-        ((RubyArray) stack_peek().val).append(value);
-    }
-
-    @Override
-    public void addCStr(ByteList value) {
+    public void addCStr(ByteList value, int orig) {
         this.value = oj_encode(getRuntime().newString(value));
     }
 
@@ -48,17 +43,12 @@ public class StrictParse extends Parse {
     }
 
     @Override
-    public void addValue(IRubyObject value) {
-        this.value = value;
-    }
-
-    @Override
     public void setCStr(Val kval, int start, int length) {
-        setCStr(kval, subStr(start, length));
+        setCStr(kval, subStr(start, length), start);
     }
 
     @Override
-    public void setCStr(Val kval, ByteList value) {
+    public void setCStr(Val kval, ByteList value, int orig) {
         IRubyObject rstr = oj_encode(getRuntime().newString(value));
 
         ((RubyHash) stack_peek().val).fastASet(calc_hash_key(kval), rstr);
@@ -93,13 +83,7 @@ public class StrictParse extends Parse {
     }
 
     @Override
-    public IRubyObject startArray() {
-        return getRuntime().newArray();
-    }
-
-    @Override
     public IRubyObject endHash() {
-
         return context.nil;
     }
 

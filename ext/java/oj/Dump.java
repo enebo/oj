@@ -30,6 +30,7 @@ import org.jruby.RubyTime;
 import org.jruby.exceptions.RaiseException;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;
 import org.jruby.ext.stringio.StringIO;
+import org.jruby.runtime.ClassIndex;
 import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
@@ -885,10 +886,10 @@ public class Dump {
         long nsec = timespec[1];
         StringBuilder buf = new StringBuilder();
         Formatter formatter = new Formatter(buf);
-        long		one = 1000000000;
-        long	tzsecs = obj.callMethod(context, "utc_offset").convertToInteger().getLongValue();
-        int			tzhour, tzmin;
-        char		tzsign = '+';
+        long one = 1000000000;
+        long tzsecs = obj.callMethod(context, "utc_offset").convertToInteger().getLongValue();
+        int tzhour, tzmin;
+        char tzsign = '+';
 
         if (9 > out.opts.sec_prec) {
             int	i;
@@ -906,7 +907,7 @@ public class Dump {
         //tm = localtime(&sec);
         sec += tzsecs;
         Date date = new Date(sec*1000); // milliseconds since epoch
-        Calendar tm = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        Calendar tm = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
         tm.setTime(date);
 
         if (0 > tzsecs) {
@@ -922,34 +923,34 @@ public class Dump {
             if (0 == tzsecs && obj.callMethod(context, "utc?").isTrue()) {
                 formatter.format("%04d-%02d-%02dT%02d:%02d:%02dZ",
                         tm.get(Calendar.YEAR), tm.get(Calendar.MONTH) + 1, tm.get(Calendar.DAY_OF_MONTH),
-                        tm.get(Calendar.HOUR), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND));
+                        tm.get(Calendar.HOUR_OF_DAY), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND));
                 dump_cstr(context, buf.toString(), false, false, out);
             } else {
                 formatter.format("%04d-%02d-%02dT%02d:%02d:%02d%c%02d:%02d",
                         tm.get(Calendar.YEAR), tm.get(Calendar.MONTH) + 1, tm.get(Calendar.DAY_OF_MONTH),
-                        tm.get(Calendar.HOUR), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND),
+                        tm.get(Calendar.HOUR_OF_DAY), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND),
                         tzsign, tzhour, tzmin);
                 dump_cstr(context, buf.toString(), false, false, out);
             }
         } else if (0 == tzsecs && obj.callMethod(context, "utc?").isTrue()) {
-            String format = "%04d-%02d-%02dT%02d:%02d:%02d.%09ldZ";
+            String format = "%04d-%02d-%02dT%02d:%02d:%02d.%09dZ";
 
             if (9 > out.opts.sec_prec) {
                 format = "%04d-%02d-%02dT%02d:%02d:%02d.%0" + (char) ('0' + out.opts.sec_prec);
             }
             formatter.format(format,
                     tm.get(Calendar.YEAR), tm.get(Calendar.MONTH) + 1, tm.get(Calendar.DAY_OF_MONTH),
-                    tm.get(Calendar.HOUR), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND), nsec);
+                    tm.get(Calendar.HOUR_OF_DAY), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND), nsec);
             dump_cstr(context, buf.toString(), false, false, out);
         } else {
-            String format = "%04d-%02d-%02dT%02d:%02d:%02d.%09ld%c%02d:%02d";
+            String format = "%04d-%02d-%02dT%02d:%02d:%02d.%09d%c%02d:%02d";
 
             if (9 > out.opts.sec_prec) {
-                format = "%04d-%02d-%02dT%02d:%02d:%02d.%0" + (char) ('0' + out.opts.sec_prec) + "ld%c%02d:%02d";
+                format = "%04d-%02d-%02dT%02d:%02d:%02d.%0" + (char) ('0' + out.opts.sec_prec) + "d%c%02d:%02d";
             }
             formatter.format(format,
                     tm.get(Calendar.YEAR), tm.get(Calendar.MONTH) + 1, tm.get(Calendar.DAY_OF_MONTH),
-                    tm.get(Calendar.HOUR), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND), nsec,
+                    tm.get(Calendar.HOUR_OF_DAY), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND), nsec,
                     tzsign, tzhour, tzmin);
             dump_cstr(context, buf.toString(), false, false, out);
         }
@@ -1379,13 +1380,13 @@ public class Dump {
                         case ObjectMode:
                         default:		dump_obj_comp(context, obj, depth, out, argv);	break;
                     }
-                } else if (obj.getMetaClass().getNativeTypeIndex() > 0) { // FIXME: Not entirely sure on this
+                } else if (obj.getMetaClass().getNativeClassIndex() != ClassIndex.NO_INDEX) { // FIXME: Not entirely sure on this
                     switch (out.opts.mode) {
                         case StrictMode:	dump_data_strict(context, obj, out);	break;
                         case NullMode:		dump_data_null(context, obj, out);	break;
-                        case CompatMode:	dump_obj_comp(context, obj, depth, out, argv);	break;
+                        case CompatMode:	dump_data_comp(context, obj, depth, out);	break;
                         case ObjectMode:
-                        default:		dump_obj_obj(context, obj, depth, out);	break;
+                        default:		dump_data_obj(context, obj, depth, out);	break;
                     }
                 } else {
                     throw context.runtime.newNotImplementedError("\"Failed to dump '" + obj.getMetaClass().getName() + "'.");
