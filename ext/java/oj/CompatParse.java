@@ -31,7 +31,7 @@ public class CompatParse extends StrictParse {
             if (undef == rkey) {
                 rkey = getRuntime().newString(key);
                 rstr = oj_encode(rstr);
-                rkey = oj_encode((RubyString) rkey);
+                rkey = oj_encode(rkey);
                 if (Yes == options.sym_key) {
                     rkey = ((RubyString)rkey).intern19();
                 }
@@ -45,7 +45,7 @@ public class CompatParse extends StrictParse {
         Val	parent = stack_peek();
 
         if (null != parent.classname) {
-            IRubyObject clas = Resolve.oj_name2class(parent.classname, false);
+            IRubyObject clas = nameToClass(parent.classname, false);
             if (undef != clas) { // else an error
                 parent.val = clas.callMethod(context, "json_create", parent.val);
             }

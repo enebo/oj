@@ -2,15 +2,19 @@ package oj;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Stack;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyBasicObject;
 import org.jruby.RubyBoolean;
+import org.jruby.RubyClass;
 import org.jruby.RubyFile;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyFloat;
+import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyNil;
 import org.jruby.RubyString;
@@ -52,6 +56,10 @@ public abstract class Parse {
     public IRubyObject value;
     protected OjLibrary oj = null;
     protected List<IRubyObject> circ_array;
+    private boolean debug = false;
+
+    // In C this is in hash.c
+    protected Map<ByteList, RubyClass> classMap = new HashMap<>();
 
     public Parse(ThreadContext context, Options options, IRubyObject handler) {
         this.context = context;
@@ -170,6 +178,7 @@ public abstract class Parse {
     }
 
     void non_white() {
+        if (debug) System.out.println(">non_white");
         while (true) {
             switch(current) {
             case ' ':
@@ -186,6 +195,7 @@ public abstract class Parse {
     }
 
     void skip_comment() {
+        if (debug) System.out.println(">skip_comment");
         advance();
         if ('*' == current) {
             advance();
@@ -215,6 +225,7 @@ public abstract class Parse {
     }
 
     void add_value(IRubyObject rval) {
+        if (debug) System.out.println(">add_value: " + rval);
         Val parent = stack_peek();
 
         if (parent == null) { // simple add
@@ -244,6 +255,7 @@ public abstract class Parse {
     }
 
     void read_null() {
+        if (debug) System.out.println(">read_null");
         if ('u' == advance() && 'l' == advance() && 'l' == advance()) {
             add_value(nilValue());
         } else {
@@ -252,6 +264,7 @@ public abstract class Parse {
     }
     
     void read_true() {
+        if (debug) System.out.println(">read_true");
         if ('r' == advance() && 'u' == advance() && 'e' == advance()) {
             add_value(trueValue());
         } else {
@@ -260,6 +273,7 @@ public abstract class Parse {
     }
 
     void read_false() {
+        if (debug) System.out.println(">read_false");
         if ('a' == advance() && 'l' == advance() && 's' == advance() && 'e' == advance()) {
             add_value(falseValue());
         } else {
@@ -269,6 +283,7 @@ public abstract class Parse {
 
     // FIXME: Uses String.  Should get swapped to bytelist eventually or byte[]
     int read_hex() {
+        if (debug) System.out.println(">read_hex");
         int	b = 0;
 
         for (int i = 0; i < 4; i++) {
@@ -324,6 +339,7 @@ public abstract class Parse {
 
 // entered at /
     void read_escaped_str(int start) {
+        if (debug) System.out.println(">read_escaped_str");
         ByteList buf = new ByteList();
         int	cnt = currentOffset - start;
         int	code;
@@ -425,6 +441,7 @@ public abstract class Parse {
     }
 
     void read_str() {
+        if (debug) System.out.println(">read_str");
         advance();
         int str = currentOffset;
         Val parent = stack_peek();
@@ -443,8 +460,10 @@ public abstract class Parse {
             }
         }
         if (null == parent) { // simple add
+            if (debug) System.out.println(">read_str - addCStr");
             addCStr(subStr(str, currentOffset - str), str);
         } else {
+            if (debug) System.out.println(">read_str - complicated: " + parent.next);
             switch (parent.next) {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
@@ -460,6 +479,7 @@ public abstract class Parse {
                     }
                     parent.k1 = (byte) at(str);
                     parent.next = HASH_COLON;
+                    if (debug) System.out.println(">read_str - complicated (key, k1): (" + parent.key + "," + (char) parent.k1 + ")");
                     break;
                 }
                 case HASH_VALUE:
@@ -478,6 +498,7 @@ public abstract class Parse {
     }
 
     void read_num() {
+        if (debug) System.out.println(">read_num");
         ni.reset();
         Val	parent = stack_peek();
         int zero_cnt = 0;
@@ -594,12 +615,12 @@ public abstract class Parse {
     }
 
     void array_start() {
-        //System.err.println("array_start");
+        if (debug) System.out.println(">array_start");
         stack.push(new Val(startArray(), ARRAY_NEW));
     }
 
     void array_end() {
-        //System.err.println("array_end");
+        if (debug) System.out.println(">array_end");
         Val	array = stack.pop();
 
         if (null == array) {
@@ -613,10 +634,12 @@ public abstract class Parse {
     }
 
     void hash_start() {
+        if (debug) System.out.println(">hash_start");
         stack.push(new Val(startHash(), HASH_NEW));
     }
 
     void hash_end() {
+        if (debug) System.out.println(">hash_end");
         Val	hash = stack_peek();
 
         // leave hash on stack until just before
@@ -632,6 +655,7 @@ public abstract class Parse {
     }
 
     void comma() {
+        if (debug) System.out.println(">comma");
         Val	parent = stack_peek();
 
         if (null == parent) {
@@ -646,6 +670,7 @@ public abstract class Parse {
     }
 
     void colon() {
+        if (debug) System.out.println(">colon");
         Val	parent = stack_peek();
 
         if (null != parent && HASH_COLON == parent.next) {
@@ -660,7 +685,7 @@ public abstract class Parse {
 
         err_init();
         for (advance(0); true; advance()) {
-            //System.out.println("CURBEG: " + (char) current);
+            if (debug) System.out.println("CURBEG: " + (char) current);
             non_white();
 
             if (!first && '\0' != current) {
@@ -960,7 +985,7 @@ public abstract class Parse {
     }
 
     public IRubyObject startHash() {
-        return context.nil;
+        return RubyHash.newHash(context.runtime);
     }
 
     // For hash keys which came in with no escape characters.
@@ -974,6 +999,61 @@ public abstract class Parse {
 
     public void parseError(String message) {
         throw context.runtime.newRaiseException(oj.getParseError(), message);
+    }
+
+    protected RubyClass nameToClass(ByteList name, boolean autoDefine) {
+        if (options.class_cache == No) {
+            return resolveClassPath(name, autoDefine);
+        }
+
+        RubyClass clas = classMap.get(name);
+        if (clas == null) {
+            clas = resolveClassPath(name, autoDefine);
+        }
+
+        return clas;
+    }
+
+    protected RubyClass resolveClassPath(ByteList className, boolean autoDefine) {
+        RubyModule clas = context.runtime.getObject();
+
+        int length = className.realSize();
+        ByteList name = className;
+        for (int index = name.indexOf(':'); index != -1 && index + 1 < name.realSize(); index = name.indexOf(':', index + 1)) {
+            if (name.get(index + 1) != ':') {
+                return null;
+            }
+            ByteList baseName = name.makeShared(0, index);
+            index++; // skip past second ':'
+            name = name.makeShared(index, name.realSize() - index);
+            // FIXME: I think 'Foo::' may be broken?
+
+            clas = resolveClassName(clas, baseName, autoDefine);
+
+            if (clas == null) {
+                return null;
+            }
+        }
+
+        clas = resolveClassName(clas, name, autoDefine);
+        if (clas == null) {
+            parseError("class" + className + "is not defined");
+        }
+
+        // FIXME: This probably isn't always true...error case
+        return (RubyClass) clas;
+    }
+
+    protected RubyModule resolveClassName(RubyModule base, ByteList name, boolean autoDefine) {
+        // FIXME: m17n issue
+        IRubyObject clas = base.getConstantAt(name.toString());
+        if (clas == null || autoDefine) {
+            // FIXME: This should be oj Bag type
+            clas = context.runtime.getHash();
+        }
+
+
+        return (RubyClass) clas;
     }
 
 }

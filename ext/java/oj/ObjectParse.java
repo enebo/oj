@@ -16,10 +16,6 @@ import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.runtime.builtin.Variable;
 import org.jruby.util.ByteList;
 
-import java.util.HashMap;
-import java.util.Map;
-
-import static oj.Options.No;
 import static oj.Options.Yes;
 
 /**
@@ -28,9 +24,6 @@ import static oj.Options.Yes;
 public class ObjectParse extends Parse {
     private RubyClass structClass;
     private RubyClass timeClass;
-
-    // In C this is in hash.c
-    private Map<ByteList, RubyClass> classMap = new HashMap<>();
 
     public ObjectParse(ThreadContext context, Options options) {
         super(context, options, null);
@@ -104,26 +97,22 @@ public class ObjectParse extends Parse {
 
     // The much faster approach (4x faster)
     static int parse_num(ByteList value, int str, int cnt) {
-        int		n = 0;
-        int	c;
-        int		i;
-        int end = value.realSize();
+        if (str + cnt > value.realSize()) return -1;
 
-        for (i = cnt; 0 < i; i--, str++) {
-            if (end <= str) {
-                return -1;
-            }
-            c = value.get(i);
-            if (c < '0' || '9' < c) {
-                return -1;
-            }
+        int n = 0;
+        for (int i = 0; i < cnt; i++) {
+            int c = value.get(str + i);
+
+            if (c < '0' || '9' < c) return -1;
+
             n = n * 10 + (c - '0');
         }
+
         return n;
     }
 
     IRubyObject parse_xml_time(ByteList value) {
-        IRubyObject[] args = new IRubyObject[8];
+        IRubyObject[] args = new IRubyObject[7];
         int n;
         int str = 0;
 
@@ -214,7 +203,9 @@ public class ObjectParse extends Parse {
                 args[6] = context.runtime.newFixnum(0);
             } else {
                 if ('Z' == c) {
-                    return timeClass.callMethod(context, "utc", args);
+                    IRubyObject[] nargs = new IRubyObject[6];
+                    System.arraycopy(args, 0, nargs, 0, 6);
+                    return timeClass.callMethod(context, "utc", nargs);
                 } else if ('+' == c) {
                     int	hr = parse_num(value, str, 2);
                     int	min;
@@ -515,8 +506,6 @@ public class ObjectParse extends Parse {
         int		klen = kval.key.realSize();
         Val		parent = stack_peek();
 
-
-        System.out.println("SETNUM");
         while (parent.val != null) {
             if (parent.val instanceof RubyNil) {
                 parent.oddArgs = null; // make sure it is 0 in case not odd
@@ -668,58 +657,8 @@ public class ObjectParse extends Parse {
         value = ni.toNumber(context);
     }
 
-    private RubyClass nameToClass(ByteList name, boolean autoDefine) {
-        if (options.class_cache == No) {
-            return resolveClassPath(name, autoDefine);
-        }
-
-        RubyClass clas = classMap.get(name);
-        if (clas == null) {
-            clas = resolveClassPath(name, autoDefine);
-        }
-
-        return clas;
-    }
-
-    private RubyClass resolveClassPath(ByteList className, boolean autoDefine) {
-        RubyModule clas = context.runtime.getObject();
-
-        int length = className.realSize();
-        ByteList name = className;
-        for (int index = name.indexOf(':'); index != -1 && index + 1 < name.realSize(); index = name.indexOf(':', index + 1)) {
-            if (name.get(index + 1) != ':') {
-                return null;
-            }
-            ByteList baseName = name.makeShared(0, index);
-            index++; // skip past second ':'
-            name = name.makeShared(index, name.realSize() - index);
-            // FIXME: I think 'Foo::' may be broken?
-
-            clas = resolveClassName(clas, baseName, autoDefine);
-
-            if (clas == null) {
-                return null;
-            }
-        }
-
-        clas = resolveClassName(clas, name, autoDefine);
-        if (clas == null) {
-            parseError("class" + className + "is not defined");
-        }
-
-        // FIXME: This probably isn't always true...error case
-        return (RubyClass) clas;
-    }
-
-    private RubyModule resolveClassName(RubyModule base, ByteList name, boolean autoDefine) {
-        // FIXME: m17n issue
-        IRubyObject clas = base.getConstantAt(name.toString());
-        if (clas == null || autoDefine) {
-            // FIXME: This should be oj Bag type
-            clas = context.runtime.getHash();
-        }
-
-
-        return (RubyClass) clas;
+    @Override
+    public IRubyObject startHash() {
+        return context.nil;
     }
 }

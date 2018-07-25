@@ -66,29 +66,4 @@ public class StrictParse extends Parse {
     public void setValue(Val kval, IRubyObject value) {
         ((RubyHash) stack_peek().val).fastASet(calc_hash_key(kval), value);
     }
-
-    @Override
-    public IRubyObject hashKey(int start, int length) {
-        return undef;
-    }
-
-    @Override
-    public IRubyObject hashKey(ByteList key) {
-        return undef;
-    }
-
-    @Override
-    public IRubyObject endArray() {
-        return context.nil;
-    }
-
-    @Override
-    public IRubyObject endHash() {
-        return context.nil;
-    }
-
-    @Override
-    public IRubyObject startHash() {
-        return RubyHash.newHash(context.runtime);
-    }
 }
