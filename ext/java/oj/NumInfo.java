@@ -72,9 +72,9 @@ public class NumInfo {
             } else if (1 == div && 0 == exp) { // fixnum
                 if (big) {
                     if (256 > len) {
-                        rnum = ConvertBytes.byteListToInum19(runtime, parse.subStr(str_start, str_length), 10, true);
+                        rnum = ConvertBytes.byteListToInum19(runtime, parse.source.subStr(str_start, str_length), 10, true);
                     } else {
-                        rnum = ConvertBytes.byteListToInum19(runtime, parse.subStr(str_start, str_length), 10, true);
+                        rnum = ConvertBytes.byteListToInum19(runtime, parse.source.subStr(str_start, str_length), 10, true);
                     }
                 } else {
                     if (neg) {
@@ -85,7 +85,7 @@ public class NumInfo {
                 }
         } else { // decimal
             if (big) {
-                    rnum = newBigDecimal(runtime, runtime.newString(parse.subStr(str_start, str_length)));
+                    rnum = newBigDecimal(runtime, runtime.newString(parse.source.subStr(str_start, str_length)));
                     if (no_big) {
                         rnum = rnum.callMethod(context, "to_f");
                     }

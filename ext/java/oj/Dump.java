@@ -165,22 +165,20 @@ public class Dump {
     }
 
     static void dump_ulong(long num, Out out) {
-        /*
-        char	buf[32];
-        char	*b = buf + sizeof(buf) - 1;
+        byte[] buf = new byte[32]; // FIXME: Can be instance variable
+        int	b = buf.length - 1;
 
-        *b-- = '\0';
         if (0 < num) {
             for (; 0 < num; num /= 10, b--) {
-                *b = (num % 10) + '0';
+                buf[b] = (byte) ((num % 10) + '0');
             }
             b++;
         } else {
-            *b = '0';
+            buf[b] = '0';
         }
-        for (; '\0' != *b; b++) {
-            *out.append(*b);
-        }*/
+        for (; b < buf.length; b++) {
+            out.append(buf[b]);
+        }
     }
 
      static void dump_hex(int c, Out out) {
@@ -1143,6 +1141,8 @@ public class Dump {
             fill_indent(out, d2);
             out.append(SELF_KEY);
             dump_hash(context, obj, null, depth + 1, out.opts.mode, out);
+        } else {
+            out.append(',');
         }
 
         // dump instance variables.
@@ -1380,7 +1380,7 @@ public class Dump {
                         case ObjectMode:
                         default:		dump_obj_comp(context, obj, depth, out, argv);	break;
                     }
-                } else if (obj.getMetaClass().getNativeClassIndex() != ClassIndex.NO_INDEX) { // FIXME: Not entirely sure on this
+                } else if (obj instanceof RubyTime || obj instanceof RubyBigDecimal) {  // FIXME: not sure it is only these two types.
                     switch (out.opts.mode) {
                         case StrictMode:	dump_data_strict(context, obj, out);	break;
                         case NullMode:		dump_data_null(context, obj, out);	break;
@@ -1389,7 +1389,16 @@ public class Dump {
                         default:		dump_data_obj(context, obj, depth, out);	break;
                     }
                 } else {
-                    throw context.runtime.newNotImplementedError("\"Failed to dump '" + obj.getMetaClass().getName() + "'.");
+                    switch (out.opts.mode) {
+                        case StrictMode:	dump_data_strict(context, obj, out);	break;
+                        case NullMode:		dump_data_null(context, obj, out);	break;
+                        case CompatMode:	dump_obj_comp(context, obj, depth, out, argv);	break;
+                        case ObjectMode:
+                        default:		dump_obj_obj(context, obj, depth, out);	break;
+                    }
+
+
+                    // What type causes this? throw context.runtime.newNotImplementedError("\"Failed to dump '" + obj.getMetaClass().getName() + "'.");
                 }
             }
         }
@@ -1443,7 +1452,7 @@ public class Dump {
         }
     }
 
-    void oj_write_obj_to_stream(ThreadContext context, IRubyObject obj, IRubyObject stream, Options copts) {
+    static void oj_write_obj_to_stream(ThreadContext context, IRubyObject obj, IRubyObject stream, Options copts) {
         Out out = new Out();
 
         obj_to_json(context, obj, copts, out);

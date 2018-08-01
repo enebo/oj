@@ -21,8 +21,8 @@ public class SCParse extends Parse {
     private final boolean dispatchArrayAppend;
     private final boolean dispatchValueAdd;
 
-    public SCParse(ThreadContext context, Options options, IRubyObject handler) {
-        super(context, options, handler);
+    public SCParse(ParserSource source, ThreadContext context, Options options, IRubyObject handler) {
+        super(source, context, options, handler);
 
         dispatchStartHash = handler.respondsTo("hash_start");
         dispatchEndHash = handler.respondsTo("hash_end");
@@ -81,7 +81,7 @@ public class SCParse extends Parse {
 
     public void setCStr(Val parent, int start, int length) {
         if (dispatchHashSet) {
-            setCStr(parent, subStr(start, length), start);
+            setCStr(parent, source.subStr(start, length), start);
         }
     }
 
@@ -111,7 +111,7 @@ public class SCParse extends Parse {
 
     @Override
     public IRubyObject hashKey(int start, int length) {
-        return dispatchHashKey ? hashKey(subStr(start, length)) : undef;
+        return dispatchHashKey ? hashKey(source.subStr(start, length)) : undef;
     }
 
     @Override

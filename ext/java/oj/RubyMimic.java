@@ -3,9 +3,7 @@ package oj;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyClass;
-import org.jruby.RubyGlobal;
 import org.jruby.RubyHash;
-import org.jruby.RubyKernel;
 import org.jruby.RubyModule;
 import org.jruby.RubyObject;
 import org.jruby.anno.JRubyMethod;
@@ -107,8 +105,9 @@ public class RubyMimic {
     public static IRubyObject load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = RubyOj.resolveOj(self);
         Options options = oj.default_options;
+        ParserSource source = RubyOj.processArgs(context, args, options);
 
-        IRubyObject obj = new CompatParse(context, options).parse(oj, args, null, false, Block.NULL_BLOCK);
+        IRubyObject obj = new CompatParse(source, context, options).parse(oj, false, Block.NULL_BLOCK);
 
         // FIXME: We need to make some common logic to extract explicit proc arg with implicit block.
         /*

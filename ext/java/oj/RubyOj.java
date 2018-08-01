@@ -323,19 +323,22 @@ public class RubyOj extends RubyModule {
             IRubyObject Qnil = runtime.getNil();
             mode = getMode(runtime, mode, ropts, Qnil);
         }
+
+        ParserSource source = processArgs(context, args, oj.default_options);
+
         switch (mode) {
             case StrictMode:
-                return new StrictParse(context, oj.default_options).parse(oj, args, null, true, block);
+                return new StrictParse(source, context, oj.default_options).parse(oj, true, block);
             case NullMode:
             case CompatMode:
-                return new CompatParse(context, oj.default_options).parse(oj, args, null, true, block);
+                return new CompatParse(source, context, oj.default_options).parse(oj, true, block);
             case ObjectMode:
                 // is the catch all parser below...
             default:
                 break;
         }
 
-        return new ObjectParse(context, oj.default_options).parse(oj, args, null, true, block);
+        return new ObjectParse(source, context, oj.default_options).parse(oj, true, block);
     }
 
     private static char getMode(Ruby runtime, char mode, RubyHash ropts, IRubyObject qnil) {
@@ -384,19 +387,20 @@ public class RubyOj extends RubyModule {
 
         try {
             fd = new FileInputStream(path);
+            ParserSource source = null; // FIXME: need to hook up stream parsersource.
 
             switch (mode) {
                 case StrictMode:
-                    return new StrictParse(context, options).sparse(oj, args, fd, block);
+                    return new StrictParse(source, context, options).parse(oj, true, block);
                 case NullMode:
                 case CompatMode:
-                    return new CompatParse(context, options).sparse(oj, args, fd, block);
+                    return new CompatParse(source, context, options).parse(oj, true, block);
                 case ObjectMode:
                 default:
                     break;
             }
 
-            return new ObjectParse(context, options).sparse(oj, args, fd, block);
+            return new ObjectParse(source, context, options).parse(oj, true, block);
         } catch (IOException e) {
             throw runtime.newIOError(e.getMessage());
         } finally {
@@ -414,38 +418,77 @@ public class RubyOj extends RubyModule {
         options.auto_define = No;
         options.sym_key = No;
         options.mode = StrictMode;
+        IRubyObject[] args = new IRubyObject[] { doc };
+        ParserSource source = processArgs(context, args, options);
 
         // FIXME: can remove boxing if we are making or already know some of these arguments.
-        return new StrictParse(context, options).parse(oj, new IRubyObject[] { doc }, null, true, block);
+        return new StrictParse(source, context, options).parse(oj, true, block);
     }
 
     @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject strict_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = resolveOj(self);
+        ParserSource source = processArgs(context, args, oj.default_options);
 
-        return loadInternal(oj, new StrictParse(context, oj.default_options), args, block);
+        return new StrictParse(source, context, oj.default_options).parse(oj, true, block);
     }
 
     @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject compat_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = resolveOj(self);
+        ParserSource source = processArgs(context, args, oj.default_options);
 
-        return loadInternal(oj, new CompatParse(context, oj.default_options), args, block);
+        return new CompatParse(source, context, oj.default_options).parse(oj, true, block);
     }
 
     @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject object_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = resolveOj(self);
+        ParserSource source = processArgs(context, args, oj.default_options);
 
-        return loadInternal(oj, new ObjectParse(context, oj.default_options), args, block);
+        return new ObjectParse(source, context, oj.default_options).parse(oj, true, block);
     }
 
-    private static IRubyObject loadInternal(OjLibrary oj, Parse parser, IRubyObject[] args, Block block) {
-        if (args[0] instanceof RubyString) {
-            return parser.parse(oj, args, null, true, block);
+    public static ParserSource processArgs(ThreadContext context, IRubyObject[] args, Options options) {
+        Ruby runtime = context.runtime;
+        IRubyObject	input;
+        ByteList byteSource;
+
+        if (args.length < 1) {
+            throw runtime.newArgumentError("Wrong number of arguments to parse.");
+        }
+        input = args[0];
+        if (2 == args.length) {
+            RubyOj.parse_options(context, args[1], options);
         }
 
-        return parser.sparse(oj, args, parser.getRuntime().getIn(), block);
+        if (input instanceof RubyString) {
+            byteSource = ((RubyString) input).getByteList();
+        } else if (context.nil == input && Yes == options.nilnil) {
+            return null;
+        } else {
+            RubyModule clas = input.getMetaClass();
+
+            if (runtime.getClass("StringIO") == clas) {
+                input = input.callMethod(context, "string");
+            } else if (!Platform.IS_WINDOWS && runtime.getFile() == clas && 0 == input.callMethod(context, "pos").convertToInteger().getLongValue()) {
+                input = ((RubyFile) input).read(context);
+            } else if (input.respondsTo("read")) {
+                throw runtime.newArgumentError("FIXME: No streaming parser");
+                // use stream parser instead
+                // FIXME:
+                //return oj_pi_sparse(args, pi, 0);
+            } else {
+                throw runtime.newArgumentError("strict_parse() expected a String or IO Object.");
+            }
+
+            if (!(input instanceof RubyString)) {
+                throw runtime.newArgumentError("strict_parse() expected a String or IO Object.");
+            }
+            byteSource = ((RubyString) input).getByteList();
+        }
+
+        return new StringParserSource(byteSource);
     }
 
     @JRubyMethod(module = true, rest = true)
@@ -483,7 +526,6 @@ public class RubyOj extends RubyModule {
         return context.nil;
     }*/
 
-    /*
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject to_stream(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         OjLibrary oj = resolveOj(self);
@@ -492,11 +534,10 @@ public class RubyOj extends RubyModule {
         if (3 == args.length) {
             parse_options(context, args[2], oj.default_options);
         }
-        oj_write_obj_to_stream(args[1], args, copts);
+        Dump.oj_write_obj_to_stream(context, args[1], args[0], copts);
 
         return context.nil;
     }
-    */
 
     /*
     @JRubyMethod(module = true, rest = true)
@@ -561,12 +602,9 @@ public class RubyOj extends RubyModule {
 
         IRubyObject[] newArgs = new IRubyObject[args.length - 1];
         System.arraycopy(args, 1, newArgs, 0, newArgs.length);
-        if (input instanceof RubyString) {
-            // FIXME: non-port (re-dicing and rechecking input and args here is double checking some stuff).
-            return new SCParse(context, copts, args[0]).parse(oj, newArgs, null, true, block);
-        } else {
-            return new SCParse(context, copts, args[0]).sparse(oj, newArgs, context.runtime.getIn(), block);
-        }
+        ParserSource source = processArgs(context, newArgs, copts);
+
+        return new SCParse(source, context, copts, args[0]).parse(oj, true, block);
     }
 
     public static ByteList getInput(ThreadContext context, IRubyObject input) {

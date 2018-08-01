@@ -13,8 +13,8 @@ import static oj.Options.Yes;
  * Created by enebo on 8/28/15.
  */
 public class CompatParse extends StrictParse {
-    public CompatParse(ThreadContext context, Options options) {
-        super(context, options);
+    public CompatParse(ParserSource source, ThreadContext context, Options options) {
+        super(source, context, options);
     }
 
     @Override

@@ -4,7 +4,6 @@ import org.jruby.RubyArray;
 import org.jruby.RubyClass;
 import org.jruby.RubyException;
 import org.jruby.RubyHash;
-import org.jruby.RubyModule;
 import org.jruby.RubyNil;
 import org.jruby.RubyObject;
 import org.jruby.RubyString;
@@ -25,8 +24,8 @@ public class ObjectParse extends Parse {
     private RubyClass structClass;
     private RubyClass timeClass;
 
-    public ObjectParse(ThreadContext context, Options options) {
-        super(context, options, null);
+    public ObjectParse(ParserSource source, ThreadContext context, Options options) {
+        super(source, context, options, null);
 
         structClass = context.runtime.getStructClass();
         timeClass = context.runtime.getTime();
@@ -78,11 +77,11 @@ public class ObjectParse extends Parse {
 
     private IRubyObject str_to_value(ByteList value, int orig) {
         int len = value.length();
-        int c = at(orig);
+        int c = source.at(orig);
 
         if (':' == c && 0 < len) {
             return keyIsSym(value);
-        } else if (circ_array != null && 3 <= len && '^' == c && 'r' == at(orig + 1)) {
+        } else if (circ_array != null && 3 <= len && '^' == c && 'r' == source.at(orig + 1)) {
             int i = (int) read_long(value, 2);
 
             if (0 > i) {
@@ -95,7 +94,6 @@ public class ObjectParse extends Parse {
         }
     }
 
-    // The much faster approach (4x faster)
     static int parse_num(ByteList value, int str, int cnt) {
         if (str + cnt > value.realSize()) return -1;
 
@@ -252,7 +250,7 @@ public class ObjectParse extends Parse {
             switch (key.get(1)) {
                 case 'o': // object
                 {	// name2class sets and error if the class is not found or created
-                    RubyClass	clas = nameToClass(value, Yes == options.auto_define);
+                    RubyClass clas = nameToClass(value, Yes == options.auto_define);
 
                     if (null != clas) {
                         parent.val = clas.allocate();
@@ -354,7 +352,7 @@ public class ObjectParse extends Parse {
                         if (context.nil == parent.val) {
                             parent.val = RubyHash.newHash(context.runtime);
                         }
-                        circ_array.set(ni.i, parent.val);
+                        circArraySet(ni.i, parent.val);
                     } else {
                         return false;
                     }
@@ -527,7 +525,7 @@ public class ObjectParse extends Parse {
             } else if (parent.val instanceof RubyObject) {
                 if (2 == klen && '^' == key.get(0) && 'i' == key.get(1) &&
                         !ni.infinity && !ni.neg && 1 == ni.div && 0 == ni.exp && circ_array != null) { // fixnum
-                    circ_array.set(ni.i, parent.val);
+                    circArraySet(ni.i, parent.val);
                 } else {
                     set_obj_ivar(parent, kval, ni.toNumber(context));
                 }
@@ -622,14 +620,14 @@ public class ObjectParse extends Parse {
         int len = value.length();
 
         if (3 <= len && circ_array != null) {
-            if ('i' == at(orig + 1)) {
+            if ('i' == source.at(orig + 1)) {
                 int i = (int) read_long(value, 2);
 
                 if (0 < i) {
-                    circ_array.set(i, stack_peek().val);
+                    circArraySet(i, stack_peek().val);
                     return;
                 }
-            } else if ('r' == at(orig + 1)) {
+            } else if ('r' == source.at(orig + 1)) {
                 int i = (int) read_long(value, 2);
 
                 if (0 < i) {
@@ -640,6 +638,16 @@ public class ObjectParse extends Parse {
             }
         }
         ((RubyArray) stack_peek().val).append(str_to_value(value, orig));
+    }
+
+    private void circArraySet(int i, IRubyObject value) {
+        // FIXME: This is just weird.  a) why 1 on oj/json side? b) this does not 'fit' well with ArrayList.
+        if (i >= circ_array.size()) {
+            for(int j = 0; j <= i; j++) {
+                circ_array.add(null);
+            }
+        }
+        circ_array.set(i, value);
     }
 
     @Override

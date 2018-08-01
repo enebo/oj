@@ -11,7 +11,6 @@ import org.jruby.RubyArray;
 import org.jruby.RubyBasicObject;
 import org.jruby.RubyBoolean;
 import org.jruby.RubyClass;
-import org.jruby.RubyFile;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyFloat;
 import org.jruby.RubyHash;
@@ -19,7 +18,6 @@ import org.jruby.RubyModule;
 import org.jruby.RubyNil;
 import org.jruby.RubyString;
 import org.jruby.RubySymbol;
-import org.jruby.platform.Platform;
 import org.jruby.runtime.Block;
 import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
@@ -28,6 +26,7 @@ import org.jruby.util.ByteList;
 
 import static oj.NextItem.*;
 import static oj.Options.*;
+import static oj.ParserSource.EOF;
 
 /**
  * Base class for all the parser types.
@@ -40,10 +39,8 @@ public abstract class Parse {
     static final int EXP_MAX = 100000;
     static final ByteList INFINITY = new ByteList(new byte[] { 'I', 'n', 'f', 'i', 'n', 'i', 't', 'y'});
 
+    protected ParserSource source;
     protected ThreadContext context;
-    public ByteList json;
-    public int currentOffset;
-    public int current;
     public Stack<Val> stack;
     public Block proc;
     public IRubyObject undef;
@@ -56,12 +53,13 @@ public abstract class Parse {
     public IRubyObject value;
     protected OjLibrary oj = null;
     protected List<IRubyObject> circ_array;
-    private boolean debug = false;
+    private boolean debug = System.getProperty("oj.debug") != null;
 
     // In C this is in hash.c
     protected Map<ByteList, RubyClass> classMap = new HashMap<>();
 
-    public Parse(ThreadContext context, Options options, IRubyObject handler) {
+    public Parse(ParserSource source, ThreadContext context, Options options, IRubyObject handler) {
+        this.source = source;
         this.context = context;
         this.stack = new Stack<Val>();
         this.proc = null;
@@ -70,12 +68,6 @@ public abstract class Parse {
         this.options = options;
         this.handler = handler;
         this.ni = new NumInfo(this);
-        this.currentOffset = 0;
-    }
-
-    public void setJSON(ByteList json) {
-        this.json = json;
-        this.currentOffset = 0;
     }
 
     public IRubyObject stack_head_val() {
@@ -96,49 +88,6 @@ public abstract class Parse {
         }
 
         return stack.peek();
-    }
-
-    public void appendTo(ByteList buf, int start) {
-        buf.append(json, start, currentOffset - start);
-    }
-
-    public int advance() {
-        return advance(1);
-    }
-    
-    public int advance(int amount) {
-        currentOffset += amount;
-
-        if (currentOffset >= json.getRealSize()) {
-            current = 0;
-        } else {
-            current = json.get(currentOffset);
-        }
-        return current;
-    }
-
-    public int at(int offset) {
-        return json.get(offset);
-    }
-
-    public ByteList subStr(int offset, int length) {
-        return json.makeShared(offset, length);
-    }
-
-    public boolean startsWith(ByteList str) {
-        return json.startsWith(str, currentOffset);
-    }
-
-    public int peek(int amount) {
-        if (currentOffset >= json.getRealSize()) {
-            return 0;
-        }
-
-        return json.get(currentOffset + amount);
-    }
-
-    public int length() {
-        return json.getRealSize();
     }
 
     public void err_init() {
@@ -180,13 +129,13 @@ public abstract class Parse {
     void non_white() {
         if (debug) System.out.println(">non_white");
         while (true) {
-            switch(current) {
+            switch(source.current) {
             case ' ':
             case '\t':
             case '\f':
             case '\n':
             case '\r':
-                advance();
+                source.advance();
                 break;
             default:
                 return;
@@ -196,22 +145,18 @@ public abstract class Parse {
 
     void skip_comment() {
         if (debug) System.out.println(">skip_comment");
-        advance();
-        if ('*' == current) {
-            advance();
-            int length = length();
-            for (; currentOffset < length; advance()) {
-                if ('*' == current && '/' == peek(1)) {
-                    advance(1);
-                    return;
-                } else if (length <= currentOffset) {
-                    setError("comment not terminated");
+        source.advance();
+        if ('*' == source.current) {
+            source.advance();
+            for (; source.current != EOF; source.advance()) {
+                if ('*' == source.current && '/' == source.peek(1)) {
+                    source.advance(1);
                     return;
                 }
             }
-        } else if ('/' == current) {
-            for (; true; advance()) {
-                switch (current) {
+        } else if ('/' == source.current) {
+            for (; true; source.advance()) {
+                switch (source.current) {
                 case '\n':
                 case '\r':
                 case '\f':
@@ -221,6 +166,10 @@ public abstract class Parse {
             }
         } else {
             setError("invalid comment format");
+        }
+
+        if (source.current == EOF) {
+            setError("comment not terminated");
         }
     }
 
@@ -256,7 +205,7 @@ public abstract class Parse {
 
     void read_null() {
         if (debug) System.out.println(">read_null");
-        if ('u' == advance() && 'l' == advance() && 'l' == advance()) {
+        if ('u' == source.advance() && 'l' == source.advance() && 'l' == source.advance()) {
             add_value(nilValue());
         } else {
             setError("expected null");
@@ -265,7 +214,7 @@ public abstract class Parse {
     
     void read_true() {
         if (debug) System.out.println(">read_true");
-        if ('r' == advance() && 'u' == advance() && 'e' == advance()) {
+        if ('r' == source.advance() && 'u' == source.advance() && 'e' == source.advance()) {
             add_value(trueValue());
         } else {
             setError("expected true");
@@ -274,7 +223,7 @@ public abstract class Parse {
 
     void read_false() {
         if (debug) System.out.println(">read_false");
-        if ('a' == advance() && 'l' == advance() && 's' == advance() && 'e' == advance()) {
+        if ('a' == source.advance() && 'l' == source.advance() && 's' == source.advance() && 'e' == source.advance()) {
             add_value(falseValue());
         } else {
             setError("expected false");
@@ -287,7 +236,7 @@ public abstract class Parse {
         int	b = 0;
 
         for (int i = 0; i < 4; i++) {
-            int h = peek(i);
+            int h = source.peek(i);
             b = b << 4;
             if ('0' <= h && h <= '9') {
                 b += h - '0';
@@ -341,21 +290,20 @@ public abstract class Parse {
     void read_escaped_str(int start) {
         if (debug) System.out.println(">read_escaped_str");
         ByteList buf = new ByteList();
-        int	cnt = currentOffset - start;
+        int	cnt = source.currentOffset - start;
         int	code;
         Val parent = stack_peek();
 
         if (0 < cnt) {
-            appendTo(buf, start);
+            source.appendTo(buf, start);
         }
 
-        int length = length();
-        for (int s = current; '"' != s; s = advance()) {
-            if (currentOffset >= length) {
+        for (int s = source.current; '"' != s; s = source.advance()) {
+            if (s == EOF) {
                 setError("quoted string not terminated");
                 return;
             } else if ('\\' == s) {
-                s = advance();
+                s = source.advance();
                 switch (s) {
                 case 'n':	buf.append('\n');	break;
                 case 'r':	buf.append('\r');	break;
@@ -366,26 +314,26 @@ public abstract class Parse {
                 case '/':	buf.append('/');	break;
                 case '\\':	buf.append('\\');	break;
                 case 'u':
-                    advance();
+                    source.advance();
                     if (0 == (code = read_hex()) && err_has()) {
                         return;
                     }
-                    advance(3);
+                    source.advance(3);
                     if (0x0000D800 <= code && code <= 0x0000DFFF) {
                         int	c1 = (code - 0x0000D800) & 0x000003FF;
                         int	c2;
 
-                        advance();
-                        if ('\\' != current || 'u' != peek(1)) {
-                            advance(-1);
+                        source.advance();
+                        if ('\\' != source.current || 'u' != source.peek(1)) {
+                            source.advance(-1);
                             setError("invalid escaped character");
                             return;
                         }
-                        advance(2);
+                        source.advance(2);
                         if (0 == (c2 = read_hex()) && err_has()) {
                             return;
                         }
-                        advance(3);
+                        source.advance(3);
                         c2 = (c2 - 0x0000DC00) & 0x000003FF;
                         code = ((c1 << 10) | c2) + 0x00010000;
                     }
@@ -395,7 +343,7 @@ public abstract class Parse {
                     }
                     break;
                     default:
-                        advance(-1);
+                        source.advance(-1);
                         setError("invalid escaped character");
                         return;
                 }
@@ -420,7 +368,7 @@ public abstract class Parse {
                 } else {
                     parent.key = new ByteList();
                 }
-                parent.k1 = (byte) at(start);
+                parent.k1 = (byte) source.at(start);
                 parent.next =  HASH_COLON;
                 break;
                 case HASH_VALUE:
@@ -436,54 +384,54 @@ public abstract class Parse {
                     break;
             }
         }
-        // Do I advance or is it advanced at this potin
+        // Do I source.advance or is it source.advanced at this potin
         //currentOffset = s + 1;
     }
 
     void read_str() {
         if (debug) System.out.println(">read_str");
-        advance();
-        int str = currentOffset;
+        source.advance();
+        int str = source.currentOffset;
         Val parent = stack_peek();
 
-        int length = length();
-        for (; '"' != current; advance()) {
-            if (length <= currentOffset) {
+        for (; '"' != source.current; source.advance()) {
+            if (source.current == EOF) {
                 setError("quoted string not terminated");
                 return;
-            } else if ('\0' == current) {
+            } else if ('\0' == source.current) {
                 setError("NULL byte in string");
                 return;
-            } else if ('\\' == current) {
+            } else if ('\\' == source.current) {
                 read_escaped_str(str);
                 return;
             }
         }
         if (null == parent) { // simple add
             if (debug) System.out.println(">read_str - addCStr");
-            addCStr(subStr(str, currentOffset - str), str);
+            addCStr(source.subStr(str, source.currentOffset - str), str);
         } else {
             if (debug) System.out.println(">read_str - complicated: " + parent.next);
             switch (parent.next) {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
-                    arrayAppendCStr(subStr(str, currentOffset - str), str);
+                    // FIXME: we should use begin + length instead of making bytelist here
+                    arrayAppendCStr(source.subStr(str, source.currentOffset - str), str);
                     parent.next =  ARRAY_COMMA;
                     break;
                 case HASH_NEW:
                 case HASH_KEY: {
-                    if (undef == (parent.key_val = hashKey(str, currentOffset - str))) {
-                        parent.key = subStr(str, currentOffset - str);
+                    if (undef == (parent.key_val = hashKey(str, source.currentOffset - str))) {
+                        parent.key = source.subStr(str, source.currentOffset - str);
                     } else {
                         parent.key = new ByteList();
                     }
-                    parent.k1 = (byte) at(str);
+                    parent.k1 = (byte) source.at(str);
                     parent.next = HASH_COLON;
                     if (debug) System.out.println(">read_str - complicated (key, k1): (" + parent.key + "," + (char) parent.k1 + ")");
                     break;
                 }
                 case HASH_VALUE:
-                    setCStr(parent, str, currentOffset - str);
+                    setCStr(parent, str, source.currentOffset - str);
                     parent.next =  HASH_COMMA;
                     break;
                 case HASH_COMMA:
@@ -502,37 +450,37 @@ public abstract class Parse {
         ni.reset();
         Val	parent = stack_peek();
         int zero_cnt = 0;
-        int start = currentOffset;
+        int start = source.currentOffset;
 
         ni.no_big = (FloatDec == options.bigdec_load);
 
-        if ('-' == current) {
-            advance();
+        if ('-' == source.current) {
+            source.advance();
             ni.neg = true;
-        } else if ('+' == current) {
-            advance();
+        } else if ('+' == source.current) {
+            source.advance();
         }
-        if ('I' == current) {
-            if (!startsWith(INFINITY)) {
+        if ('I' == source.current) {
+            if (!source.startsWith(INFINITY)) {
                 setError("not a number or other Object");
                 return;
             }
-            advance(8);
+            source.advance(8);
             ni.infinity = true;
-        } else if ('N' == current || 'n' == current) {
-            if ('a' != peek(1) || ('N' != peek(2) && 'n' != peek(2))) {
+        } else if ('N' == source.current || 'n' == source.current) {
+            if ('a' != source.peek(1) || ('N' != source.peek(2) && 'n' != source.peek(2))) {
                 setError("not a number or other Object");
                 return;
             }
-            advance(3);
+            source.advance(3);
             ni.nan = true;
         } else {
-            for (; '0' <= current && current <= '9'; advance()) {
+            for (; '0' <= source.current && source.current <= '9'; source.advance()) {
                 ni.dec_cnt++;
                 if (ni.big) {
                     //ni.big++; // What is this for?
                 } else {
-                    int	d = (current - '0');
+                    int	d = (source.current - '0');
 
                     if (0 == d) {
                         zero_cnt++;
@@ -546,10 +494,10 @@ public abstract class Parse {
                     }
                 }
             }
-            if ('.' == current) {
-                advance();
-                for (; '0' <= current && current <= '9'; advance()) {
-                    int	d = (current - '0');
+            if ('.' == source.current) {
+                source.advance();
+                for (; '0' <= source.current && source.current <= '9'; source.advance()) {
+                    int	d = (source.current - '0');
 
                     if (0 == d) {
                         zero_cnt++;
@@ -565,19 +513,19 @@ public abstract class Parse {
                     }
                 }
             }
-            if ('e' == current || 'E' == current) {
+            if ('e' == source.current || 'E' == source.current) {
                 boolean	eneg = false;
 
                 ni.hasExp = true;
-                advance();
-                if ('-' == current) {
-                    advance();
+                source.advance();
+                if ('-' == source.current) {
+                    source.advance();
                     eneg = true;
-                } else if ('+' == current) {
-                    advance();
+                } else if ('+' == source.current) {
+                    source.advance();
                 }
-                for (; '0' <= current && current <= '9'; advance()) {
-                    ni.exp = ni.exp * 10 + (current - '0');
+                for (; '0' <= source.current && source.current <= '9'; source.advance()) {
+                    ni.exp = ni.exp * 10 + (source.current - '0');
                     if (EXP_MAX <= ni.exp) {
                         ni.big = true;
                     }
@@ -588,9 +536,9 @@ public abstract class Parse {
             }
             ni.dec_cnt -= zero_cnt;
             ni.str_start = start;
-            ni.str_length = currentOffset - start;
+            ni.str_length = source.currentOffset - start;
         }
-        advance(-1);
+        source.advance(-1);
         if (BigDec == options.bigdec_load) {
             ni.big = true;
         }
@@ -684,15 +632,15 @@ public abstract class Parse {
         boolean first = true;
 
         err_init();
-        for (advance(0); true; advance()) {
-            if (debug) System.out.println("CURBEG: " + (char) current);
+        for (source.advance(0); true; source.advance()) {
+            if (debug) System.out.println("CURBEG: " + (char) source.current);
             non_white();
 
-            if (!first && '\0' != current) {
+            if (!first && '\0' != source.current) {
                 setError("unexpected characters after the JSON document");
             }
 
-            switch (current) {
+            switch (source.current) {
                 case '{':
                     hash_start();
                     break;
@@ -737,7 +685,7 @@ public abstract class Parse {
                     read_false();
                     break;
                 case 'n':
-                    if ('u' == peek(1)) {
+                    if ('u' == source.peek(1)) {
                         read_null();
                     } else {
                         read_num();
@@ -747,7 +695,7 @@ public abstract class Parse {
                     skip_comment();
                     break;
                 case '\0':
-                    advance(-1);
+                    source.advance(-1);
                     return;
                 default:
                     setError("unexpected character");
@@ -756,7 +704,7 @@ public abstract class Parse {
             if (err_has()) {
                 return;
             }
-            //System.out.println("CUREND: " + (char) current);
+            //System.out.println("CUREND: " + (char) source.current);
             if (stack.isEmpty()) {
                 if (proc != null) {
                     proc.yield(getContext(), stack_head_val());
@@ -780,23 +728,19 @@ public abstract class Parse {
         String file = context.getFile();
         int line = context.getLine();
 
-        if (null == json) {
+     //   if (null == json) {
             // FIXME:
             //oj_err_set(err, err_clas, "%s at line %d, column %d [%s:%d]", msg, rd.line, rd.col, file, line);
-        } else {
+//        } else {
             // FIXME:
             //_oj_err_set_with_location(err, err_clas, msg, json, currentOffset - 1, file, line);
-        }
+//        }
 }
 
     IRubyObject protect_parse() {
         oj_parse2();
 
         return nilValue();
-    }
-
-    void oj_pi_set_input_str(ByteList input) {
-        json = input;
     }
 
     IRubyObject calc_hash_key(Val kval) {
@@ -832,56 +776,15 @@ public abstract class Parse {
         return null;
     }
 
-    public IRubyObject parse(OjLibrary oj, IRubyObject[] args, ByteList json) {
-        return parse(oj, args, json, false, Block.NULL_BLOCK);
-    }
-
-    public IRubyObject parse(OjLibrary oj, IRubyObject[] args, ByteList json, boolean yieldOk, Block block) {
+    public IRubyObject parse(OjLibrary oj, boolean yieldOk, Block block) {
         this.oj = oj;
-
-        Ruby runtime = context.runtime;
-        IRubyObject	input;
         IRubyObject result;
         int			line = 0;
 
-        if (args.length < 1) {
-            throw getRuntime().newArgumentError("Wrong number of arguments to parse.");
-        }
-        input = args[0];
-        if (2 == args.length) {
-            RubyOj.parse_options(context, args[1], options);
-        }
         if (yieldOk && block.isGiven()) {
             proc = block;
         } else {
             proc = null;
-        }
-        if (null != json) {
-            this.json = json;
-        } else if (input instanceof RubyString) {
-            oj_pi_set_input_str(((RubyString) input).getByteList());
-        } else if (nilValue() == input && Yes == options.nilnil) {
-            return nilValue();
-        } else {
-            RubyModule clas = input.getMetaClass();
-
-            if (runtime.getClass("StringIO") == clas) {
-                input = input.callMethod(context, "string");
-            } else if (!Platform.IS_WINDOWS && runtime.getFile() == clas && 0 == input.callMethod(context, "pos").convertToInteger().getLongValue()) {
-                input = ((RubyFile) input).read(context);
-            } else if (input.respondsTo("read")) {
-                throw runtime.newArgumentError("FIXME: No streaming parser");
-                // use stream parser instead
-                // FIXME:
-                //return oj_pi_sparse(args, pi, 0);
-            } else {
-                throw runtime.newArgumentError("strict_parse() expected a String or IO Object.");
-            }
-
-            if (!(input instanceof RubyString)) {
-                throw runtime.newArgumentError("strict_parse() expected a String or IO Object.");
-            }
-            this.json = ((RubyString) input).getByteList();
         }
 
         if (Yes == options.circular) {
@@ -946,7 +849,7 @@ public abstract class Parse {
     }
 
     public void setCStr(Val kval, int start, int length) {
-        setCStr(kval, subStr(start, length), start);
+        setCStr(kval, source.subStr(start, length), start);
     }
 
     public void setCStr(Val parent, ByteList value, int orig) {
@@ -1017,7 +920,6 @@ public abstract class Parse {
     protected RubyClass resolveClassPath(ByteList className, boolean autoDefine) {
         RubyModule clas = context.runtime.getObject();
 
-        int length = className.realSize();
         ByteList name = className;
         for (int index = name.indexOf(':'); index != -1 && index + 1 < name.realSize(); index = name.indexOf(':', index + 1)) {
             if (name.get(index + 1) != ':') {
@@ -1025,7 +927,7 @@ public abstract class Parse {
             }
             ByteList baseName = name.makeShared(0, index);
             index++; // skip past second ':'
-            name = name.makeShared(index, name.realSize() - index);
+            name = name.makeShared(index + 1, name.realSize() - index - 1);
             // FIXME: I think 'Foo::' may be broken?
 
             clas = resolveClassName(clas, baseName, autoDefine);
@@ -1047,11 +949,10 @@ public abstract class Parse {
     protected RubyModule resolveClassName(RubyModule base, ByteList name, boolean autoDefine) {
         // FIXME: m17n issue
         IRubyObject clas = base.getConstantAt(name.toString());
-        if (clas == null || autoDefine) {
+        if (clas == null && autoDefine) {
             // FIXME: This should be oj Bag type
             clas = context.runtime.getHash();
         }
-
 
         return (RubyClass) clas;
     }

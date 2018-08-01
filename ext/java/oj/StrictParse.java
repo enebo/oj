@@ -10,8 +10,8 @@ import org.jruby.util.ByteList;
  * Created by enebo on 8/28/15.
  */
 public class StrictParse extends Parse {
-    public StrictParse(ThreadContext context, Options options) {
-        super(context, options, null);
+    public StrictParse(ParserSource source, ThreadContext context, Options options) {
+        super(source, context, options, null);
     }
 
     @Override
@@ -44,7 +44,7 @@ public class StrictParse extends Parse {
 
     @Override
     public void setCStr(Val kval, int start, int length) {
-        setCStr(kval, subStr(start, length), start);
+        setCStr(kval, source.subStr(start, length), start);
     }
 
     @Override
