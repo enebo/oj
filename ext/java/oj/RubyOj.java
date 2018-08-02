@@ -1,8 +1,6 @@
 package oj;
 
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
@@ -383,31 +381,21 @@ public class RubyOj extends RubyModule {
         }
 
         String path = args[0].asJavaString();
-        InputStream fd = null;
 
-        try {
-            fd = new FileInputStream(path);
-            ParserSource source = null; // FIXME: need to hook up stream parsersource.
+        ParserSource source = new FileParserSource(context, path);
 
-            switch (mode) {
-                case StrictMode:
-                    return new StrictParse(source, context, options).parse(oj, true, block);
-                case NullMode:
-                case CompatMode:
-                    return new CompatParse(source, context, options).parse(oj, true, block);
-                case ObjectMode:
-                default:
-                    break;
-            }
-
-            return new ObjectParse(source, context, options).parse(oj, true, block);
-        } catch (IOException e) {
-            throw runtime.newIOError(e.getMessage());
-        } finally {
-            if (fd != null) {
-                try { fd.close(); } catch (IOException e) {}
-            }
+        switch (mode) {
+            case StrictMode:
+                return new StrictParse(source, context, options).parse(oj, true, block);
+            case NullMode:
+            case CompatMode:
+                return new CompatParse(source, context, options).parse(oj, true, block);
+            case ObjectMode:
+            default:
+                break;
         }
+
+        return new ObjectParse(source, context, options).parse(oj, true, block);
     }
 
     @JRubyMethod(module = true)
@@ -473,11 +461,10 @@ public class RubyOj extends RubyModule {
                 input = input.callMethod(context, "string");
             } else if (!Platform.IS_WINDOWS && runtime.getFile() == clas && 0 == input.callMethod(context, "pos").convertToInteger().getLongValue()) {
                 input = ((RubyFile) input).read(context);
+            } else if (input.respondsTo("readpartial")) {
+                return new ReadParserSource(context, input, "readpartial");
             } else if (input.respondsTo("read")) {
-                throw runtime.newArgumentError("FIXME: No streaming parser");
-                // use stream parser instead
-                // FIXME:
-                //return oj_pi_sparse(args, pi, 0);
+                return new ReadParserSource(context, input, "read");
             } else {
                 throw runtime.newArgumentError("strict_parse() expected a String or IO Object.");
             }
