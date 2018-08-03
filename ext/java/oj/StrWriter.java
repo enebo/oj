@@ -18,7 +18,7 @@ public class StrWriter {
     public StrWriter(ThreadContext context) {
         RubyModule oj = context.runtime.getModule("Oj");
         OjLibrary library = RubyOj.resolveOj(oj);
-        opts = library.default_options; // FIXME: Clone?
+        opts = library.default_options.dup();
         depth = 0;
         keyWritten = false;
         out = new Out(opts);

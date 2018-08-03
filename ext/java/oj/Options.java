@@ -75,6 +75,32 @@ public class Options {
         float_fmt = "%0.15g";		// float_fmt
     }
 
+    public Options dup() {
+        Options newOptions = new Options();
+
+        newOptions.indent = indent;
+        newOptions.circular = circular;
+        newOptions.auto_define = auto_define;
+        newOptions.sym_key = sym_key;
+        newOptions.escape_mode = escape_mode;
+        newOptions.mode = mode;
+        newOptions.class_cache = class_cache;
+        newOptions.time_format = time_format;
+        newOptions.bigdec_as_num = bigdec_as_num;
+        newOptions.bigdec_load = bigdec_load;
+        newOptions.to_json = to_json;
+        newOptions.nilnil = nilnil;
+        newOptions.allow_gc = allow_gc;
+        newOptions.quirks_mode = quirks_mode;
+        newOptions.create_id = create_id;
+        newOptions.sec_prec = sec_prec;
+        newOptions.dump_opts = dump_opts;
+        newOptions.float_prec = float_prec;
+        newOptions.float_fmt = float_fmt;
+
+        return newOptions;
+    }
+
     public static Options mimicOptions() {
         Options options =  new Options();
 

@@ -307,7 +307,8 @@ public class RubyOj extends RubyModule {
     public static IRubyObject load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = resolveOj(self);
         Ruby runtime = context.runtime;
-        char mode = oj.default_options.mode;
+        Options options = oj.default_options.dup();
+        char mode = options.mode;
 
         if (1 > args.length) {
             throw context.runtime.newArgumentError("Wrong number of arguments to load().");
@@ -322,21 +323,21 @@ public class RubyOj extends RubyModule {
             mode = getMode(runtime, mode, ropts, Qnil);
         }
 
-        ParserSource source = processArgs(context, args, oj.default_options);
+        ParserSource source = processArgs(context, args, options);
 
         switch (mode) {
             case StrictMode:
-                return new StrictParse(source, context, oj.default_options).parse(oj, true, block);
+                return new StrictParse(source, context, options).parse(oj, true, block);
             case NullMode:
             case CompatMode:
-                return new CompatParse(source, context, oj.default_options).parse(oj, true, block);
+                return new CompatParse(source, context, options).parse(oj, true, block);
             case ObjectMode:
                 // is the catch all parser below...
             default:
                 break;
         }
 
-        return new ObjectParse(source, context, oj.default_options).parse(oj, true, block);
+        return new ObjectParse(source, context, options).parse(oj, true, block);
     }
 
     private static char getMode(Ruby runtime, char mode, RubyHash ropts, IRubyObject qnil) {
@@ -361,7 +362,7 @@ public class RubyOj extends RubyModule {
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject load_file(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = resolveOj(self);
-        Options options = oj.default_options;
+        Options options = oj.default_options.dup();
         Ruby runtime = context.runtime;
 
         if (1 > args.length) {
@@ -401,7 +402,7 @@ public class RubyOj extends RubyModule {
     @JRubyMethod(module = true)
     public static IRubyObject safe_load(ThreadContext context, IRubyObject self, IRubyObject doc, Block block) {
         OjLibrary oj = resolveOj(self);
-        Options options = oj.default_options;
+        Options options = oj.default_options.dup();
 
         options.auto_define = No;
         options.sym_key = No;
@@ -416,25 +417,28 @@ public class RubyOj extends RubyModule {
     @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject strict_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = resolveOj(self);
-        ParserSource source = processArgs(context, args, oj.default_options);
+        Options options = oj.default_options.dup();
+        ParserSource source = processArgs(context, args, options);
 
-        return new StrictParse(source, context, oj.default_options).parse(oj, true, block);
+        return new StrictParse(source, context, options).parse(oj, true, block);
     }
 
     @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject compat_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = resolveOj(self);
-        ParserSource source = processArgs(context, args, oj.default_options);
+        Options options = oj.default_options.dup();
+        ParserSource source = processArgs(context, args, options);
 
-        return new CompatParse(source, context, oj.default_options).parse(oj, true, block);
+        return new CompatParse(source, context, options).parse(oj, true, block);
     }
 
     @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject object_load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = resolveOj(self);
-        ParserSource source = processArgs(context, args, oj.default_options);
+        Options options = oj.default_options.dup();
+        ParserSource source = processArgs(context, args, options);
 
-        return new ObjectParse(source, context, oj.default_options).parse(oj, true, block);
+        return new ObjectParse(source, context, options).parse(oj, true, block);
     }
 
     public static ParserSource processArgs(ThreadContext context, IRubyObject[] args, Options options) {
@@ -483,7 +487,7 @@ public class RubyOj extends RubyModule {
         OjLibrary oj = resolveOj(self);
         ByteList buf = new ByteList();
         Out out = new Out();
-        Options	copts = oj.default_options;
+        Options	copts = oj.default_options.dup();
 
         if (2 == args.length) {
             parse_options(context, args[1], copts);
@@ -516,12 +520,12 @@ public class RubyOj extends RubyModule {
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject to_stream(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         OjLibrary oj = resolveOj(self);
-        Options copts = oj.default_options;
+        Options options = oj.default_options.dup();
 
         if (3 == args.length) {
-            parse_options(context, args[2], oj.default_options);
+            parse_options(context, args[2], options);
         }
-        Dump.oj_write_obj_to_stream(context, args[1], args[0], copts);
+        Dump.oj_write_obj_to_stream(context, args[1], args[0], options);
 
         return context.nil;
     }
@@ -582,7 +586,7 @@ public class RubyOj extends RubyModule {
 
         // FIXME: We should be cloning this I think?
         OjLibrary oj = resolveOj(self);
-        Options copts = oj.default_options;
+        Options copts = oj.default_options.dup();
         if (3 == args.length) {
             parse_options(context, args[2], copts);
         }

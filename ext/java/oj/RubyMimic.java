@@ -104,7 +104,7 @@ public class RubyMimic {
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = RubyOj.resolveOj(self);
-        Options options = oj.default_options;
+        Options options = oj.default_options.dup();
         ParserSource source = RubyOj.processArgs(context, args, options);
 
         IRubyObject obj = new CompatParse(source, context, options).parse(oj, false, Block.NULL_BLOCK);

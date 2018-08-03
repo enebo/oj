@@ -30,7 +30,6 @@ import org.jruby.RubyTime;
 import org.jruby.exceptions.RaiseException;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;
 import org.jruby.ext.stringio.StringIO;
-import org.jruby.runtime.ClassIndex;
 import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
@@ -1634,18 +1633,14 @@ public class Dump {
     }
 
     static void maybe_comma(StrWriter sw) {
-        switch (sw.peekTypes()) {
-            case ObjectNew:
-                sw.types.set(sw.types.size(), ObjectType);
-                break;
-            case ArrayNew:
-                sw.types.set(sw.types.size(), ArrayType);
-                break;
-            case ObjectType:
-            case ArrayType:
-                // Always have a few characters available in the out.buf.
-                sw.out.append(',');
-                break;
+        DumpType type = sw.peekTypes();
+        if (type == ObjectNew) {
+            sw.types.set(sw.types.size() - 1, ObjectType);
+        } else if (type == ArrayNew) {
+            sw.types.set(sw.types.size() - 1, ArrayType);
+        } else if (type == ObjectType || type == ArrayType) {
+            // Always have a few characters available in the out.buf.
+            sw.out.append(',');
         }
     }
 
@@ -1707,8 +1702,6 @@ public class Dump {
     }
 
     static void pop(ThreadContext context, StrWriter sw) {
-        DumpType type = sw.types.pop();
-
         if (sw.keyWritten) {
             sw.keyWritten = false;
             throw context.runtime.newStandardError("Can not pop after writing a key but no value.");
@@ -1718,16 +1711,13 @@ public class Dump {
             throw context.runtime.newStandardError("Can not pop with no open array or object.");
         }
 
+        DumpType type = sw.types.pop();
+
         fill_indent(sw.out, sw.types.size());
-        switch (type) {
-            case ObjectNew:
-            case ObjectType:
-                sw.out.append('}');
-                break;
-            case ArrayNew:
-            case ArrayType:
-                sw.out.append(']');
-                break;
+        if (type == ObjectNew || type == ObjectType) {
+            sw.out.append('}');
+        } else if (type == ArrayNew || type == ArrayType) {
+            sw.out.append(']');
         }
         if (sw.types.empty() && 0 <= sw.out.indent) {
             sw.out.append('\n');
