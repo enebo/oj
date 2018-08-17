@@ -747,18 +747,13 @@ public abstract class Parse {
         IRubyObject rkey;
 
         if (undef == kval.key_val) {
-            rkey = getRuntime().newString(kval.key);
+            rkey = oj_encode(getRuntime().newString(kval.key));
+
+            if (Yes == options.sym_key) {
+                return getRuntime().newSymbol(((RubyString) rkey).getByteList());
+            }
         } else {
             rkey = kval.key_val;
-        }
-
-        rkey = oj_encode(rkey);
-        if (Yes == options.sym_key) {
-            if (rkey instanceof RubyString) {
-                return getRuntime().newSymbol(((RubyString) rkey).getByteList());
-            } else if (!(rkey instanceof RubySymbol) && rkey.respondsTo("to_sym")) {
-                return Helpers.invoke(context, rkey, "to_sym");
-            }
         }
 
         return rkey;
