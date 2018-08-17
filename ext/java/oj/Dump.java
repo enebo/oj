@@ -1524,16 +1524,15 @@ public class Dump {
         int	d2 = depth + 1;
 
         out.append('[');
-        if (leaf.elements.length > 0) {
-            fill_indent(out, d2);
-            dump_leaf(context, leaf.elements[0], d2, out);
-            for (int i = 1; i < leaf.elements.length; i++) {
+        if (leaf.hasElements()) {
+            boolean first = true;
+            for (Leaf element: leaf.elements) {
+                if (!first) out.append(',');
                 fill_indent(out, d2);
-                dump_leaf(context, leaf.elements[i], d2, out);
-                out.append(',');
+                dump_leaf(context, element, d2, out);
+                first = false;
             }
             fill_indent(out, depth);
-
         }
         out.append(']');
     }
@@ -1542,17 +1541,15 @@ public class Dump {
         int	d2 = depth + 1;
 
         out.append('{');
-        if (leaf.elements.length > 0) {
-            fill_indent(out, d2);
-            dump_cstr(context, leaf.elements[0].key, false, false, out);
-            out.append(':');
-            dump_leaf(context, leaf.elements[0], d2, out);
-            for (int i = 1; i < leaf.elements.length; i++) {
+        if (leaf.hasElements()) {
+            boolean first = true;
+            for (Leaf element: leaf.elements) {
+                if (!first) out.append(',');
                 fill_indent(out, d2);
-                dump_cstr(context, leaf.elements[i].key, false, false, out);
+                dump_cstr(context, element.key, false, false, out);
                 out.append(':');
-                dump_leaf(context, leaf.elements[i], d2, out);
-                out.append(',');
+                dump_leaf(context, element, d2, out);
+                first = false;
             }
             fill_indent(out, depth);
         }
@@ -1590,7 +1587,7 @@ public class Dump {
         }
     }
 
-    Out oj_dump_leaf_to_json(ThreadContext context, Leaf leaf, Options copts) {
+    public static Out leaf_to_json(ThreadContext context, Leaf leaf, Options copts) {
         Out out = new Out();
         out.circ_cnt = 0;
         out.opts = copts;
@@ -1601,8 +1598,8 @@ public class Dump {
         return out;
     }
 
-    void oj_write_leaf_to_file(ThreadContext context, Leaf leaf, String path, Options copts) {
-        Out out = oj_dump_leaf_to_json(context, leaf, copts);
+    public static void leaf_to_file(ThreadContext context, Leaf leaf, String path, Options copts) {
+        Out out = leaf_to_json(context, leaf, copts);
         FileOutputStream f = null;
 
         try {

@@ -12,7 +12,7 @@ import org.jruby.runtime.load.Library;
  * Created by enebo on 8/28/15.
  */
 public class OjLibrary implements Library {
-    public Options default_options;
+    public static Options default_options;
     private RubyClass parseError;
 
     public void load(Ruby runtime, boolean wrap) {
@@ -28,9 +28,14 @@ public class OjLibrary implements Library {
         parseError = (RubyClass) ojModule.getConstant("ParseError");
 
         StringWriter.createStringWriterClass(runtime, ojModule);
+        Doc.createDocClass(runtime, ojModule);
     }
 
     public RubyClass getParseError() {
         return parseError;
+    }
+
+    public static Options getDefaultOptions() {
+        return default_options.dup();
     }
 }

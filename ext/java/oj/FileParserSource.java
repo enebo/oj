@@ -17,6 +17,10 @@ public class FileParserSource extends ParserSource {
     public FileParserSource(ThreadContext context, String file) {
 
         // FIXME: This is reading whole file into memory and not streaming.
+        json = readFileIntoByteList(context, file);
+    }
+
+    public static ByteList readFileIntoByteList(ThreadContext context, String file) {
         FileInputStream fis = null;
         try {
             fis = new FileInputStream(file);
@@ -29,11 +33,12 @@ public class FileParserSource extends ParserSource {
                 baos.write(buffer, 0, read);
             }
             baos.flush();
-            json = new ByteList(baos.toByteArray());
+            return new ByteList(baos.toByteArray());
         } catch (IOException e) {
             if (fis != null) {
                 try { fis.close(); } catch (IOException e1) {}
             }
+            throw context.runtime.newIOError("Count not open '" + file + "': " + e.getMessage());
         }
     }
 

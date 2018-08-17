@@ -764,7 +764,7 @@ public abstract class Parse {
         return rkey;
     }
 
-    IRubyObject oj_encode(IRubyObject str) {
+    public static IRubyObject oj_encode(IRubyObject str) {
         // FIXME: Add 1.9 + 1.8 ability to convert to UTF-8
         return str;
     }
