@@ -290,6 +290,13 @@ public class RubyOj extends RubyModule {
             copts.escape_mode = JSONEsc;
         }
 
+        v = ropts.fastARef(runtime.newSymbol("use_to_json"));
+        if (Qtrue == v) {
+            copts.to_json = Yes;
+        } else if (Qfalse == v) {
+            copts.to_json = No;
+        }
+
         v = ropts.fastARef(runtime.newSymbol("symbol_keys"));
         if (Qtrue == v) {
             copts.sym_key = Yes;
