@@ -6,6 +6,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
+
+import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyBasicObject;
@@ -289,7 +291,7 @@ public abstract class Parse {
 // entered at /
     void read_escaped_str(int start) {
         if (debug) System.out.println(">read_escaped_str");
-        ByteList buf = new ByteList();
+        ByteList buf = newByteList();
         int	cnt = source.currentOffset - start;
         int	code;
         Val parent = stack_peek();
@@ -366,7 +368,7 @@ public abstract class Parse {
                     if (undef == (parent.key_val = hashKey(buf))) {
                     parent.key = buf.dup();
                 } else {
-                    parent.key = new ByteList();
+                    parent.key = newByteList();
                 }
                 parent.k1 = (byte) source.at(start);
                 parent.next =  HASH_COLON;
@@ -423,7 +425,7 @@ public abstract class Parse {
                     if (undef == (parent.key_val = hashKey(str, source.currentOffset - str))) {
                         parent.key = source.subStr(str, source.currentOffset - str);
                     } else {
-                        parent.key = new ByteList();
+                        parent.key = newByteList();
                     }
                     parent.k1 = (byte) source.at(str);
                     parent.next = HASH_COLON;
@@ -952,4 +954,9 @@ public abstract class Parse {
         return (RubyClass) clas;
     }
 
+    public static ByteList newByteList() {
+        ByteList bytelist = new ByteList();
+        bytelist.setEncoding(UTF8Encoding.INSTANCE);
+        return bytelist;
+    }
 }

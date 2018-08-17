@@ -1,5 +1,6 @@
 package oj;
 
+import org.jcodings.specific.UTF8Encoding;
 import org.jruby.RubyArray;
 import org.jruby.RubyClass;
 import org.jruby.RubyException;
@@ -440,6 +441,7 @@ public class ObjectParse extends Parse {
             } else {
                 // FIXME: hacky aroundy
                 var_id = new ByteList(new byte[]{'@'});
+                var_id.setEncoding(UTF8Encoding.INSTANCE);
                 var_id.append(key);
             }
         } else {
@@ -448,6 +450,7 @@ public class ObjectParse extends Parse {
             } else {
                 // FIXME: hacky aroundy
                 var_id = new ByteList(new byte[]{'@'});
+                var_id.setEncoding(UTF8Encoding.INSTANCE);
                 var_id.append(key);
             }
         }

@@ -87,7 +87,7 @@ public class Out {
     }
 
     public void reset() {
-        buf = new ByteList();
+        buf = Parse.newByteList();
     }
 
     public RubyString asString(ThreadContext context) {
