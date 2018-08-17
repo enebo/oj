@@ -488,13 +488,13 @@ public class Dump {
         dump_cstr(context, ((RubyString) obj.to_s()).getByteList(), true, false, out);
     }
 
-    static void dump_class_comp(ThreadContext context, IRubyObject obj, Out out) {
-        dump_cstr(context, new ByteList(obj.getMetaClass().getName().getBytes()), false, false, out);
+    static void dump_class_comp(ThreadContext context, RubyModule clas, Out out) {
+        dump_cstr(context, new ByteList(clas.getName().getBytes()), false, false, out);
     }
 
-    static void dump_class_obj(ThreadContext context, IRubyObject obj, Out out) {
+    static void dump_class_obj(ThreadContext context, RubyModule clas, Out out) {
         out.append(C_KEY);
-        dump_cstr(context, new ByteList(obj.getMetaClass().getName().getBytes()), false, false, out);
+        dump_cstr(context, new ByteList(clas.getName().getBytes()), false, false, out);
         out.append('}');
     }
 
@@ -1312,9 +1312,9 @@ public class Dump {
             switch (out.opts.mode) {
                 case StrictMode:	raise_strict(obj);		break;
                 case NullMode:		dump_nil(out);			break;
-                case CompatMode:	dump_class_comp(context, obj, out);	break;
+                case CompatMode:	dump_class_comp(context, (RubyModule) obj, out);	break;
                 case ObjectMode:
-                default:		dump_class_obj(context, obj, out);	break;
+                default:		dump_class_obj(context, (RubyModule) obj, out);	break;
             }
         } else if (obj instanceof RubySymbol) {
             switch (out.opts.mode) {
