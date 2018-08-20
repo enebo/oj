@@ -486,7 +486,7 @@ public class ObjectParse extends Parse {
                 break;
             } else if (parent.val instanceof RubyString) {
                 if (4 == klen && 's' == key.get(0) && 'e' == key.get(1) && 'l' == key.get(2) && 'f' == key.get(3)) {
-                    parent.val.callMethod(context, "replace_id", str_to_value(value, orig));
+                    parent.val.callMethod(context, "replace", str_to_value(value, orig));
                 } else {
                     set_obj_ivar(parent, kval, str_to_value(value, orig));
                 }
@@ -563,14 +563,13 @@ public class ObjectParse extends Parse {
                 }
                 break;
             } else if (parent.val instanceof RubyHash) {
-                /* Note: Not sure what case this could be?  T_HASH which is not actually of type Hash?
-                if (rb_cHash != rb_obj_class(parent.val)) {
+                if (parent.val.getMetaClass() != context.runtime.getHash()) {
                     if (4 == klen && 's' == key.get(0) && 'e' == key.get(1) && 'l' == key.get(2) && 'f' == key.get(3)){
                         parent.val.callMethod(context, "replace", value);
-                    } else{
+                    } else {
                         set_obj_ivar(parent, kval, value);
                     }
-                } else {*/
+                } else {
                     if (3 <= klen && '^' == key.get(0) && '#' == key.get(1) && value instanceof RubyArray) {
                         RubyArray array = (RubyArray) value;
 
@@ -582,7 +581,7 @@ public class ObjectParse extends Parse {
                     } else{
                         ((RubyHash) parent.val).op_aset(context, calc_hash_key(kval, parent.k1), value);
                     }
-                //}
+                }
                 break;
             } else if (parent.val instanceof RubyArray) {
                 if (4 == klen && 's' == key.get(0) && 'e' == key.get(1) && 'l' == key.get(2) && 'f' == key.get(3)) {

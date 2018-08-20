@@ -1150,7 +1150,7 @@ public class Dump {
         if (clas != null && variables.getInstanceVariableList().size() > 0) {
             out.append(',');
         }
-        
+
         boolean first = true;
         for(String attr: variables.getInstanceVariableNameList()) {
             if (first) {
@@ -1360,7 +1360,7 @@ public class Dump {
                 }*/
                 if (obj instanceof RubyBignum) {
                     dump_bignum(context, (RubyBignum) obj, out);
-                } else if (obj instanceof RubyString) {
+                } else if (obj.getMetaClass() == context.runtime.getString()) {
                     switch (out.opts.mode) {
                         case StrictMode:
                         case NullMode:
@@ -1372,9 +1372,9 @@ public class Dump {
                             dump_str_obj(context, obj, clas, depth, out);
                             break;
                     }
-                } else if (obj instanceof RubyArray) {
+                } else if (obj.getMetaClass() == context.runtime.getArray()) {
                     dump_array(context, obj, clas, depth, out);
-                } else if (obj instanceof RubyHash) {
+                } else if (obj.getMetaClass() == context.runtime.getHash()) {
                     dump_hash(context, obj, clas, depth, out.opts.mode, out);
                 } else if (obj instanceof RubyComplex || obj instanceof RubyRegexp) {
                     switch (out.opts.mode) {

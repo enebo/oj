@@ -738,7 +738,8 @@ public abstract class Parse {
 }
 
     IRubyObject protect_parse() {
-        oj_parse2();
+        // nilnil option and nil source will not create a source.
+        if (source != null) oj_parse2();
 
         return nilValue();
     }
