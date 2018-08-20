@@ -21,7 +21,6 @@ import org.jruby.RubyNil;
 import org.jruby.RubyString;
 import org.jruby.RubySymbol;
 import org.jruby.runtime.Block;
-import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
@@ -65,8 +64,6 @@ public abstract class Parse {
         this.context = context;
         this.stack = new Stack<Val>();
         this.proc = null;
-        // FIXME: This should only get made once per runtime not per parse
-        this.undef = new RubyBasicObject(null);
         this.options = options;
         this.handler = handler;
         this.ni = new NumInfo(this);
@@ -365,7 +362,7 @@ public abstract class Parse {
                     break;
                 case HASH_NEW:
                 case HASH_KEY:
-                    if (undef == (parent.key_val = hashKey(buf))) {
+                    if (null == (parent.key_val = hashKey(buf))) {
                     parent.key = buf.dup();
                 } else {
                     parent.key = newByteList();
@@ -374,7 +371,7 @@ public abstract class Parse {
                 parent.next =  HASH_COLON;
                 break;
                 case HASH_VALUE:
-                    setCStr(parent, buf, 0);
+                    hashSetCStr(parent, buf, 0);
                     parent.next =  HASH_COMMA;
                     break;
                 case HASH_COMMA:
@@ -422,7 +419,7 @@ public abstract class Parse {
                     break;
                 case HASH_NEW:
                 case HASH_KEY: {
-                    if (undef == (parent.key_val = hashKey(str, source.currentOffset - str))) {
+                    if (null == (parent.key_val = hashKey(str, source.currentOffset - str))) {
                         parent.key = source.subStr(str, source.currentOffset - str);
                     } else {
                         parent.key = newByteList();
@@ -433,7 +430,7 @@ public abstract class Parse {
                     break;
                 }
                 case HASH_VALUE:
-                    setCStr(parent, str, source.currentOffset - str);
+                    hashSetCStr(parent, str, source.currentOffset - str);
                     parent.next =  HASH_COMMA;
                     break;
                 case HASH_COMMA:
@@ -748,7 +745,7 @@ public abstract class Parse {
     IRubyObject calc_hash_key(Val kval) {
         IRubyObject rkey;
 
-        if (undef == kval.key_val) {
+        if (null == kval.key_val) {
             rkey = oj_encode(getRuntime().newString(kval.key));
 
             if (Yes == options.sym_key) {
@@ -845,11 +842,11 @@ public abstract class Parse {
     public void arrayAppendCStr(ByteList value, int orig) {
     }
 
-    public void setCStr(Val kval, int start, int length) {
-        setCStr(kval, source.subStr(start, length), start);
+    public void hashSetCStr(Val kval, int start, int length) {
+        hashSetCStr(kval, source.subStr(start, length), start);
     }
 
-    public void setCStr(Val parent, ByteList value, int orig) {
+    public void hashSetCStr(Val parent, ByteList value, int orig) {
     }
 
     public void addValue(IRubyObject value) {
@@ -890,11 +887,11 @@ public abstract class Parse {
 
     // For hash keys which came in with no escape characters.
     public IRubyObject hashKey(int start, int length) {
-        return undef;
+        return null;
     }
 
     public IRubyObject hashKey(ByteList key) {
-        return undef;
+        return null;
     }
 
     public void parseError(String message) {

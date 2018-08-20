@@ -43,12 +43,12 @@ public class StrictParse extends Parse {
     }
 
     @Override
-    public void setCStr(Val kval, int start, int length) {
-        setCStr(kval, source.subStr(start, length), start);
+    public void hashSetCStr(Val kval, int start, int length) {
+        hashSetCStr(kval, source.subStr(start, length), start);
     }
 
     @Override
-    public void setCStr(Val kval, ByteList value, int orig) {
+    public void hashSetCStr(Val kval, ByteList value, int orig) {
         IRubyObject rstr = oj_encode(getRuntime().newString(value));
 
         ((RubyHash) stack_peek().val).fastASet(calc_hash_key(kval), rstr);

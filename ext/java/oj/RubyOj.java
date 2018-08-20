@@ -238,7 +238,7 @@ public class RubyOj extends RubyModule {
             if (Qnil == v) {
                 copts.create_id = null;
             } else if (v instanceof RubyString) {
-                String str = v.asJavaString();
+                ByteList str = ((RubyString) v).getByteList();
 
                 if (!str.equals(copts.create_id)) {
                     copts.create_id = str;

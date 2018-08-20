@@ -1,5 +1,7 @@
 package oj;
 
+import org.jruby.util.ByteList;
+
 /**
  * Created by enebo on 8/24/15.
  */
@@ -31,7 +33,7 @@ public class Options {
     public static final char STREAM_IO = 's';
     public static final char FILE_IO = 'f';
 
-    public static final String JSON_CLASS = "json_class";
+    public static final ByteList JSON_CLASS = new ByteList(new byte[] {'j', 's', 'o', 'n', '_', 'c', 'l', 'a', 's', 's'});
 
     int		indent;		// indention for dump; default 2
     char	circular;	// YesNo
@@ -47,7 +49,7 @@ public class Options {
     char	nilnil;		// YesNo
     char	allow_gc;	// allow GC during parse
     char	quirks_mode;	// allow single JSON values instead of documents
-    String create_id;	// 0 or string
+    ByteList create_id;	// 0 or string
     int		sec_prec;	// second precision when dumping time
     DumpOpts	dump_opts;
     char	float_prec;	// float precision, linked to float_fmt

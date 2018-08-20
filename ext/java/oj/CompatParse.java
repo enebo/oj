@@ -18,19 +18,18 @@ public class CompatParse extends StrictParse {
     }
 
     @Override
-    public void setCStr(Val kval, ByteList str, int orig) {
+    public void hashSetCStr(Val kval, ByteList str, int orig) {
         ByteList key = kval.key;
         Val	parent = stack_peek();
         IRubyObject rkey = kval.key_val;
 
-        if (undef == rkey && options.create_id != null && options.create_id.equals(key)) {
+        if (null == rkey && options.create_id != null && options.create_id.equals(key)) {
             parent.classname = str.dup();
         } else {
             IRubyObject rstr = getRuntime().newString(str);
 
-            if (undef == rkey) {
-                rkey = getRuntime().newString(key);
-                rstr = oj_encode(rstr);
+            if (rkey == null) {
+                rkey = oj_encode(getRuntime().newString(key));
                 rkey = oj_encode(rkey);
                 if (Yes == options.sym_key) {
                     rkey = ((RubyString)rkey).intern19();
@@ -46,7 +45,7 @@ public class CompatParse extends StrictParse {
 
         if (null != parent.classname) {
             IRubyObject clas = nameToClass(parent.classname, false);
-            if (undef != clas) { // else an error
+            if (null != clas) { // else an error
                 parent.val = clas.callMethod(context, "json_create", parent.val);
             }
             if (null != parent.classname) {

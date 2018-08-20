@@ -460,7 +460,7 @@ public class ObjectParse extends Parse {
     }
 
     @Override
-    public void setCStr(Val kval, ByteList value, int orig) {
+    public void hashSetCStr(Val kval, ByteList value, int orig) {
         ByteList key = kval.key;
         int klen = kval.key.realSize();
         Val	parent = stack_peek();

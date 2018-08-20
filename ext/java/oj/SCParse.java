@@ -79,14 +79,14 @@ public class SCParse extends Parse {
         }
     }
 
-    public void setCStr(Val parent, int start, int length) {
+    public void hashSetCStr(Val parent, int start, int length) {
         if (dispatchHashSet) {
-            setCStr(parent, source.subStr(start, length), start);
+            hashSetCStr(parent, source.subStr(start, length), start);
         }
     }
 
     @Override
-    public void setCStr(Val kval, ByteList value, int orig) {
+    public void hashSetCStr(Val kval, ByteList value, int orig) {
         if (dispatchHashSet) {
             Helpers.invoke(context, handler, "hash_set",
                     stack_head_val(), calc_hash_key(kval), oj_encode(getRuntime().newString(value)));
@@ -111,7 +111,7 @@ public class SCParse extends Parse {
 
     @Override
     public IRubyObject hashKey(int start, int length) {
-        return dispatchHashKey ? hashKey(source.subStr(start, length)) : undef;
+        return dispatchHashKey ? hashKey(source.subStr(start, length)) : null;
     }
 
     @Override
