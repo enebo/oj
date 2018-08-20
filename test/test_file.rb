@@ -171,8 +171,6 @@ class FileJuice < Minitest::Test
       json = Oj.dump(1..7, :mode => :object, :indent => 0)
       if 'rubinius' == $ruby
         assert(%{{"^O":"Range","begin":1,"end":7,"exclude_end?":false}} == json)
-      elsif 'jruby' == $ruby
-        assert(%{{"^O":"Range","begin":1,"end":7,"exclude_end?":false}} == json)
       else
         assert_equal(%{{"^u":["Range",1,7,false]}}, json)
       end

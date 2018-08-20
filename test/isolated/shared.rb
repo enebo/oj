@@ -233,11 +233,8 @@ class SharedMimicTest < Minitest::Test
   def test_recurse_proc
     children = []
     JSON.recurse_proc({ 'a' => 1, 'b' => [true, false]}) { |x| children << x }
-    # JRuby 1.7.0 rb_yield() is broken and converts the [true, false] array into true
-    unless 'jruby' == $ruby && '1.9.3' == RUBY_VERSION
-      assert([1, true, false, [true, false], { 'a' => 1, 'b' => [true, false]}] == children ||
+    assert([1, true, false, [true, false], { 'a' => 1, 'b' => [true, false]}] == children ||
              [true, false, [true, false], 1, { 'b' => [true, false], 'a' => 1}] == children)
-    end
   end
 
 # make sure to_json is defined for object.

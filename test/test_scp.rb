@@ -319,7 +319,7 @@ class ScpTest < Minitest::Test
         Process.exit(0)
       end
     end
-  end unless RUBY_ENGINE == 'jruby' # no fork in jruby.
+  end unless RUBY_PLATFORM == 'jruby' # no fork in jruby.
 
   def test_pipe_close
     json = %{{"one":true,"two":false}}
@@ -345,7 +345,7 @@ class ScpTest < Minitest::Test
         Process.exit(0)
       end
     end
-  end
+  end unless RUBY_PLATFORM == 'jruby' # no fork in jruby
 
   def test_socket_close
     json = %{{"one":true,"two":false}}
@@ -377,6 +377,6 @@ class ScpTest < Minitest::Test
     assert_equal([[:hash_start],
                   [:hash_key, 'one'],
                   [:hash_set, 'one', true]], handler.calls)
-  end
+  end 
 
 end
