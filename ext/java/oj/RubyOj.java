@@ -589,9 +589,6 @@ public class RubyOj extends RubyModule {
 
     @JRubyMethod(module = true, required = 2, rest = true)
     public static IRubyObject sc_parse(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
-        IRubyObject input = args[1];
-
-        // FIXME: We should be cloning this I think?
         OjLibrary oj = resolveOj(self);
         Options copts = oj.default_options.dup();
         if (3 == args.length) {
