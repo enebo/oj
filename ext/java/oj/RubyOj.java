@@ -47,7 +47,7 @@ public class RubyOj extends RubyModule {
         IRubyObject Qnil = runtime.getNil();
 
         opts.fastASet(runtime.newSymbol("indent"), runtime.newFixnum(oj.default_options.indent));
-        opts.fastASet(runtime.newSymbol("sec_prec"), runtime.newFixnum(oj.default_options.sec_prec));
+        opts.fastASet(runtime.newSymbol("second_precision"), runtime.newFixnum(oj.default_options.sec_prec));
         opts.fastASet(runtime.newSymbol("circular"), (Yes == oj.default_options.circular) ? Qtrue : ((No == oj.default_options.circular) ? Qfalse : Qnil));
         opts.fastASet(runtime.newSymbol("class_cache"), (Yes == oj.default_options.class_cache) ? Qtrue : ((No == oj.default_options.class_cache) ? Qfalse : Qnil));
         opts.fastASet(runtime.newSymbol("auto_define"), (Yes == oj.default_options.auto_define) ? Qtrue : ((No == oj.default_options.auto_define) ? Qfalse : Qnil));
@@ -57,7 +57,7 @@ public class RubyOj extends RubyModule {
         opts.fastASet(runtime.newSymbol("nilnil"), (Yes == oj.default_options.nilnil) ? Qtrue : ((No == oj.default_options.nilnil) ? Qfalse : Qnil));
         opts.fastASet(runtime.newSymbol("allow_gc"), (Yes == oj.default_options.allow_gc) ? Qtrue : ((No == oj.default_options.allow_gc) ? Qfalse : Qnil));
         opts.fastASet(runtime.newSymbol("quirks_mode"), (Yes == oj.default_options.quirks_mode) ? Qtrue : ((No == oj.default_options.quirks_mode) ? Qfalse : Qnil));
-        opts.fastASet(runtime.newSymbol("float_prec"), runtime.newFixnum(oj.default_options.float_prec));
+        opts.fastASet(runtime.newSymbol("float_precision"), runtime.newFixnum(oj.default_options.float_prec));
 
         switch (oj.default_options.mode) {
             case StrictMode:
@@ -151,7 +151,7 @@ public class RubyOj extends RubyModule {
             copts.indent = RubyNumeric.num2int(v);
         }
 
-        if (null != (v = ropts.fastARef(runtime.newSymbol("float_prec")))) {
+        if (null != (v = ropts.fastARef(runtime.newSymbol("float_precision")))) {
             if (!(v instanceof RubyFixnum)) {
                 throw runtime.newArgumentError(":float_precision must be a Fixnum.");
             }
@@ -259,35 +259,70 @@ public class RubyOj extends RubyModule {
             }
         }
         /*
-        { circular_sym, &oj_default_options.circular },
-        { auto_define_sym, &oj_default_options.auto_define },
-        { symbol_keys_sym, &oj_default_options.sym_key },
-        { class_cache_sym, &oj_default_options.class_cache },
-        { bigdecimal_as_decimal_sym, &oj_default_options.bigdec_as_num },
-        { use_to_json_sym, &oj_default_options.to_json },
         { nilnil_sym, &oj_default_options.nilnil },
-        { allow_gc_sym, &oj_default_options.allow_gc },
-        { quirks_mode_sym, &oj_default_options.quirks_mode },
         */
-        // FIXME:
-        /*
-        for (o = ynos; 0 != o.attr; o++) {
-            if (Qnil != (v = ropts.fastARef(o.sym))) {
-                if (Qtrue == v) {
-                    o.attr = Yes;
-                } else if (Qfalse == v) {
-                    o.attr = No;
-                } else {
-                    throw runtime.newArgumentError("" + o.sym +  "must be true or false.");
-                }
-            }
-        }*/
-        // This is here only for backwards compatibility with the original Oj.
+
+        v = ropts.fastARef(runtime.newSymbol("allow_gc"));
+        if (Qtrue == v) {
+            copts.allow_gc = Yes;
+        } else if (Qfalse == v) {
+            copts.allow_gc = No;
+        }
+
+        v = ropts.fastARef(runtime.newSymbol("auto_define"));
+        if (Qtrue == v) {
+            copts.auto_define = Yes;
+        } else if (Qfalse == v) {
+            copts.auto_define = No;
+        }
+
         v = ropts.fastARef(runtime.newSymbol("ascii_only"));
         if (Qtrue == v) {
             copts.escape_mode = ASCIIEsc;
         } else if (Qfalse == v) {
             copts.escape_mode = JSONEsc;
+        }
+
+        v = ropts.fastARef(runtime.newSymbol("bigdecimal_as_decimal"));
+        if (Qtrue == v) {
+            copts.bigdec_as_num = Yes;
+        } else if (Qfalse == v) {
+            copts.bigdec_as_num = No;
+        }
+
+        v = ropts.fastARef(runtime.newSymbol("circular"));
+        if (Qtrue == v) {
+            copts.circular = Yes;
+        } else if (Qfalse == v) {
+            copts.circular = No;
+        }
+
+        v = ropts.fastARef(runtime.newSymbol("class_cache"));
+        if (Qtrue == v) {
+            copts.class_cache = Yes;
+        } else if (Qfalse == v) {
+            copts.class_cache = No;
+        }
+
+        v = ropts.fastARef(runtime.newSymbol("nilnil"));
+        if (Qtrue == v) {
+            copts.nilnil = Yes;
+        } else if (Qfalse == v) {
+            copts.nilnil = No;
+        }
+
+        v = ropts.fastARef(runtime.newSymbol("quirks_mode"));
+        if (Qtrue == v) {
+            copts.quirks_mode = Yes;
+        } else if (Qfalse == v) {
+            copts.quirks_mode = No;
+        }
+
+        v = ropts.fastARef(runtime.newSymbol("symbol_keys"));
+        if (Qtrue == v) {
+            copts.sym_key = Yes;
+        } else if (Qfalse == v) {
+            copts.sym_key = No;
         }
 
         v = ropts.fastARef(runtime.newSymbol("use_to_json"));
@@ -297,12 +332,6 @@ public class RubyOj extends RubyModule {
             copts.to_json = No;
         }
 
-        v = ropts.fastARef(runtime.newSymbol("symbol_keys"));
-        if (Qtrue == v) {
-            copts.sym_key = Yes;
-        } else if (Qfalse == v) {
-            copts.sym_key = No;
-        }
     }
 
     @JRubyMethod(module = true, rest = true)
@@ -325,9 +354,7 @@ public class RubyOj extends RubyModule {
                 throw context.runtime.newArgumentError("options must be a hash.");
             }
 
-            RubyHash	ropts = (RubyHash) args[1];
-            IRubyObject Qnil = runtime.getNil();
-            mode = getMode(runtime, mode, ropts, Qnil);
+            mode = getMode(runtime, mode, (RubyHash) args[1]);
         }
 
         ParserSource source = processArgs(context, args, options);
@@ -347,9 +374,9 @@ public class RubyOj extends RubyModule {
         return new ObjectParse(source, context, options).parse(oj, true, block);
     }
 
-    private static char getMode(Ruby runtime, char mode, RubyHash ropts, IRubyObject qnil) {
+    private static char getMode(Ruby runtime, char mode, RubyHash ropts) {
         IRubyObject v;
-        if (qnil != (v = ropts.fastARef(runtime.newSymbol("mode")))) {
+        if (null != (v = ropts.fastARef(runtime.newSymbol("mode")))) {
             if (runtime.newSymbol("object") == v) {
                 mode = ObjectMode;
             } else if (runtime.newSymbol("strict") == v) {
@@ -380,13 +407,9 @@ public class RubyOj extends RubyModule {
             throw runtime.newArgumentError("Expected String");
         }
 
-        IRubyObject Qnil = runtime.getNil();
         char mode = options.mode;
 
-        if (2 <= args.length) {
-            RubyHash	ropts = (RubyHash) args[1];
-            mode = getMode(runtime, mode, ropts, Qnil);
-        }
+        if (2 <= args.length) mode = getMode(runtime, mode, (RubyHash) args[1]);
 
         String path = args[0].asJavaString();
 
