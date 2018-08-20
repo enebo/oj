@@ -21,6 +21,7 @@ import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyNil;
 import org.jruby.RubyNumeric;
+import org.jruby.RubyRange;
 import org.jruby.RubyRational;
 import org.jruby.RubyRegexp;
 import org.jruby.RubyString;
@@ -1200,7 +1201,6 @@ public class Dump {
 
     static void dump_struct_obj(ThreadContext context, RubyStruct obj, int depth, Out out) {
         String class_name = obj.getMetaClass().getName();
-        int		i;
         int		d2 = depth + 1;
         int		d3 = d2 + 1;
 
@@ -1213,7 +1213,7 @@ public class Dump {
             int	cnt = ma.size();
 
             out.append('[');
-            for (i = 0; i < cnt; i++) {
+            for (int i = 0; i < cnt; i++) {
                 RubySymbol name = (RubySymbol) ma.eltOk(i); // struct forces all members to be symbols
 
                 if (0 < i) {
@@ -1249,6 +1249,29 @@ public class Dump {
         out.append(']');
         out.append('}');
     }
+
+    static void dump_range_obj(ThreadContext context, RubyRange obj, int depth, Out out) {
+        String class_name = obj.getMetaClass().getName();
+        int		d2 = depth + 1;
+        int		d3 = d2 + 1;
+
+        out.append('{');
+        fill_indent(out, d2);
+        out.append(U_KEY);
+        fill_indent(out, d3);
+        out.append('"');
+        out.append(class_name);
+        out.append('"');
+        out.append(',');
+        dump_val(context, obj.begin(context), d3, out, null);
+        out.append(',');
+        dump_val(context, obj.end(context), d3, out, null);
+        out.append(',');
+        dump_val(context, obj.exclude_end_p(), d3, out, null);
+        out.append(']');
+        out.append('}');
+    }
+
 
     static void dump_odd(ThreadContext context, IRubyObject obj, Odd odd, RubyClass clas, int depth, Out out) {
         String idp;
@@ -1323,13 +1346,21 @@ public class Dump {
             }
         } else if (obj instanceof RubySymbol) {
             switch (out.opts.mode) {
-                case StrictMode:	raise_strict(obj);		break;
-                case NullMode:		dump_nil(out);			break;
-                case CompatMode:	dump_sym_comp(context, (RubySymbol) obj, out);	break;
+                case StrictMode:
+                    raise_strict(obj);
+                    break;
+                case NullMode:
+                    dump_nil(out);
+                    break;
+                case CompatMode:
+                    dump_sym_comp(context, (RubySymbol) obj, out);
+                    break;
                 case ObjectMode:
-                default:		dump_sym_obj(context, (RubySymbol) obj, out);		break;
+                default:
+                    dump_sym_obj(context, (RubySymbol) obj, out);
+                    break;
             }
-        } else if (obj instanceof RubyStruct) {
+        } else if (obj instanceof RubyStruct || obj instanceof RubyRange) { // In MRI T_STRUCT is also Range
             switch (out.opts.mode) {
                 case StrictMode:
                     raise_strict(obj);
@@ -1342,7 +1373,11 @@ public class Dump {
                     break;
                 case ObjectMode:
                 default:
-                    dump_struct_obj(context, (RubyStruct) obj, depth, out);
+                    if (obj instanceof RubyRange) {
+                        dump_range_obj(context, (RubyRange) obj, depth, out);
+                    } else {
+                        dump_struct_obj(context, (RubyStruct) obj, depth, out);
+                    }
                     break;
             }
         } else {
