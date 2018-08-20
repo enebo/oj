@@ -1083,10 +1083,14 @@ public class Dump {
                     dump_cstr(context, rstr, false, false, out);
                 }
                 //FIXME: what if datetime does not exist?
-            } else if (context.runtime.getClass("DateTime").isInstance(obj) || context.runtime.getClass("Date").isInstance(obj) || obj instanceof RubyRational) {
-                dump_cstr(context, stringToByteList(context, obj, "to_s"), false, false, out);
-            } else {
-                dump_obj_attrs(context, obj, null, 0, depth, out);
+            } else  {
+                RubyClass dateTime = context.runtime.getClass("DateTime");
+                RubyClass date = context.runtime.getClass("Date");
+                if (dateTime != null && dateTime.isInstance(obj) || date != null && date.isInstance(obj) || obj instanceof RubyRational) {
+                    dump_cstr(context, stringToByteList(context, obj, "to_s"), false, false, out);
+                } else {
+                    dump_obj_attrs(context, obj, null, 0, depth, out);
+                }
             }
         }
     }
@@ -1138,12 +1142,15 @@ public class Dump {
             fill_indent(out, d2);
             out.append(SELF_KEY);
             dump_hash(context, obj, null, depth + 1, out.opts.mode, out);
-        } else {
-            out.append(',');
         }
 
         // dump instance variables.
         InstanceVariables variables = obj.getInstanceVariables();
+
+        if (clas != null && variables.getInstanceVariableList().size() > 0) {
+            out.append(',');
+        }
+        
         boolean first = true;
         for(String attr: variables.getInstanceVariableNameList()) {
             if (first) {
