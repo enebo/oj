@@ -24,6 +24,7 @@ import org.jruby.runtime.Block;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
+import org.jruby.util.TypeConverter;
 
 import static oj.NextItem.*;
 import static oj.Options.*;
@@ -898,6 +899,12 @@ public abstract class Parse {
         throw context.runtime.newRaiseException(oj.getParseError(), message);
     }
 
+    protected RubyClass nameToStruct(IRubyObject name) {
+        RubyString structName = (RubyString) TypeConverter.checkStringType(context.runtime, name);
+
+        return resolveClassPath(structName.getByteList(), false);
+    }
+
     protected RubyClass nameToClass(ByteList name, boolean autoDefine) {
         if (options.class_cache == No) {
             return resolveClassPath(name, autoDefine);
@@ -915,28 +922,27 @@ public abstract class Parse {
         RubyModule clas = context.runtime.getObject();
 
         ByteList name = className;
-        for (int index = name.indexOf(':'); index != -1 && index + 1 < name.realSize(); index = name.indexOf(':', index + 1)) {
+        for (int index = name.indexOf(':'); index != -1 && index + 1 < name.realSize(); index = name.indexOf(':')) {
             if (name.get(index + 1) != ':') {
                 return null;
             }
             ByteList baseName = name.makeShared(0, index);
             index++; // skip past second ':'
             name = name.makeShared(index + 1, name.realSize() - index - 1);
-            // FIXME: I think 'Foo::' may be broken?
+
+            if (ByteList.EMPTY_BYTELIST.equals(name)) { // protection against 'Foo::'
+                return null;
+            }
 
             clas = resolveClassName(clas, baseName, autoDefine);
 
-            if (clas == null) {
-                return null;
-            }
+            if (clas == null) return null;
         }
 
         clas = resolveClassName(clas, name, autoDefine);
-        if (clas == null) {
-            parseError("class" + className + "is not defined");
-        }
+        if (clas == null) parseError("class " + className + " is not defined");
 
-        // FIXME: This probably isn't always true...error case
+        // FIXME: This could module or class here???
         return (RubyClass) clas;
     }
 
@@ -948,7 +954,7 @@ public abstract class Parse {
             clas = context.runtime.getHash();
         }
 
-        return (RubyClass) clas;
+        return (RubyModule) clas;
     }
 
     public static ByteList newByteList() {

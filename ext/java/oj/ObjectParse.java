@@ -377,6 +377,8 @@ public class ObjectParse extends Parse {
             if (2 == klen && 'u' == key.get(1)) {
                 if (0 == argsLength) parseError("Invalid struct data");
 
+                RubyClass sc;
+
                 if (args.eltInternal(0) instanceof RubyArray) {
                     RubyArray names = (RubyArray) args.eltInternal(0);
                     IRubyObject[] nameArgs = new IRubyObject[names.size()];
@@ -386,18 +388,18 @@ public class ObjectParse extends Parse {
                         // FIXME: Seems this could be optimized to not dyndispatch (make symbol() util which checks type before trying dyn).
                         nameArgs[i] = names.eltInternal(i).callMethod(context, "to_sym");
                     }
-                    RubyClass sc = RubyStruct.newInstance(structClass, nameArgs, Block.NULL_BLOCK);
-
-                    IRubyObject[] newArgs = new IRubyObject[argsLength - 1];
-                    for (int i = 1; i < argsLength; i++) {
-                        newArgs[i - 1] = args.eltInternal(i);
-                    }
-
-                    // FIXME: newInstance will call initialize() as dynamic dispatch.
-                    parent.val = sc.newInstance(context, newArgs, Block.NULL_BLOCK);
+                    sc = RubyStruct.newInstance(structClass, nameArgs, Block.NULL_BLOCK);
                 } else { // already existing names struct.
-                    // FIXME: Handled named struct
+                    sc = nameToStruct(args.eltInternal(0));
                 }
+
+                IRubyObject[] newArgs = new IRubyObject[argsLength - 1];
+                for (int i = 1; i < argsLength; i++) {
+                    newArgs[i - 1] = args.eltInternal(i);
+                }
+
+                // FIXME: newInstance will call initialize() as dynamic dispatch.
+                parent.val = sc.newInstance(context, newArgs, Block.NULL_BLOCK);
 
                 return true;
             } else if (3 <= klen && '#' == key.get(1)) {
