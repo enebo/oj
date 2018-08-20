@@ -8,8 +8,10 @@ import org.jruby.RubyHash;
 import org.jruby.RubyNil;
 import org.jruby.RubyObject;
 import org.jruby.RubyString;
+import org.jruby.RubyStruct;
 import org.jruby.RubySymbol;
 import org.jruby.RubyTime;
+import org.jruby.runtime.Block;
 import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
@@ -368,41 +370,45 @@ public class ObjectParse extends Parse {
 
     boolean hat_value(Val parent, ByteList key, IRubyObject value) {
         if (value instanceof RubyArray) {
-            RubyArray e1 = (RubyArray) value;
-            int	len = e1.size();
+            RubyArray args = (RubyArray) value;
+            int	argsLength = args.size();
             int klen = key.length();
 
             if (2 == klen && 'u' == key.get(1)) {
-                IRubyObject	sc;
+                if (0 == argsLength) parseError("Invalid struct data");
 
-                if (0 == len) {
-                    parseError("Invalid struct data");
-                    return true;
+                if (args.eltInternal(0) instanceof RubyArray) {
+                    RubyArray names = (RubyArray) args.eltInternal(0);
+                    IRubyObject[] nameArgs = new IRubyObject[names.size()];
+                    int namesLength = names.size();
+
+                    for (int i = 0; i < namesLength; i++) {
+                        // FIXME: Seems this could be optimized to not dyndispatch (make symbol() util which checks type before trying dyn).
+                        nameArgs[i] = names.eltInternal(i).callMethod(context, "to_sym");
+                    }
+                    RubyClass sc = RubyStruct.newInstance(structClass, nameArgs, Block.NULL_BLOCK);
+
+                    IRubyObject[] newArgs = new IRubyObject[argsLength - 1];
+                    for (int i = 1; i < argsLength; i++) {
+                        newArgs[i - 1] = args.eltInternal(i);
+                    }
+
+                    // FIXME: newInstance will call initialize() as dynamic dispatch.
+                    parent.val = sc.newInstance(context, newArgs, Block.NULL_BLOCK);
+                } else { // already existing names struct.
+                    // FIXME: Handled named struct
                 }
-
-                // FIXME: There was anonymous and non-anonymous struct check here I did not understand.
-                IRubyObject[] args = new IRubyObject[1024];
-                IRubyObject	rstr;
-                int	i, cnt = e1.size();
-
-                for (i = 0; i < cnt; i++) {
-                    rstr = e1.eltInternal(i);
-                    args[i] = rstr.callMethod(context, "to_sym");
-                }
-                sc = structClass.callMethod(context, "new", args);
-                // Create a properly initialized struct instance without calling the initialize method.
-                parent.val = sc;
 
                 return true;
             } else if (3 <= klen && '#' == key.get(1)) {
                 IRubyObject	a;
 
-                if (2 != len) {
+                if (2 != argsLength) {
                     parseError("invalid hash pair");
                     return true;
                 }
                 parent.val = RubyHash.newHash(context.runtime);
-                ((RubyHash) parent.val).op_aset(context, e1.eltInternal(0), e1.eltInternal(1));
+                ((RubyHash) parent.val).op_aset(context, args.eltInternal(0), args.eltInternal(1));
 
                 return true;
             }
