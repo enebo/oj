@@ -799,7 +799,7 @@ public class Dump {
         int b = buf.length - 1;
         boolean neg = false;
         int dot;
-        long		one = 1000000000;
+        long one = 1000000000;
 
         if (withZone) {
             long	tzsecs = obj.callMethod(context, "utc_offset").convertToInteger().getLongValue();
@@ -837,9 +837,7 @@ public class Dump {
         dot = b - 9;
         if (0 < out.opts.sec_prec) {
             if (9 > out.opts.sec_prec) {
-                int	i;
-
-                for (i = 9 - out.opts.sec_prec; 0 < i; i--) {
+                for (int i = 9 - out.opts.sec_prec; 0 < i; i--) {
                     dot++;
                     nsec = (nsec + 5) / 10;
                     one /= 10;
@@ -869,7 +867,7 @@ public class Dump {
         }
         b++;
 
-        int size = buf.length - 1 - b;
+        int size = buf.length - b;
         out.append(buf, b, size);
     }
 

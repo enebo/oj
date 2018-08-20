@@ -170,7 +170,7 @@ public class RubyOj extends RubyModule {
             }
         }
 
-        if (null != (v = ropts.fastARef(runtime.newSymbol("sec_prec")))) {
+        if (null != (v = ropts.fastARef(runtime.newSymbol("second_precision")))) {
             if (!(v instanceof RubyFixnum)) {
                 throw runtime.newArgumentError(":second_precision must be a Fixnum.");
             }
