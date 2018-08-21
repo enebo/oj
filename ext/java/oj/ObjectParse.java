@@ -262,16 +262,13 @@ public class ObjectParse extends Parse {
                 break;
                 case 'O': // odd object
                 {
-                    // FIXME: Handle odd types...
-                    /*
-                    Odd	odd = oj_get_oddc(value);
+                    // FIXME: bytelist -> String mismatch.
+                    Odd	odd = oj.getOdd(value.toString());
 
-                    if (null == odd) {
-                        return false;
-                    }
+                    if (null == odd) return false;
+
                     parent.val = odd.clas;
-                    parent.oddArgs = oj_odd_alloc_args(odd);
-                    */
+                    parent.oddArgs = new OddArgs(context, odd);
                 }
                 break;
                 case 'm':
@@ -355,7 +352,7 @@ public class ObjectParse extends Parse {
                         if (context.nil == parent.val) {
                             parent.val = RubyHash.newHash(context.runtime);
                         }
-                        circArraySet(ni.i, parent.val);
+                        circArraySet((int) ni.i, parent.val);
                     } else {
                         return false;
                     }
@@ -536,7 +533,7 @@ public class ObjectParse extends Parse {
             } else if (parent.val instanceof RubyObject) {
                 if (2 == klen && '^' == key.get(0) && 'i' == key.get(1) &&
                         !ni.infinity && !ni.neg && 1 == ni.div && 0 == ni.exp && circ_array != null) { // fixnum
-                    circArraySet(ni.i, parent.val);
+                    circArraySet((int) ni.i, parent.val);
                 } else {
                     set_obj_ivar(parent, kval, ni.toNumber(context));
                 }

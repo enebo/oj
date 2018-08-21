@@ -34,7 +34,7 @@ public class StringWriter extends RubyObject {
 
     public static void createStringWriterClass(Ruby runtime, RubyModule oj) {
         RubyClass clazz = oj.defineClassUnder("StringWriter", runtime.getObject(), ALLOCATOR);
-
+        clazz.setInternalVariable("_oj", oj);
         clazz.defineAnnotatedMethods(StringWriter.class);
     }
 
@@ -44,7 +44,8 @@ public class StringWriter extends RubyObject {
 
     @JRubyMethod(optional = 1)
     public IRubyObject initialize(ThreadContext context, IRubyObject[] argv) {
-        sw = new StrWriter(context);
+        OjLibrary oj = RubyOj.resolveOj(this);
+        sw = new StrWriter(context, oj);
 
         if (1 == argv.length) {
             RubyOj.parse_options(context, argv[0], sw.opts);

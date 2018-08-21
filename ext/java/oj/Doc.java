@@ -42,7 +42,7 @@ public class Doc extends RubyObject {
 
     public static void createDocClass(Ruby runtime, RubyModule oj) {
         RubyClass clazz = oj.defineClassUnder("Doc", runtime.getObject(), ALLOCATOR);
-
+        clazz.setInternalVariable("_oj", oj);
         clazz.defineAnnotatedMethods(Doc.class);
     }
 
@@ -300,11 +300,12 @@ public class Doc extends RubyObject {
 
         Leaf leaf = get_doc_leaf(context, path);
         if (leaf != null) {
+            OjLibrary oj = RubyOj.resolveOj(this);
             if (null == filename) {
-                Out out = Dump.leaf_to_json(context, leaf, OjLibrary.getDefaultOptions());
+                Out out = Dump.leaf_to_json(context, oj, leaf, OjLibrary.getDefaultOptions());
                 return context.runtime.newString(out.buf);
             } else {
-                Dump.leaf_to_file(context, leaf, filename, OjLibrary.getDefaultOptions());
+                Dump.leaf_to_file(context, oj, leaf, filename, OjLibrary.getDefaultOptions());
             }
         }
         return context.nil;

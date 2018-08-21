@@ -15,13 +15,11 @@ public class StrWriter {
     public Out out;
     public int depth;
     
-    public StrWriter(ThreadContext context) {
-        RubyModule oj = context.runtime.getModule("Oj");
-        OjLibrary library = RubyOj.resolveOj(oj);
-        opts = library.default_options.dup();
+    public StrWriter(ThreadContext context, OjLibrary oj) {
+        opts = oj.default_options.dup();
         depth = 0;
         keyWritten = false;
-        out = new Out(opts);
+        out = new Out(oj, opts);
     }
 
     /**

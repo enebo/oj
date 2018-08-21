@@ -7,7 +7,6 @@ import java.util.Map;
 
 import org.jruby.RubyString;
 import org.jruby.runtime.ThreadContext;
-import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
 /**
@@ -21,18 +20,21 @@ public class Out {
     public int circ_cnt = 0;
     public Map<Object,Integer> circ_cache = null;
     public ByteList buf;
+    public OjLibrary oj;
 
-    public Out() {
+    public Out(OjLibrary oj) {
         reset();
+        this.oj = oj;
     }
 
-    public Out(Options opts) {
+    public Out(OjLibrary oj, Options opts) {
         reset();
         circ_cnt = 0;
         hash_cnt = 0;
         this.opts = opts;
         indent = opts.indent;
         depth = 0;
+        this.oj = oj;
     }
 
     public void append(int aByte) {

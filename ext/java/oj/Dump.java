@@ -1289,16 +1289,15 @@ public class Dump {
             dump_cstr(context, class_name, false, false, out);
             out.append(',');
         }
-        int index = 0;
-        for (idp = odd.attrs[index], fp = odd.attrFuncs[index]; index < odd.attrs.length; index++) {
-            int	nlen;
 
-            name = idp;
-            nlen = name.length();
+        int index = 0;
+        for (; index < odd.attrs.length; index++) {
+            fp = odd.attrFuncs[index];
+            name = odd.attrs[index];
             if (null != fp) {
-                v = fp.execute(obj);
+                v = fp.execute(context, obj);
             } else if (-1 == name.indexOf('.')) {
-                v = obj.callMethod(context, idp);
+                v = obj.callMethod(context, name);
             } else {
                 v = obj;
                 for (String segment: name.split("\\.")) {
@@ -1388,11 +1387,11 @@ public class Dump {
                 RubyClass clas = obj.getMetaClass();
                 Odd		odd;
 
-                // FIXME: No odd support for now.
-                /*if (ObjectMode == out.opts.mode && null != (odd = oj_get_odd(clas))) {
+                if (ObjectMode == out.opts.mode && null != (odd = out.oj.getOdd(clas))) {
                     dump_odd(context, obj, odd, clas, depth + 1, out);
                     return;
-                }*/
+                }
+
                 if (obj instanceof RubyBignum) {
                     dump_bignum(context, (RubyBignum) obj, out);
                 } else if (obj.getMetaClass() == context.runtime.getString()) {
@@ -1470,8 +1469,8 @@ public class Dump {
         }
     }
 
-    void oj_write_obj_to_file(ThreadContext context, IRubyObject obj, String path, Options copts) {
-        Out out = new Out();
+    void oj_write_obj_to_file(ThreadContext context, OjLibrary oj, IRubyObject obj, String path, Options copts) {
+        Out out = new Out(oj);
         FileOutputStream f = null;
 
         obj_to_json(context, obj, copts, out);
@@ -1491,8 +1490,8 @@ public class Dump {
         }
     }
 
-    static void oj_write_obj_to_stream(ThreadContext context, IRubyObject obj, IRubyObject stream, Options copts) {
-        Out out = new Out();
+    static void oj_write_obj_to_stream(ThreadContext context, OjLibrary oj, IRubyObject obj, IRubyObject stream, Options copts) {
+        Out out = new Out(oj);
 
         obj_to_json(context, obj, copts, out);
 
@@ -1627,8 +1626,8 @@ public class Dump {
         }
     }
 
-    public static Out leaf_to_json(ThreadContext context, Leaf leaf, Options copts) {
-        Out out = new Out();
+    public static Out leaf_to_json(ThreadContext context, OjLibrary oj, Leaf leaf, Options copts) {
+        Out out = new Out(oj);
         out.circ_cnt = 0;
         out.opts = copts;
         out.hash_cnt = 0;
@@ -1638,8 +1637,8 @@ public class Dump {
         return out;
     }
 
-    public static void leaf_to_file(ThreadContext context, Leaf leaf, String path, Options copts) {
-        Out out = leaf_to_json(context, leaf, copts);
+    public static void leaf_to_file(ThreadContext context, OjLibrary oj, Leaf leaf, String path, Options copts) {
+        Out out = leaf_to_json(context, oj, leaf, copts);
         FileOutputStream f = null;
 
         try {

@@ -1,15 +1,15 @@
 package oj;
 
-import java.io.IOException;
-
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
+import org.jruby.RubyClass;
 import org.jruby.RubyFile;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyNumeric;
 import org.jruby.RubyString;
+import org.jruby.RubySymbol;
 import org.jruby.anno.JRubyMethod;
 import org.jruby.anno.JRubyModule;
 import org.jruby.platform.Platform;
@@ -516,7 +516,7 @@ public class RubyOj extends RubyModule {
     public static IRubyObject dump(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         OjLibrary oj = resolveOj(self);
         ByteList buf = Parse.newByteList();
-        Out out = new Out();
+        Out out = new Out(oj);
         Options	copts = oj.default_options.dup();
 
         if (2 == args.length) {
@@ -555,12 +555,11 @@ public class RubyOj extends RubyModule {
         if (3 == args.length) {
             parse_options(context, args[2], options);
         }
-        Dump.oj_write_obj_to_stream(context, args[1], args[0], options);
+        Dump.oj_write_obj_to_stream(context, oj, args[1], args[0], options);
 
         return context.nil;
     }
 
-    /*
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject register_odd(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         OjLibrary oj = resolveOj(self);
@@ -571,7 +570,7 @@ public class RubyOj extends RubyModule {
         if (!(args[0] instanceof RubyClass)) {
             throw context.runtime.newArgumentError("expecting class.");
         }
-        if (!(args[0] instanceof RubySymbol)) {
+        if (!(args[2] instanceof RubySymbol)) {
             throw context.runtime.newArgumentError("expecting symbol.");
         }
 
@@ -582,11 +581,10 @@ public class RubyOj extends RubyModule {
         IRubyObject[] newArgs = new IRubyObject[args.length - 3];
         System.arraycopy(args, 3, newArgs, 0, newArgs.length);
 
-        oj_reg_odd(args[0], args[1], args[2], newArgs);
+        oj.registerOdd((RubyClass) args[0], args[1], (RubySymbol) args[2], newArgs);
 
         return context.nil;
     }
-    */
 
     /*
     @JRubyMethod(module = true, rest = true)

@@ -23,7 +23,7 @@ public class NumInfo {
     public boolean no_big;
     public int exp = 0;
     public double div = 1;
-    public int i = 0;
+    public long i = 0;
     public int num = 0;
     public int len = 0;
     public int dec_cnt = 0;
