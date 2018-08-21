@@ -304,7 +304,6 @@ public class ObjectParse extends Parse {
             switch (kval.key.get(1)) {
                 case 't': // time as a float
                 {
-                    System.err.println("T: ");
                     double nsec = ni.num * 1000000000L / ni.div;
 
                     if (ni.neg) {
