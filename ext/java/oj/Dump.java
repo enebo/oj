@@ -802,6 +802,12 @@ public class Dump {
         int dot;
         long one = 1000000000;
 
+        // JRuby returns negative nsec....not sure if this is correct or whether sec should subtract 1 too?
+        if (nsec < 0) {
+            nsec = one + nsec;
+            sec--;
+        }
+
         if (withZone) {
             long	tzsecs = obj.callMethod(context, "utc_offset").convertToInteger().getLongValue();
             boolean	zneg = (0 > tzsecs);
@@ -953,9 +959,7 @@ public class Dump {
     }
 
     static void dump_data_strict(ThreadContext context, IRubyObject obj, Out out) {
-        IRubyObject	clas = obj.getMetaClass();
-
-        if (clas instanceof RubyBigDecimal) {
+        if (obj instanceof RubyBigDecimal) {
             dump_raw(stringToByteList(context, obj, "to_s"), out);
         } else {
             raise_strict(obj);
@@ -963,9 +967,7 @@ public class Dump {
     }
 
     static void dump_data_null(ThreadContext context, IRubyObject obj, Out out) {
-        IRubyObject	clas = obj.getMetaClass();
-
-        if (clas instanceof RubyBigDecimal) {
+        if (obj instanceof RubyBigDecimal) {
             dump_raw(stringToByteList(context, obj, "to_s"), out);
         } else {
             dump_nil(out);
