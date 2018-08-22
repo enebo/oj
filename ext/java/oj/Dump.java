@@ -312,7 +312,9 @@ public class Dump {
     }
 
     static void dump_bignum(ThreadContext context, RubyBignum obj, Out out) {
-        out.append(obj.to_s(context.runtime.newFixnum(10)).convertToString().getByteList());
+        // Note: This uses boxed call to to_s because 9.1 -> 9.2 changed return type on non-boxed version
+        // from IRubyObject -> RubyString.
+        out.append(obj.to_s(new IRubyObject[] { context.runtime.newFixnum(10) }).convertToString().getByteList());
     }
 
     static void dump_float(ThreadContext context, RubyFloat obj, Out out) {

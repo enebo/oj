@@ -48,11 +48,11 @@ public class StreamWriter extends RubyObject {
         RubyString string = sw.sw.out.asString(context);
 
         if (type == FILE_IO) {
-            IRubyObject size = string.length();
+            int size = string.getByteList().realSize();
 
             // Note(s): 1. fixnum is immediate so == is ok. 2. this is doing dyndispatch where as C is direct fd write
             // FIXME: Make this direct call
-            if (size != stream.callMethod(context, "write", string)) {
+            if (size != RubyNumeric.fix2int(stream.callMethod(context, "write", string))) {
                 throw context.runtime.newIOError("Write failed.");// [%d:%s]\n", errno, strerror(errno));
             }
         } else {
