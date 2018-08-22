@@ -18,6 +18,7 @@ import org.jruby.RubyFloat;
 import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyNil;
+import org.jruby.RubyObject;
 import org.jruby.RubyString;
 import org.jruby.RubySymbol;
 import org.jruby.runtime.Block;
@@ -933,14 +934,12 @@ public abstract class Parse {
     }
 
     protected RubyModule resolveClassName(RubyModule base, ByteList name, boolean autoDefine) {
-        // FIXME: m17n issue
-        IRubyObject clas = base.getConstantAt(name.toString());
-        if (clas == null && autoDefine) {
-            // FIXME: This should be oj Bag type
-            clas = context.runtime.getHash();
-        }
+        String id = name.toString(); // FIXME: m17n issue (utf-8 source needs iso8859_1 for id on 9.2)
 
-        return (RubyModule) clas;
+        IRubyObject clas = base.getConstantAt(id);
+
+        return clas == null && autoDefine ?
+                base.defineClassUnder(id, RubyOj.oj(context).bag, RubyObject.OBJECT_ALLOCATOR) : (RubyModule) clas;
     }
 
     public static ByteList newByteList() {

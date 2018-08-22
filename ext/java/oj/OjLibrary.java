@@ -18,27 +18,32 @@ public class OjLibrary implements Library {
     public static Options default_options;
     private RubyClass parseError;
     public RubyClass stringWriter;
+    public RubyModule oj;
+    public RubyClass bag;
     private List<Odd> odds;
 
     public void load(Ruby runtime, boolean wrap) {
         RubyKernel.require(runtime.getKernel(), runtime.newString("time"), Block.NULL_BLOCK);
         RubyKernel.require(runtime.getKernel(), runtime.newString("date"), Block.NULL_BLOCK);
         RubyKernel.require(runtime.getKernel(), runtime.newString("oj"), Block.NULL_BLOCK);
-        RubyModule ojModule = runtime.getOrCreateModule("Oj");
-        ojModule.defineAnnotatedMethods(RubyOj.class);
+        oj = runtime.getOrCreateModule("Oj");
+        oj.defineAnnotatedMethods(RubyOj.class);
 
         default_options = new Options();
 
-        ojModule.setInternalVariable("_oj", this);
+        oj.setInternalVariable("_oj", this);
 
-        // FIXME: Can crash
-        parseError = (RubyClass) ojModule.getConstant("ParseError");
+        parseError = (RubyClass) oj.getConstant("ParseError");
 
-        stringWriter = StringWriter.createStringWriterClass(runtime, ojModule);
-        StreamWriter.createStreamWriterClass(runtime, ojModule);
-        Doc.createDocClass(runtime, ojModule);
+        stringWriter = StringWriter.createStringWriterClass(runtime, oj);
+        StreamWriter.createStreamWriterClass(runtime, oj);
+        Doc.createDocClass(runtime, oj);
 
         odds = Odd.initBuiltinOdds(runtime);
+
+        RubyKernel.require(runtime.getKernel(), runtime.newString("oj/bag"), Block.NULL_BLOCK);
+
+        bag = (RubyClass) oj.getConstantAt("Bag");
     }
 
     public RubyClass getParseError() {
