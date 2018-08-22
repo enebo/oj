@@ -312,9 +312,8 @@ public class Dump {
         out.append(obj.to_s(context.runtime.newFixnum(10)).convertToString().getByteList());
     }
 
-    // Removed dependencies on math due to problems with CentOS 5.4.
     static void dump_float(ThreadContext context, RubyFloat obj, Out out) {
-        double	d = obj.getDoubleValue();
+        double d = obj.getDoubleValue();
 
         if (0.0 == d) {
             out.append('0');
@@ -351,7 +350,7 @@ public class Dump {
                     out.append(NULL_VALUE);
                     break;
                 default:
-                    out.append(NULL_VALUE);
+                    out.append(NAN_VALUE);
                     break;
             }
         /*} else if (d == (double)(long)d) {  // FIXME: Precision overflow?
