@@ -33,6 +33,10 @@ public class RubyOj extends RubyModule {
         super(runtime);
     }
 
+    public static OjLibrary oj(ThreadContext context) {
+        return resolveOj(context.runtime.getObject().getConstantAt("Oj"));
+    }
+
     public static OjLibrary resolveOj(IRubyObject self) {
         return (OjLibrary) self.getInternalVariables().getInternalVariable("_oj");
     }

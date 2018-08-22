@@ -17,9 +17,11 @@ import java.util.List;
 public class OjLibrary implements Library {
     public static Options default_options;
     private RubyClass parseError;
+    public RubyClass stringWriter;
     private List<Odd> odds;
 
     public void load(Ruby runtime, boolean wrap) {
+        RubyKernel.require(runtime.getKernel(), runtime.newString("time"), Block.NULL_BLOCK);
         RubyKernel.require(runtime.getKernel(), runtime.newString("date"), Block.NULL_BLOCK);
         RubyKernel.require(runtime.getKernel(), runtime.newString("oj"), Block.NULL_BLOCK);
         RubyModule ojModule = runtime.getOrCreateModule("Oj");
@@ -32,7 +34,8 @@ public class OjLibrary implements Library {
         // FIXME: Can crash
         parseError = (RubyClass) ojModule.getConstant("ParseError");
 
-        StringWriter.createStringWriterClass(runtime, ojModule);
+        stringWriter = StringWriter.createStringWriterClass(runtime, ojModule);
+        StreamWriter.createStreamWriterClass(runtime, ojModule);
         Doc.createDocClass(runtime, ojModule);
 
         odds = Odd.initBuiltinOdds(runtime);

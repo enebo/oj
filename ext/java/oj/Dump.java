@@ -1387,7 +1387,7 @@ public class Dump {
             // classes is performed.
             {
                 RubyClass clas = obj.getMetaClass();
-                Odd		odd;
+                Odd odd;
 
                 if (ObjectMode == out.opts.mode && null != (odd = out.oj.getOdd(clas))) {
                     dump_odd(context, obj, odd, clas, depth + 1, out);

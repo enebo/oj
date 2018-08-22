@@ -23,7 +23,7 @@ import org.jruby.util.TypeConverter;
  * construction is complete will return the document in it's current state.
  */
 public class StringWriter extends RubyObject {
-    private StrWriter sw;
+    public StrWriter sw;
 
     private static ObjectAllocator ALLOCATOR = new ObjectAllocator() {
         @Override
@@ -32,10 +32,10 @@ public class StringWriter extends RubyObject {
         }
     };
 
-    public static void createStringWriterClass(Ruby runtime, RubyModule oj) {
+    public static RubyClass createStringWriterClass(Ruby runtime, RubyModule oj) {
         RubyClass clazz = oj.defineClassUnder("StringWriter", runtime.getObject(), ALLOCATOR);
-        clazz.setInternalVariable("_oj", oj);
         clazz.defineAnnotatedMethods(StringWriter.class);
+        return clazz;
     }
 
     public StringWriter(Ruby runtime, RubyClass metaClass) {
@@ -44,8 +44,7 @@ public class StringWriter extends RubyObject {
 
     @JRubyMethod(optional = 1)
     public IRubyObject initialize(ThreadContext context, IRubyObject[] argv) {
-        OjLibrary oj = RubyOj.resolveOj(this);
-        sw = new StrWriter(context, oj);
+        sw = new StrWriter(context, RubyOj.oj(context));
 
         if (1 == argv.length) {
             RubyOj.parse_options(context, argv[0], sw.opts);
