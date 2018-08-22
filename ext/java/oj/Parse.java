@@ -723,20 +723,6 @@ public abstract class Parse {
         }
     }
 
-    void oj_set_error_at(String format, String... data) {
-        //RubyModule errorClass = getRuntime().getClass("Oj").getClass("ParseError");
-        String file = context.getFile();
-        int line = context.getLine();
-
-     //   if (null == json) {
-            // FIXME:
-            //oj_err_set(err, err_clas, "%s at line %d, column %d [%s:%d]", msg, rd.line, rd.col, file, line);
-//        } else {
-            // FIXME:
-            //_oj_err_set_with_location(err, err_clas, msg, json, currentOffset - 1, file, line);
-//        }
-}
-
     IRubyObject protect_parse() {
         // nilnil option and nil source will not create a source.
         if (source != null) oj_parse2();

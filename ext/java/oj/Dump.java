@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Formatter;
+import java.util.List;
 import java.util.TimeZone;
 
 import jnr.posix.util.Platform;
@@ -21,6 +22,7 @@ import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyNil;
 import org.jruby.RubyNumeric;
+import org.jruby.RubyObject;
 import org.jruby.RubyRange;
 import org.jruby.RubyRational;
 import org.jruby.RubyRegexp;
@@ -35,6 +37,7 @@ import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.runtime.builtin.InstanceVariables;
+import org.jruby.runtime.builtin.Variable;
 import org.jruby.util.ByteList;
 import org.jruby.util.Sprintf;
 import org.jruby.util.StringSupport;
@@ -1147,15 +1150,16 @@ public class Dump {
             dump_hash(context, obj, null, depth + 1, out.opts.mode, out);
         }
 
-        // dump instance variables.
-        InstanceVariables variables = obj.getInstanceVariables();
+        List<Variable<Object>> variables = obj.getVariableList();
 
-        if (clas != null && variables.getInstanceVariableList().size() > 0) {
+        if (clas != null && !variables.isEmpty()) {
             out.append(',');
         }
 
         boolean first = true;
-        for(String attr: variables.getInstanceVariableNameList()) {
+        for (Variable<Object> variable: variables) {
+            String name = variable.getName();
+
             if (first) {
                 first = false;
             } else {
@@ -1164,18 +1168,19 @@ public class Dump {
 
             fill_indent(out, d2);
 
-            if (attr.charAt(0) == '@') {
-                dump_cstr(context, attr.substring(1), false, false, out);
+            if (name.charAt(0) == '@') {
+                dump_cstr(context, name.substring(1), false, false, out);
             } else {
-                dump_cstr(context, "~" + attr, false, false, out);
+                dump_cstr(context, "~" + name, false, false, out);
             }
             out.append(':');
-            dump_val(context, variables.getInstanceVariable(attr), d2, out, null);
+            // FIXME: We may crash if non ruby object is internal
+            dump_val(context, (IRubyObject) variable.getValue(), d2, out, null);
         }
         out.depth = depth;
         fill_indent(out, depth);
         out.append('}');
-}
+    }
 
     static void dump_struct_comp(ThreadContext context, IRubyObject obj, int depth, Out out) {
         if (obj.respondsTo("to_hash")) {

@@ -21,9 +21,7 @@ public class StrictParse extends Parse {
 
     @Override
     public void appendNum(NumInfo ni) {
-        if (ni.infinity || ni.nan) {
-            oj_set_error_at("not a number or other value");
-        }
+        if (ni.infinity || ni.nan) parseError("not a number or other value");
 
         ((RubyArray) stack_peek().val).append(ni.toNumber(context));
     }
@@ -35,9 +33,7 @@ public class StrictParse extends Parse {
 
     @Override
     public void addNum(NumInfo ni) {
-        if (ni.infinity || ni.nan) {
-            oj_set_error_at("not a number or other value");
-        }
+        if (ni.infinity || ni.nan) parseError("not a number or other value");
 
         value = ni.toNumber(context);
     }
@@ -56,9 +52,8 @@ public class StrictParse extends Parse {
 
     @Override
     public void setNum(Val kval, NumInfo ni) {
-        if (ni.infinity || ni.nan) {
-            oj_set_error_at("not a number or other value");
-        }
+        if (ni.infinity || ni.nan) parseError("not a number or other value");
+
         ((RubyHash) stack_peek().val).fastASet(calc_hash_key(kval), ni.toNumber(context));
     }
 
