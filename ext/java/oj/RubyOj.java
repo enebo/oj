@@ -165,12 +165,10 @@ public class RubyOj extends RubyModule {
                 copts.float_fmt = "";
                 copts.float_prec = 0;
             } else {
-                if (20 < n) {
-                    n = 20;
-                }
-                // FIXME:
-                //sprintf(copts.float_fmt, "%%0.%dg", n);
-                copts.float_prec = (char) n;
+                if (20 < n) n = 20;
+
+                copts.float_fmt = "%0." + n + "g";
+                copts.float_prec = n;
             }
         }
 

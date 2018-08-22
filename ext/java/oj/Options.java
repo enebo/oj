@@ -52,7 +52,7 @@ public class Options {
     ByteList create_id;	// 0 or string
     int		sec_prec;	// second precision when dumping time
     DumpOpts	dump_opts;
-    char	float_prec;	// float precision, linked to float_fmt
+    int	float_prec;	// float precision, linked to float_fmt
     String	float_fmt;	// float format for dumping, if empty use Ruby
     
     public Options() {
