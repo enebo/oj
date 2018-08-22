@@ -903,15 +903,15 @@ public abstract class Parse {
     protected RubyClass nameToStruct(IRubyObject name) {
         RubyString structName = (RubyString) TypeConverter.checkStringType(context.runtime, name);
 
-        return resolveClassPath(structName.getByteList(), false);
+        return (RubyClass) resolveClassPath(structName.getByteList(), false);
     }
 
-    protected RubyClass nameToClass(ByteList name, boolean autoDefine) {
+    protected RubyModule nameToClass(ByteList name, boolean autoDefine) {
         if (options.class_cache == No) {
             return resolveClassPath(name, autoDefine);
         }
 
-        RubyClass clas = classMap.get(name);
+        RubyModule clas = classMap.get(name);
         if (clas == null) {
             clas = resolveClassPath(name, autoDefine);
         }
@@ -919,7 +919,7 @@ public abstract class Parse {
         return clas;
     }
 
-    protected RubyClass resolveClassPath(ByteList className, boolean autoDefine) {
+    protected RubyModule resolveClassPath(ByteList className, boolean autoDefine) {
         RubyModule clas = context.runtime.getObject();
 
         ByteList name = className;
@@ -943,8 +943,7 @@ public abstract class Parse {
         clas = resolveClassName(clas, name, autoDefine);
         if (clas == null) parseError("class " + className + " is not defined");
 
-        // FIXME: This could module or class here???
-        return (RubyClass) clas;
+        return clas;
     }
 
     protected RubyModule resolveClassName(RubyModule base, ByteList name, boolean autoDefine) {

@@ -494,6 +494,7 @@ public class Dump {
     }
 
     static void dump_class_obj(ThreadContext context, RubyModule clas, Out out) {
+        out.append('{');
         out.append(C_KEY);
         dump_cstr(context, new ByteList(clas.getName().getBytes()), false, false, out);
         out.append('}');

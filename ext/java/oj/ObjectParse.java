@@ -253,7 +253,7 @@ public class ObjectParse extends Parse {
             switch (key.get(1)) {
                 case 'o': // object
                 {	// name2class sets and error if the class is not found or created
-                    RubyClass clas = nameToClass(value, Yes == options.auto_define);
+                    RubyClass clas = (RubyClass) nameToClass(value, Yes == options.auto_define);
 
                     if (null != clas) {
                         parent.val = clas.allocate();
