@@ -1,4 +1,4 @@
-package oj;
+package oj.options;
 
 /**
  * Created by enebo on 9/11/15.

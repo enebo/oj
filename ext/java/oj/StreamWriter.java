@@ -24,9 +24,10 @@ import static oj.StreamWriterType.*;
  * the elements to that array or object until a pop() is called.
  */
 public class StreamWriter extends RubyObject {
-    IRubyObject stream;
     StringWriter sw;
     StreamWriterType type = STREAM_IO;
+    IRubyObject stream;
+    int flush_limit;
 
     public static void createStreamWriterClass(Ruby runtime, RubyModule oj) {
         RubyClass clazz = oj.defineClassUnder("StreamWriter", runtime.getObject(), ALLOCATOR);

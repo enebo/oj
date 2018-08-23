@@ -6,6 +6,7 @@ import org.jruby.RubyKernel;
 import org.jruby.RubyModule;
 import org.jruby.RubySymbol;
 import org.jruby.runtime.Block;
+import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.runtime.load.Library;
 
@@ -29,7 +30,9 @@ public class OjLibrary implements Library {
         oj = runtime.getOrCreateModule("Oj");
         oj.defineAnnotatedMethods(RubyOj.class);
 
-        default_options = new Options();
+        ThreadContext context = runtime.getCurrentContext();
+
+        default_options = new Options(context);
 
         oj.setInternalVariable("_oj", this);
 
@@ -66,8 +69,8 @@ public class OjLibrary implements Library {
         return null;
     }
 
-    public static Options getDefaultOptions() {
-        return default_options.dup();
+    public static Options getDefaultOptions(ThreadContext context) {
+        return default_options.dup(context);
     }
 
     public void registerOdd(RubyClass clas, IRubyObject createObject, RubySymbol createMethod, IRubyObject[] newArgs) {

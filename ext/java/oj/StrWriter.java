@@ -1,22 +1,19 @@
 package oj;
 
-import org.jruby.RubyModule;
+import oj.options.DumpType;
 import org.jruby.runtime.ThreadContext;
 
 import java.util.Stack;
 
-/**
- * Created by enebo on 9/11/15.
- */
 public class StrWriter {
+    public Out out;
+    public Options opts;
+    public int depth;
     public Stack<DumpType> types = new Stack<DumpType>();
     public boolean keyWritten;
-    public Options opts;
-    public Out out;
-    public int depth;
-    
+
     public StrWriter(ThreadContext context, OjLibrary oj) {
-        opts = oj.default_options.dup();
+        opts = oj.default_options.dup(context);
         depth = 0;
         keyWritten = false;
         out = new Out(oj, opts);

@@ -5,21 +5,29 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+import oj.options.DumpCaller;
 import org.jruby.RubyString;
 import org.jruby.runtime.ThreadContext;
+import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
 /**
  * Created by enebo on 9/11/15.
  */
 public class Out {
-    public Options opts;
-    public int indent;
-    public int depth;
-    public int hash_cnt = 0;
-    public int circ_cnt = 0;
-    public Map<Object,Integer> circ_cache = null;
     public ByteList buf;
+    public Map<Object,Integer> circ_cache = null;
+    public int circ_cnt = 0;
+    public int indent;
+    public int depth; // used by dump_hash
+    public Options opts;
+    public int hash_cnt = 0;
+    public boolean allocated;
+    public boolean omit_nil;
+    IRubyObject[] argv;
+    DumpCaller caller; // use for mimic json only
+    ROptTable ropts;
+
     public OjLibrary oj;
 
     public Out(OjLibrary oj) {

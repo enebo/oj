@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.TimeZone;
 
 import jnr.posix.util.Platform;
+import oj.options.DumpType;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.RubyArray;
 import org.jruby.RubyBignum;
@@ -22,7 +23,6 @@ import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyNil;
 import org.jruby.RubyNumeric;
-import org.jruby.RubyObject;
 import org.jruby.RubyRange;
 import org.jruby.RubyRational;
 import org.jruby.RubyRegexp;
@@ -36,17 +36,16 @@ import org.jruby.ext.stringio.StringIO;
 import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
-import org.jruby.runtime.builtin.InstanceVariables;
 import org.jruby.runtime.builtin.Variable;
 import org.jruby.util.ByteList;
 import org.jruby.util.Sprintf;
 import org.jruby.util.StringSupport;
 import org.jruby.util.TypeConverter;
 
-import static oj.DumpType.ArrayNew;
-import static oj.DumpType.ArrayType;
-import static oj.DumpType.ObjectNew;
-import static oj.DumpType.ObjectType;
+import static oj.options.DumpType.ArrayNew;
+import static oj.options.DumpType.ArrayType;
+import static oj.options.DumpType.ObjectNew;
+import static oj.options.DumpType.ObjectType;
 import static oj.Options.*;
 import static oj.NumInfo.OJ_INFINITY;
 
@@ -544,7 +543,7 @@ public class Dump {
                     }
                     if (0 < out.opts.dump_opts.indent_size) {
                         for (int j = d2; 0 < j; j--) {
-                            out.append(out.opts.dump_opts.indent);
+                            out.append(out.opts.dump_opts.indent_str);
                         }
                     }
                 }
@@ -556,13 +555,13 @@ public class Dump {
             if (null == out.opts.dump_opts) {
                 fill_indent(out, depth);
             } else {
-                //printf("*** d2: %u  indent: %u '%s'\n", d2, out.opts.dump_opts.indent_size, out.opts.dump_opts.indent);
+                //printf("*** d2: %u  indent_str: %u '%s'\n", d2, out.opts.dump_opts.indent_size, out.opts.dump_opts.indent_str);
                 if (0 < out.opts.dump_opts.array_size) {
                     out.append(out.opts.dump_opts.array_nl);
                 }
                 if (0 < out.opts.dump_opts.indent_size) {
                     for (int j = depth; 0 < j; j--) {
-                        out.append(out.opts.dump_opts.indent);
+                        out.append(out.opts.dump_opts.indent_str);
                     }
                 }
             }
@@ -587,7 +586,7 @@ public class Dump {
             if (0 < out.opts.dump_opts.indent_size) {
                 int	i;
                 for (i = depth; 0 < i; i--) {
-                    out.append(out.opts.dump_opts.indent);
+                    out.append(out.opts.dump_opts.indent_str);
                 }
             }
             dump_str_comp(context, (RubyString) key, out);
@@ -616,7 +615,7 @@ public class Dump {
             if (0 < out.opts.dump_opts.indent_size) {
                 int	i;
                 for (i = depth; 0 < i; i--) {
-                    out.append(out.opts.dump_opts.indent);
+                    out.append(out.opts.dump_opts.indent_str);
                 }
             }
         }
@@ -762,7 +761,7 @@ public class Dump {
                     int	i;
 
                     for (i = depth; 0 < i; i--) {
-                        out.append(out.opts.dump_opts.indent);
+                        out.append(out.opts.dump_opts.indent_str);
                     }
                 }
             }

@@ -26,14 +26,14 @@ import static oj.LeafValue.STR_VAL;
 public class Leaf {
     public static final long NUM_MAX = RubyFixnum.MAX;
 
-    public LeafValue value_type;
-    public LeafType rtype;
-    public ParentType parentType = ParentType.None;
-    public ByteList str;
-    public IRubyObject value;
-    public List<Leaf> elements;
     public ByteList key;
     public int index;
+    public ByteList str;
+    public List<Leaf> elements;
+    public IRubyObject value;
+    public LeafType rtype;
+    public LeafValue value_type;
+    public ParentType parentType = ParentType.None;
 
     public Leaf(ThreadContext context, LeafType type) {
         this.rtype = type;

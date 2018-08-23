@@ -300,11 +300,12 @@ public class Doc extends RubyObject {
         Leaf leaf = get_doc_leaf(context, path);
         if (leaf != null) {
             OjLibrary oj = RubyOj.oj(context);
+            Options options = OjLibrary.getDefaultOptions(context);
             if (null == filename) {
-                Out out = Dump.leaf_to_json(context, oj, leaf, OjLibrary.getDefaultOptions());
+                Out out = Dump.leaf_to_json(context, oj, leaf, options);
                 return context.runtime.newString(out.buf);
             } else {
-                Dump.leaf_to_file(context, oj, leaf, filename, OjLibrary.getDefaultOptions());
+                Dump.leaf_to_file(context, oj, leaf, filename, options);
             }
         }
         return context.nil;

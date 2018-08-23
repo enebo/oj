@@ -75,7 +75,7 @@ public class RubyMimic {
             mimic.defineClassUnder("State", runtime.getObject(), OBJECT_ALLOCATOR);
         }
 
-        ojLibrary.default_options = Options.mimicOptions();
+        ojLibrary.default_options = Options.mimicOptions(context);
         ojLibrary.default_options.to_json = Options.Yes;
 
         return mimic;
@@ -104,7 +104,7 @@ public class RubyMimic {
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject load(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {
         OjLibrary oj = RubyOj.resolveOj(self);
-        Options options = oj.default_options.dup();
+        Options options = oj.default_options.dup(context);
         ParserSource source = RubyOj.processArgs(context, args, options);
 
         IRubyObject obj = new CompatParse(source, context, options).parse(oj, false, Block.NULL_BLOCK);
