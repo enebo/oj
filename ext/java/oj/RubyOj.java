@@ -588,7 +588,6 @@ public class RubyOj extends RubyModule {
         return context.nil;
     }
 
-    /*
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject saj_parse(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         Ruby runtime = context.runtime;
@@ -604,11 +603,10 @@ public class RubyOj extends RubyModule {
         } else {
             json = getInput(context, input);
         }
-        Saj.parse(args, json);
+        new SajParse(new StringParserSource(json), context).parse(args[0]);
 
         return context.nil;
     }
-    */
 
     @JRubyMethod(module = true, required = 2, rest = true)
     public static IRubyObject sc_parse(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {

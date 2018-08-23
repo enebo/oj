@@ -1,6 +1,15 @@
 package oj;
 
+import org.jcodings.specific.UTF8Encoding;
+import org.jruby.ext.bigdecimal.RubyBigDecimal;
+import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
+import org.jruby.util.ByteList;
+
+import static oj.Leaf.NUM_MAX;
+import static oj.NumInfo.OJ_INFINITY;
+import static oj.Parse.INFINITY;
+import static oj.ParserSource.EOF;
 
 /** This JSON parser is a single pass, destructive, callback parser. It is a
 * single pass parse since it only make one pass over the characters in the
@@ -15,12 +24,27 @@ import org.jruby.runtime.builtin.IRubyObject;
 * all cases to parse the string.
 */
 public class SajParse { // extends Parse {
-    //static final long NUM_MAX = FIXNUM_MAX >> 8;
+    ThreadContext context;
+    ParserSource source;
+    IRubyObject handler;
+    boolean has_error;
+    boolean has_hash_start;
+    private boolean has_add_value;
+    private boolean has_hash_end;
+    private boolean has_array_start;
+    private boolean has_array_end;
+    private static boolean debug = System.getProperty("oj.debug") != null;
 
-    /*
-    void call_error(String msg, ParseInfo pi, String  file, int line) {
-        char	buf[128];
-    String s = pi.s;
+    public SajParse(ParserSource source, ThreadContext context) {
+        this.source = source;
+        this.context = context;
+    }
+
+    void call_error(String msg) {
+        StringBuilder buf = new StringBuilder(msg);
+
+        // FIXME: Implement source.pos() -> [line, col]
+        /*
         int		jline = 1;
         int		col = 1;
 
@@ -32,71 +56,62 @@ public class SajParse { // extends Parse {
                 jline++;
             }
         }
+
         sprintf(buf, "%s at line %d, column %d [%s:%d]", msg, jline, col, file, line);
-        rb_funcall(pi.handler, oj_error_id, 3, rb_str_new2(buf), LONG2NUM(jline), LONG2NUM(col));
+        */
+        handler.callMethod(context, "error",
+                new IRubyObject[] {context.runtime.newString(buf.toString()),
+                context.runtime.newFixnum(-1),
+                context.runtime.newFixnum(-1)});
     }
 
-    void next_non_white(ParseInfo pi) {
-        for (; true; pi.s++) {
-            switch(*pi.s) {
+    void non_white() {
+        while (true) {
+            switch(source.current) {
                 case ' ':
                 case '\t':
                 case '\f':
                 case '\n':
                 case '\r':
+                    source.advance();
                     break;
                 case '/':
-                    skip_comment(pi);
-                    break;
+                    skip_comment();
                 default:
                     return;
             }
         }
     }
 
-    public void call_add_value(IRubyObject handler, IRubyObject IRubyObject, String key) {
-        IRubyObject	k;
+    public void call_add_value(IRubyObject value, ByteList key) {
+        IRubyObject	k = null == key ?
+                context.nil : Parse.oj_encode(context.runtime.newString(key));
 
-        if (null == key) {
-            k = context.nil;
-        } else {
-            k = rb_str_new2(key);
-            k = oj_encode(k);
-        }
-        rb_funcall(handler, oj_add_IRubyObject_id, 2, IRubyObject, k);
+        handler.callMethod(context, "add_value", new IRubyObject[] {value, k});
     }
 
-    public void call_no_value(IRubyObject handler, String method, String key) {
-        IRubyObject	k;
+    public void call_no_value(String method, ByteList key) {
+        IRubyObject	k = null == key ?
+                context.nil : Parse.oj_encode(context.runtime.newString(key));
 
-        if (null == key) {
-            k = context.nil;
-        } else {
-            k = rb_str_new2(key);
-            k = oj_encode(k);
-        }
-        rb_funcall(handler, method, 1, k);
+        handler.callMethod(context, method, k);
     }
 
-    public void skip_comment(ParseInfo pi) {
-        pi.s++; // skip first /
-        if ('*' == *pi.s) {
-            pi.s++;
-            for (; '\0' != *pi.s; pi.s++) {
-                if ('*' == *pi.s && '/' == *(pi.s + 1)) {
-                    pi.s++;
+    public void skip_comment() {
+        source.advance(); // skip first /
+        if ('*' == source.current) {
+            source.advance();
+            for (; source.current != EOF; source.advance()) {
+                if ('*' == source.current && '/' == source.peek(1)) {
+                    source.advance(1);
                     return;
-                } else if ('\0' == *pi.s) {
-                    if (pi.has_error) {
-                        call_error("comment not terminated", pi, __FILE__, __LINE__);
-                    } else {
-                        raise_error("comment not terminated", pi.str, pi.s);
-                    }
+                } else if (source.current == EOF) {
+                    error("comment not terminated");
                 }
             }
-        } else if ('/' == pi.s) {
-            for (; true; pi.s++) {
-                switch (pi.s) {
+        } else if ('/' == source.current) {
+            for (; true; source.advance()) {
+                switch (source.current) {
                     case '\n':
                     case '\r':
                     case '\f':
@@ -107,30 +122,22 @@ public class SajParse { // extends Parse {
                 }
             }
         } else {
-            if (pi.has_error) {
-                call_error("invalid comment", pi, __FILE__, __LINE__);
-            } else {
-                raise_error("invalid comment", pi.str, pi.s);
-            }
+            error("invalid comment");
         }
     }
 
-    public void read_next(ParseInfo pi, String key) {
-        IRubyObject	obj;
-
-        if ((void*)&obj < pi.stack_min) {
-            rb_raise(rb_eSysStackError, "JSON is too deeply nested");
-        }
-        next_non_white(pi);	// skip white space
-        switch (pi.s) {
+    public void read_next(ByteList key) {
+        non_white();	// skip white space
+        if (debug) System.out.println("read_next - current: " + (char) source.current);
+        switch (source.current) {
             case '{':
-                read_hash(pi, key);
+                read_hash(key);
                 break;
             case '[':
-                read_array(pi, key);
+                read_array(key);
                 break;
             case '"':
-                read_str(pi, key);
+                read_str(key);
                 break;
             case '+':
             case '-':
@@ -144,19 +151,19 @@ public class SajParse { // extends Parse {
             case '7':
             case '8':
             case '9':
-                read_num(pi, key);
+                read_num(key);
                 break;
             case 'I':
-                read_num(pi, key);
+                read_num(key);
                 break;
             case 't':
-                read_true(pi, key);
+                read_true(key);
                 break;
             case 'f':
-                read_false(pi, key);
+                read_false(key);
                 break;
             case 'n':
-                read_nil(pi, key);
+                read_nil(key);
                 break;
             case '\0':
                 return;
@@ -165,191 +172,157 @@ public class SajParse { // extends Parse {
         }
     }
 
-    public void read_hash(ParseInfo pi, String key) {
-        String ks;
+    public void read_hash(ByteList key) {
+        if (debug) System.out.println("read_hash: " + (char) source.current);
+        ByteList ks;
 
-        if (pi.has_hash_start) {
-            call_no_value(pi.handler, oj_hash_start_id, key);
-        }
-        pi.s++;
-        next_non_white(pi);
-        if ('}' == pi.s) {
-            pi.s++;
+        if (has_hash_start) call_no_value("hash_start", key);
+
+        source.advance();
+        non_white();
+        if ('}' == source.current) {
+            source.advance();
         } else {
-            while (1) {
-                next_non_white(pi);
-                ks = read_quoted_IRubyObject(pi);
-                next_non_white(pi);
-                if (':' == *pi.s) {
-                    pi.s++;
+            while (true) {
+                non_white();
+                ks = read_quoted_value();
+                non_white();
+                if (':' == source.current) {
+                    source.advance();
                 } else {
-                    if (pi.has_error) {
-                        call_error("invalid format, expected :", pi, __FILE__, __LINE__);
-                    }
-                    raise_error("invalid format, expected :", pi.str, pi.s);
+                    error("invalid format, expected :");
                 }
-                read_next(pi, ks);
-                next_non_white(pi);
-                if ('}' == pi.s) {
-                    pi.s++;
+                read_next(ks);
+                non_white();
+                if ('}' == source.current) {
+                    source.advance();
                     break;
-                } else if (',' == pi.s) {
-                    pi.s++;
+                } else if (',' == source.current) {
+                    source.advance();
                 } else {
-                    if (pi.has_error) {
-                        call_error("invalid format, expected , or } while in an object", pi, __FILE__, __LINE__);
-                    }
-                    raise_error("invalid format, expected , or } while in an object", pi.str, pi.s);
+                    error("invalid format, expected , or } while in an object");
                 }
             }
         }
-        if (pi.has_hash_end) {
-            call_no_value(pi.handler, oj_hash_end_id, key);
-        }
+        if (has_hash_end) call_no_value("hash_end", key);
     }
 
-    public void read_array(ParseInfo pi, String key) {
-        if (pi.has_array_start) {
-            call_no_value(pi.handler, oj_array_start_id, key);
-        }
-        pi.s++;
-        next_non_white(pi);
-        if (']' == pi.s) {
-            pi.s++;
+    public void read_array(ByteList key) {
+        if (has_array_start) call_no_value("array_start", key);
+
+        source.advance();
+        non_white();
+        if (']' == source.current) {
+            source.advance();
         } else {
-            while (1) {
-                read_next(pi, 0);
-                next_non_white(pi);
-                if (',' == pi.s) {
-                    pi.s++;
-                } else if (']' == pi.s) {
-                    pi.s++;
+            while (true) {
+                read_next(null);
+                non_white();
+                if (',' == source.current) {
+                    source.advance();
+                } else if (']' == source.current) {
+                    source.advance();
                     break;
                 } else {
-                    if (pi.has_error) {
-                        call_error("invalid format, expected , or ] while in an array", pi, __FILE__, __LINE__);
-                    }
-                    raise_error("invalid format, expected , or ] while in an array", pi.str, pi.s);
+                    error("invalid format, expected , or ] while in an array");
                 }
             }
         }
-        if (pi.has_array_end) {
-            call_no_value(pi.handler, oj_array_end_id, key);
-        }
+        if (has_array_end) call_no_value("array_end", key);
     }
 
-    void read_str(ParseInfo pi, String key) {
-    char	*text;
-
-        text = read_quoted_value(pi);
-        if (pi.has_add_value) {
-            IRubyObject	s = rb_str_new2(text);
-
-            s = oj_encode(s);
-            call_add_value(pi.handler, s, key);
+    void read_str(ByteList key) {
+        ByteList text = read_quoted_value();
+        if (has_add_value) {
+            IRubyObject	s = Parse.oj_encode(context.runtime.newString(text));
+            call_add_value(s, key);
         }
     }
 
 
+    void read_num(ByteList key) {
+        int start = source.currentOffset;
+        long n = 0;
+        long a = 0;
+        long div = 1;
+        long e = 0;
+        boolean neg = false;
+        boolean eneg = false;
+        int big = 0;
 
-
-    void read_num(ParseInfo pi, String key) {
-    char	*start = pi.s;
-        int64_t	n = 0;
-        long	a = 0;
-        long	div = 1;
-        long	e = 0;
-        int		neg = 0;
-        int		eneg = 0;
-        int		big = 0;
-
-        if ('-' == *pi.s) {
-            pi.s++;
-            neg = 1;
-        } else if ('+' == *pi.s) {
-            pi.s++;
+        if ('-' == source.current) {
+            source.advance();
+            neg = true;
+        } else if ('+' == source.current) {
+            source.advance();
         }
-        if ('I' == *pi.s) {
-            if (0 != strncmp("Infinity", pi.s, 8)) {
-                if (pi.has_error) {
-                    call_error("number or other IRubyObject", pi, __FILE__, __LINE__);
-                }
-                raise_error("number or other IRubyObject", pi.str, pi.s);
-            }
-            pi.s += 8;
+        if ('I' == source.current) {
+            if (!source.startsWith(INFINITY)) error("number or other IRubyObject");
+
+            source.advance(8);
             if (neg) {
-                if (pi.has_add_IRubyObject) {
-                    call_add_IRubyObject(pi.handler, rb_float_new(-OJ_INFINITY), key);
-                }
+                if (has_add_value) call_add_value(context.runtime.newFloat(-OJ_INFINITY), key);
             } else {
-                if (pi.has_add_IRubyObject) {
-                    call_add_IRubyObject(pi.handler, rb_float_new(OJ_INFINITY), key);
-                }
+                if (has_add_value) call_add_value(context.runtime.newFloat(OJ_INFINITY), key);
             }
             return;
         }
-        for (; '0' <= *pi.s && *pi.s <= '9'; pi.s++) {
-            if (big) {
+        for (; '0' <= source.current && source.current <= '9'; source.advance()) {
+            if (big > 0) {
                 big++;
             } else {
-                n = n * 10 + (*pi.s - '0');
+                n = n * 10 + (source.current - '0');
                 if (NUM_MAX <= n) {
                     big = 1;
                 }
             }
         }
-        if ('.' == *pi.s) {
-            pi.s++;
-            for (; '0' <= *pi.s && *pi.s <= '9'; pi.s++) {
-                a = a * 10 + (*pi.s - '0');
+        if ('.' == source.current) {
+            source.advance();
+            for (; '0' <= source.current && source.current <= '9'; source.advance()) {
+                a = a * 10 + (source.current - '0');
                 div *= 10;
                 if (NUM_MAX <= div) {
                     big = 1;
                 }
             }
         }
-        if ('e' == *pi.s || 'E' == *pi.s) {
-            pi.s++;
-            if ('-' == *pi.s) {
-                pi.s++;
-                eneg = 1;
-            } else if ('+' == *pi.s) {
-                pi.s++;
+        if ('e' == source.current || 'E' == source.current) {
+            source.advance();
+            if ('-' == source.current) {
+                source.advance();
+                eneg = true;
+            } else if ('+' == source.current) {
+                source.advance();
             }
-            for (; '0' <= *pi.s && *pi.s <= '9'; pi.s++) {
-                e = e * 10 + (*pi.s - '0');
+            for (; '0' <= source.current && source.current <= '9'; source.advance()) {
+                e = e * 10 + (source.current - '0');
                 if (NUM_MAX <= e) {
                     big = 1;
                 }
             }
         }
         if (0 == e && 0 == a && 1 == div) {
-            if (big) {
-                char	c = *pi.s;
-
-	    *pi.s = '\0';
-                if (pi.has_add_IRubyObject) {
-                    call_add_IRubyObject(pi.handler, rb_funcall(oj_bigdecimal_class, oj_new_id, 1, rb_str_new2(start)), key);
+            if (big > 0) {
+                if (has_add_value) {
+                    // FIXME: make better method that substr for offset -> current to make bytelist
+                    IRubyObject val = context.runtime.newString(source.subStr(start, source.currentOffset));
+                    IRubyObject value = RubyBigDecimal.newInstance(context, context.runtime.getClass("BigDecimal"), val);
+                    call_add_value(value, key);
                 }
-	    *pi.s = c;
             } else {
-                if (neg) {
-                    n = -n;
-                }
-                if (pi.has_add_IRubyObject) {
-                    call_add_IRubyObject(pi.handler, LONG2NUM(n), key);
-                }
+                if (neg) n = -n;
+
+                if (has_add_value) call_add_value(context.runtime.newFixnum(n), key);
             }
             return;
         } else { // decimal
-            if (big) {
-                char	c = *pi.s;
-
-	    *pi.s = '\0';
-                if (pi.has_add_IRubyObject) {
-                    call_add_IRubyObject(pi.handler, rb_funcall(oj_bigdecimal_class, oj_new_id, 1, rb_str_new2(start)), key);
+            if (big > 0) {
+                if (has_add_value) {
+                    IRubyObject val = context.runtime.newString(source.subStr(start, source.currentOffset));
+                    IRubyObject value = RubyBigDecimal.newInstance(context, context.runtime.getClass("BigDecimal"), val);
+                    call_add_value(value, key);
                 }
-	    *pi.s = c;
             } else {
                 double	d = (double)n + (double)a / (double)div;
 
@@ -363,288 +336,177 @@ public class SajParse { // extends Parse {
                     if (eneg) {
                         e = -e;
                     }
-                    d *= pow(10.0, e);
+                    d *= Math.pow(10.0, e);
                 }
-                if (pi.has_add_IRubyObject) {
-                    call_add_IRubyObject(pi.handler, rb_float_new(d), key);
-                }
+                if (has_add_value) call_add_value(context.runtime.newFloat(d), key);
             }
         }
     }
 
-    void
-    read_true(ParseInfo pi, String key) {
-        pi.s++;
-        if ('r' != *pi.s || 'u' != *(pi.s + 1) || 'e' != *(pi.s + 2)) {
-            if (pi.has_error) {
-                call_error("invalid format, expected 'true'", pi, __FILE__, __LINE__);
-            }
-            raise_error("invalid format, expected 'true'", pi.str, pi.s);
+    void read_true(ByteList key) {
+        source.advance();
+        if ('r' != source.current || 'u' != source.peek(1) || 'e' != source.peek(2)) {
+            error("invalid format, expected 'true'");
         }
-        pi.s += 3;
-        if (pi.has_add_IRubyObject) {
-            call_add_IRubyObject(pi.handler, context.true, key);
-        }
+        source.advance(3);
+        if (has_add_value) call_add_value(context.tru, key);
     }
 
-    void
-    read_false(ParseInfo pi, String key) {
-        pi.s++;
-        if ('a' != *pi.s || 'l' != *(pi.s + 1) || 's' != *(pi.s + 2) || 'e' != *(pi.s + 3)) {
-            if (pi.has_error) {
-                call_error("invalid format, expected 'false'", pi, __FILE__, __LINE__);
-            }
-            raise_error("invalid format, expected 'false'", pi.str, pi.s);
+    void read_false(ByteList key) {
+        source.advance();
+        if ('a' != source.current || 'l' != source.peek(1) || 's' != source.peek(2) || 'e' != source.peek(3)) {
+            error("invalid format, expected 'false'");
         }
-        pi.s += 4;
-        if (pi.has_add_IRubyObject) {
-            call_add_IRubyObject(pi.handler, context.false, key);
-        }
+        source.advance(4);
+        if (has_add_value) call_add_value(context.fals, key);
     }
 
-    void
-    read_nil(ParseInfo pi, String key) {
-        pi.s++;
-        if ('u' != *pi.s || 'l' != *(pi.s + 1) || 'l' != *(pi.s + 2)) {
-            if (pi.has_error) {
-                call_error("invalid format, expected 'null'", pi, __FILE__, __LINE__);
-            }
-            raise_error("invalid format, expected 'null'", pi.str, pi.s);
+    void read_nil(ByteList key) {
+        source.advance();
+        if ('u' != source.current || 'l' != source.peek(1) || 'l' != source.peek(2)) {
+            error("invalid format, expected 'null'");
         }
-        pi.s += 3;
-        if (pi.has_add_IRubyObject) {
-            call_add_IRubyObject(pi.handler, context.nil, key);
-        }
+        source.advance(3);
+        if (has_add_value) call_add_value(context.nil, key);
     }
 
-    static int read_hex(ParseInfo pi, char *h) {
-        uint32_t	b = 0;
-        int		i;
+    // FIXME: Uses String.  Should get swapped to bytelist eventually or byte[]
+    int read_hex() {
+        int	b = 0;
 
-    // TBD this can be made faster with a table
-        for (i = 0; i < 4; i++, h++) {
+        for (int i = 0; i < 4; i++) {
+            int h = source.peek(i);
             b = b << 4;
-            if ('0' <= *h && *h <= '9') {
-                b += *h - '0';
-            } else if ('A' <= *h && *h <= 'F') {
-                b += *h - 'A' + 10;
-            } else if ('a' <= *h && *h <= 'f') {
-                b += *h - 'a' + 10;
+            if ('0' <= h && h <= '9') {
+                b += h - '0';
+            } else if ('A' <= h && h <= 'F') {
+                b += h - 'A' + 10;
+            } else if ('a' <= h && h <= 'f') {
+                b += h - 'a' + 10;
             } else {
-                pi.s = h;
-                if (pi.has_error) {
-                    call_error("invalid hex character", pi, __FILE__, __LINE__);
-                }
-                raise_error("invalid hex character", pi.str, pi.s);
+                source.current = h;
+                error("invalid hex character");
             }
         }
         return b;
     }
 
-    static char*
-    unicode_to_chars(ParseInfo pi, char *t, uint32_t code) {
+    void unicode_to_chars(ByteList buf, int code) {
+        // FIXME: I think this will not work as written with signed ints (we should use jcodings
         if (0x0000007F >= code) {
-	*t = (char)code;
+            buf.append((char) code);
         } else if (0x000007FF >= code) {
-	*t++ = 0xC0 | (code >> 6);
-	*t = 0x80 | (0x3F & code);
+            buf.append(0xC0 | (code >> 6));
+            buf.append(0x80 | (0x3F & code));
         } else if (0x0000FFFF >= code) {
-	*t++ = 0xE0 | (code >> 12);
-	*t++ = 0x80 | ((code >> 6) & 0x3F);
-	*t = 0x80 | (0x3F & code);
+            buf.append(0xE0 | (code >> 12));
+            buf.append(0x80 | ((code >> 6) & 0x3F));
+            buf.append(0x80 | (0x3F & code));
         } else if (0x001FFFFF >= code) {
-	*t++ = 0xF0 | (code >> 18);
-	*t++ = 0x80 | ((code >> 12) & 0x3F);
-	*t++ = 0x80 | ((code >> 6) & 0x3F);
-	*t = 0x80 | (0x3F & code);
+            buf.append(0xF0 | (code >> 18));
+            buf.append(0x80 | ((code >> 12) & 0x3F));
+            buf.append(0x80 | ((code >> 6) & 0x3F));
+            buf.append(0x80 | (0x3F & code));
         } else if (0x03FFFFFF >= code) {
-	*t++ = 0xF8 | (code >> 24);
-	*t++ = 0x80 | ((code >> 18) & 0x3F);
-	*t++ = 0x80 | ((code >> 12) & 0x3F);
-	*t++ = 0x80 | ((code >> 6) & 0x3F);
-	*t = 0x80 | (0x3F & code);
+            buf.append(0xF8 | (code >> 24));
+            buf.append(0x80 | ((code >> 18) & 0x3F));
+            buf.append(0x80 | ((code >> 12) & 0x3F));
+            buf.append(0x80 | ((code >> 6) & 0x3F));
+            buf.append(0x80 | (0x3F & code));
         } else if (0x7FFFFFFF >= code) {
-	*t++ = 0xFC | (code >> 30);
-	*t++ = 0x80 | ((code >> 24) & 0x3F);
-	*t++ = 0x80 | ((code >> 18) & 0x3F);
-	*t++ = 0x80 | ((code >> 12) & 0x3F);
-	*t++ = 0x80 | ((code >> 6) & 0x3F);
-	*t = 0x80 | (0x3F & code);
+            buf.append(0xFC | (code >> 30));
+            buf.append(0x80 | ((code >> 24) & 0x3F));
+            buf.append(0x80 | ((code >> 18) & 0x3F));
+            buf.append(0x80 | ((code >> 12) & 0x3F));
+            buf.append(0x80 | ((code >> 6) & 0x3F));
+            buf.append(0x80 | (0x3F & code));
         } else {
-            if (pi.has_error) {
-                call_error("invalid Unicode", pi, __FILE__, __LINE__);
-            }
-            raise_error("invalid Unicode", pi.str, pi.s);
+            error("invalid Unicode");
         }
-        return t;
     }
 
-// Assume the IRubyObject starts immediately and goes until the quote character is
- // reached again. Do not read the character after the terminating quote.
- //
-    static String read_quoted_value(ParseInfo pi) {
-    char	*value = 0;
-    char	*h = pi.s; // head
-    char	*t = h;	    // tail
-        uint32_t	code;
+    ByteList read_quoted_value() {
+        ByteList value = new ByteList();
+        value.setEncoding(UTF8Encoding.INSTANCE);
 
-        h++;	// skip quote character
-        t++;
-        value = h;
-        for (; '"' != *h; h++, t++) {
-            if ('\0' == *h) {
-                pi.s = h;
-                raise_error("quoted string not terminated", pi.str, pi.s);
-            } else if ('\\' == *h) {
-                h++;
-                switch (*h) {
-                    case 'n':	*t = '\n';	break;
-                    case 'r':	*t = '\r';	break;
-                    case 't':	*t = '\t';	break;
-                    case 'f':	*t = '\f';	break;
-                    case 'b':	*t = '\b';	break;
-                    case '"':	*t = '"';	break;
-                    case '/':	*t = '/';	break;
-                    case '\\':	*t = '\\';	break;
-                    case 'u':
-                        h++;
-                        code = read_hex(pi, h);
-                        h += 3;
+        source.advance();
+        // int start = source.currentOffset;
+        // boolean foundEscape = false;
+        for (; '"' != source.current; source.advance()) {
+            if ('\0' == source.current) {
+                error("quoted string not terminated");
+            } else if ('\\' == source.current) {
+                source.advance();
+                switch (source.current) {
+                    case 'n': value.append('\n');	break;
+                    case 'r': value.append('\r');	break;
+                    case 't': value.append('\t');	break;
+                    case 'f': value.append('\f');	break;
+                    case 'b': value.append('\b');	break;
+                    case '"': value.append('"');	break;
+                    case '/': value.append('/');	break;
+                    case '\\': value.append('\\');	break;
+                    case 'u': {
+                        int code;
+
+                        source.advance();
+                        code = read_hex();
                         if (0x0000D800 <= code && code <= 0x0000DFFF) {
-                            uint32_t	c1 = (code - 0x0000D800) & 0x000003FF;
-                            uint32_t	c2;
+                            int	c1 = (code - 0x0000D800) & 0x000003FF;
+                            int c2;
 
-                            h++;
-                            if ('\\' != *h || 'u' != *(h + 1)) {
-                                pi.s = h;
-                                if (pi.has_error) {
-                                    call_error("invalid escaped character", pi, __FILE__, __LINE__);
-                                }
-                                raise_error("invalid escaped character", pi.str, pi.s);
+                            source.advance();
+                            if ('\\' != source.current || 'u' != source.peek(1)) {
+                                error("invalid escaped character");
                             }
-                            h += 2;
-                            c2 = read_hex(pi, h);
-                            h += 3;
+                            c2 = read_hex();
                             c2 = (c2 - 0x0000DC00) & 0x000003FF;
                             code = ((c1 << 10) | c2) + 0x00010000;
                         }
-                        t = unicode_to_chars(pi, t, code);
+                        unicode_to_chars(value, code);
                         break;
+                    }
                     default:
-                        pi.s = h;
-                        if (pi.has_error) {
-                            call_error("invalid escaped character", pi, __FILE__, __LINE__);
-                        }
-                        raise_error("invalid escaped character", pi.str, pi.s);
+                        error("invalid escaped character");
                         break;
                 }
-            } else if (t != h) {
-	    *t = *h;
+            } else {//if (t != source.currentOffset) {  // FIXME: see note above about doing this more efficiently
+                value.append(source.current);
             }
         }
-    *t = '\0'; // terminate value
-        pi.s = h + 1;
+        source.advance();
 
         return value;
     }
 
-    void
-    saj_parse(IRubyObject handler, char *json) {
-        volatile IRubyObject	obj = context.nil;
-        struct _ParseInfo	pi;
+    void parse(IRubyObject handler) {
+        source.advance(0);
+        // skip UTF-8 BOM if present
+        if (0xEF == source.peek(0) && 0xBB == source.peek(1) && 0xBF == source.peek(2)) {
+            source.advance(3);
+        }
 
-        if (0 == json) {
-            if (pi.has_error) {
-                call_error("Invalid arg, xml string can not be null", &pi, __FILE__, __LINE__);
-            }
-            raise_error("Invalid arg, xml string can not be null", json, 0);
-        }
-    // skip UTF-8 BOM if present
-        if (0xEF == (uint8_t)*json && 0xBB == (uint8_t)json[1] && 0xBF == (uint8_t)json[2]) {
-            json += 3;
-        }
-    // initialize parse info
-        pi.str = json;
-        pi.s = json;
-        {
-            struct rlimit	lim;
+        // initialize parse info
+        this.handler = handler;
+        has_hash_start = handler.respondsTo("hash_start");
+        has_hash_end = handler.respondsTo("hash_end");
+        has_array_start = handler.respondsTo("array_start");
+        has_array_end = handler.respondsTo("array_end");
+        has_add_value = handler.respondsTo("add_value");
+        has_error = handler.respondsTo("error");
+        read_next(null);
+        non_white();
 
-            if (0 == getrlimit(RLIMIT_STACK, &lim)) {
-            pi.stack_min = (void*)((char*)&obj - (lim.rlim_cur / 4 * 3)); // let 3/4ths of the stack be used only
-        } else {
-            pi.stack_min = 0; // indicates not to check stack limit
-        }
-        }
-        pi.handler = handler;
-        pi.has_hash_start = rb_respond_to(handler, oj_hash_start_id);
-        pi.has_hash_end = rb_respond_to(handler, oj_hash_end_id);
-        pi.has_array_start = rb_respond_to(handler, oj_array_start_id);
-        pi.has_array_end = rb_respond_to(handler, oj_array_end_id);
-        pi.has_add_IRubyObject = rb_respond_to(handler, oj_add_IRubyObject_id);
-        pi.has_error = rb_respond_to(handler, oj_error_id);
-        read_next(&pi, 0);
-        next_non_white(&pi);
-        if ('\0' != *pi.s) {
-            if (pi.has_error) {
-                call_error("invalid format, extra characters", &pi, __FILE__, __LINE__);
-            } else {
-                raise_error("invalid format, extra characters", pi.str, pi.s);
-            }
-        }
+        if (EOF != source.current) error("invalid format, extra characters");
     }
 
-    // call-seq: saj_parse(handler, io)
-    //
-    // Parses an IO stream or file containing an JSON document. Raises an exception
-    // if the JSON is malformed.
-    // @param [Oj::Saj] handler Saj (responds to Oj::Saj methods) like handler
-    // @param [IO|String] io IO Object to read from
-    //
-    IRubyObject oj_saj_parse(int argc, IRubyObject[] argv, IRubyObject self) {
-    char	*json = 0;
-        size_t	len = 0;
-        IRubyObject	input = argv[1];
-
-        if (argc < 2) {
-            rb_raise(rb_eArgError, "Wrong number of arguments to saj_parse.\n");
-        }
-        if (rb_type(input) == T_STRING) {
-            // the json string gets modified so make a copy of it
-            len = RSTRING_LEN(input) + 1;
-            json = ALLOC_N(char, len);
-            strcpy(json, StringIRubyObjectPtr(input));
+    private void error(String message) {
+        if (has_error) {
+            call_error(message);
         } else {
-            IRubyObject		clas = rb_obj_class(input);
-            volatile IRubyObject	s;
-
-            if (oj_stringio_class == clas) {
-                s = rb_funcall2(input, oj_string_id, 0, 0);
-                len = RSTRING_LEN(s) + 1;
-                json = ALLOC_N(char, len);
-                strcpy(json, rb_string_IRubyObject_cstr((IRubyObject*)&s));
-            } else if (rb_cFile == clas && 0 == FIX2INT(rb_funcall(input, oj_pos_id, 0))) {
-                int		fd = FIX2INT(rb_funcall(input, oj_fileno_id, 0));
-                ssize_t	cnt;
-
-                len = lseek(fd, 0, SEEK_END);
-                lseek(fd, 0, SEEK_SET);
-                json = ALLOC_N(char, len + 1);
-                if (0 >= (cnt = read(fd, json, len)) || cnt != (ssize_t)len) {
-                    rb_raise(rb_eIOError, "failed to read from IO Object.");
-                }
-                json[len] = '\0';
-            } else if (rb_respond_to(input, oj_read_id)) {
-                s = rb_funcall2(input, oj_read_id, 0, 0);
-                len = RSTRING_LEN(s) + 1;
-                json = ALLOC_N(char, len);
-                strcpy(json, rb_string_IRubyObject_cstr((IRubyObject*)&s));
-            } else {
-                rb_raise(rb_eArgError, "saj_parse() expected a String or IO Object.");
-            }
+            // FIXME: Use real error here
+            throw context.runtime.newArgumentError("BOOO: " + message);
+            //raise_error(message, pi.str, pi.s);
         }
-        saj_parse(*argv, json);
-
-        return context.nil;
     }
-    */
 }

@@ -24,7 +24,7 @@ import static oj.LeafValue.STR_VAL;
  */
 // FIXME: Profile how expensive using an ArrayList is versus taking this down to a primitive array.
 public class Leaf {
-    private static final long NUM_MAX = RubyFixnum.MAX;
+    public static final long NUM_MAX = RubyFixnum.MAX;
 
     public LeafValue value_type;
     public LeafType rtype;

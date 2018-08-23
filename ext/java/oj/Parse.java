@@ -56,7 +56,7 @@ public abstract class Parse {
     public IRubyObject value;
     protected OjLibrary oj = null;
     protected List<IRubyObject> circ_array;
-    private boolean debug = System.getProperty("oj.debug") != null;
+    private static boolean debug = System.getProperty("oj.debug") != null;
 
     // In C this is in hash.c
     protected Map<ByteList, RubyClass> classMap = new HashMap<>();
