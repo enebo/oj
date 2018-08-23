@@ -1,31 +1,6 @@
-/* parse.c
+/* sparse.c
  * Copyright (c) 2013, Peter Ohler
  * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *  - Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *
- *  - Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- *
- *  - Neither the name of Peter Ohler nor the names of its contributors may be
- *    used to endorse or promote products derived from this software without
- *    specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <stdlib.h>
@@ -35,6 +10,7 @@
 #include <math.h>
 
 #include "oj.h"
+#include "encode.h"
 #include "parse.h"
 #include "buf.h"
 #include "hash.h" // for oj_strndup()
@@ -252,6 +228,17 @@ read_escaped_str(ParseInfo pi) {
 	    case '"':	buf_append(&buf, '"');	break;
 	    case '/':	buf_append(&buf, '/');	break;
 	    case '\\':	buf_append(&buf, '\\');	break;
+	    case '\'':
+		// The json gem claims this is not an error despite the
+		// ECMA-404 indicating it is not valid.
+		if (CompatMode == pi->options.mode) {
+		    buf_append(&buf, '\'');
+		} else {
+		    oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "invalid escaped character");
+		    buf_cleanup(&buf);
+		    return;
+		}
+		break;
 	    case 'u':
 		if (0 == (code = read_hex(pi)) && err_has(&pi->err)) {
 		    buf_cleanup(&buf);
@@ -265,6 +252,12 @@ read_escaped_str(ParseInfo pi) {
 		    c = reader_get(&pi->rd);
 		    ch2 = reader_get(&pi->rd);
 		    if ('\\' != c || 'u' != ch2) {
+			if (Yes == pi->options.allow_invalid) {
+			    unicode_to_chars(pi, &buf, code);
+			    reader_backup(&pi->rd);
+			    reader_backup(&pi->rd);
+			    break;
+			}
 			oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "invalid escaped character");
 			buf_cleanup(&buf);
 			return;
@@ -303,8 +296,10 @@ read_escaped_str(ParseInfo pi) {
 	case NEXT_HASH_NEW:
 	case NEXT_HASH_KEY:
 	    if (Qundef == (parent->key_val = pi->hash_key(pi, buf.head, buf_len(&buf)))) {
-		parent->key = strdup(buf.head);
 		parent->klen = buf_len(&buf);
+		parent->key = malloc(parent->klen + 1);
+		memcpy((char*)parent->key, buf.head, parent->klen);
+		*(char*)(parent->key + parent->klen) = '\0';
 	    } else {
 		parent->key = "";
 		parent->klen = 0;
@@ -399,16 +394,15 @@ read_str(ParseInfo pi) {
 static void
 read_num(ParseInfo pi) {
     struct _NumInfo	ni;
-    int			zero_cnt = 0;
     char		c;
 
     reader_protect(&pi->rd);
     ni.i = 0;
     ni.num = 0;
     ni.div = 1;
+    ni.di = 0;
     ni.len = 0;
     ni.exp = 0;
-    ni.dec_cnt = 0;
     ni.big = 0;
     ni.infinity = 0;
     ni.nan = 0;
@@ -423,44 +417,58 @@ read_num(ParseInfo pi) {
 	c = reader_get(&pi->rd);
     }
     if ('I' == c) {
-	if (0 != reader_expect(&pi->rd, "nfinity")) {
+	if (No == pi->options.allow_nan) {
+	    oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "not a number or other value");
+	    return;
+	} else if (0 != reader_expect(&pi->rd, "nfinity")) {
 	    oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "not a number or other value");
 	    return;
 	}
 	ni.infinity = 1;
     } else {
+	int	dec_cnt = 0;
+	bool	zero1 = false;
+
 	for (; '0' <= c && c <= '9'; c = reader_get(&pi->rd)) {
-	    ni.dec_cnt++;
+	    if (0 == ni.i && '0' == c) {
+		zero1 = true;
+	    }
+	    if (0 < ni.i) {
+		dec_cnt++;
+	    }
 	    if (ni.big) {
 		ni.big++;
 	    } else {
 		int	d = (c - '0');
 
-		if (0 == d) {
-		    zero_cnt++;
-		} else {
-		    zero_cnt = 0;
+		if (0 < d) {
+		    if (zero1 && CompatMode == pi->options.mode) {
+			oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "not a number");
+			return;
+		    }
+		    zero1 = false;
 		}
 		ni.i = ni.i * 10 + d;
-		if (LONG_MAX <= ni.i || DEC_MAX < ni.dec_cnt - zero_cnt) {
+		if (INT64_MAX <= ni.i || DEC_MAX < dec_cnt) {
 		    ni.big = 1;
 		}
 	    }
 	}
 	if ('.' == c) {
 	    c = reader_get(&pi->rd);
+	    if (c < '0' || '9' < c) {
+		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "not a number");
+	    }
 	    for (; '0' <= c && c <= '9'; c = reader_get(&pi->rd)) {
 		int	d = (c - '0');
 
-		if (0 == d) {
-		    zero_cnt++;
-		} else {
-		    zero_cnt = 0;
+		if (0 < ni.num || 0 < ni.i) {
+		    dec_cnt++;
 		}
-		ni.dec_cnt++;
 		ni.num = ni.num * 10 + d;
 		ni.div *= 10;
-		if (LONG_MAX <= ni.div || DEC_MAX < ni.dec_cnt - zero_cnt) {
+		ni.di++;
+		if (INT64_MAX <= ni.div || DEC_MAX < dec_cnt) {
 		    ni.big = 1;
 		}
 	    }
@@ -486,17 +494,27 @@ read_num(ParseInfo pi) {
 		ni.exp = -ni.exp;
 	    }
 	}
-	ni.dec_cnt -= zero_cnt;
 	ni.len = pi->rd.tail - pi->rd.str;
 	if (0 != c) {
 	    reader_backup(&pi->rd);
 	}
     }
+    ni.str = pi->rd.str;
+    ni.len = pi->rd.tail - pi->rd.str;
+    // Check for special reserved values for Infinity and NaN.
+    if (ni.big) {
+	if (0 == strcasecmp(INF_VAL, ni.str)) {
+	    ni.infinity = 1;
+	} else if (0 == strcasecmp(NINF_VAL, ni.str)) {
+	    ni.infinity = 1;
+	    ni.neg = 1;
+	} else if (0 == strcasecmp(NAN_VAL, ni.str)) {
+	    ni.nan = 1;
+	}
+    }
     if (BigDec == pi->options.bigdec_load) {
 	ni.big = 1;
     }
-    ni.str = pi->rd.str;
-    ni.len = pi->rd.tail - pi->rd.str;
     add_num_value(pi, &ni);
     reader_release(&pi->rd);
 }
@@ -510,9 +528,9 @@ read_nan(ParseInfo pi) {
     ni.i = 0;
     ni.num = 0;
     ni.div = 1;
+    ni.di = 0;
     ni.len = 0;
     ni.exp = 0;
-    ni.dec_cnt = 0;
     ni.big = 0;
     ni.infinity = 0;
     ni.nan = 1;
@@ -604,9 +622,17 @@ void
 oj_sparse2(ParseInfo pi) {
     int		first = 1;
     char	c;
+    long	start = 0;
 
     err_init(&pi->err);
     while (1) {
+	if (0 < pi->max_depth && pi->max_depth <= pi->stack.tail - pi->stack.head - 1) {
+	    VALUE	err_clas = oj_get_json_err_class("NestingError");
+	    
+	    oj_set_error_at(pi, err_clas, __FILE__, __LINE__, "Too deeply nested.");
+	    pi->err_class = err_clas;
+	    return;
+	}
 	c = reader_next_non_white(&pi->rd);
 	if (!first && '\0' != c) {
 	    oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "unexpected characters after the JSON document");
@@ -645,12 +671,25 @@ oj_sparse2(ParseInfo pi) {
 	case '7':
 	case '8':
 	case '9':
-	case 'I':
 	    reader_backup(&pi->rd);
 	    read_num(pi);
 	    break;
+	case 'I':
+	    if (Yes == pi->options.allow_nan) {
+		reader_backup(&pi->rd);
+		read_num(pi);
+	    } else {
+		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "unexpected character");
+		return;
+	    }
+	    break;
 	case 'N':
-	    read_nan(pi);
+	    if (Yes == pi->options.allow_nan) {
+		read_nan(pi);
+	    } else {
+		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "unexpected character");
+		return;
+	    }
 	    break;
 	case 't':
 	    read_true(pi);
@@ -679,9 +718,9 @@ oj_sparse2(ParseInfo pi) {
 		ni.i = 0;
 		ni.num = 0;
 		ni.div = 1;
+		ni.di = 0;
 		ni.len = 0;
 		ni.exp = 0;
-		ni.dec_cnt = 0;
 		ni.big = 0;
 		ni.infinity = 0;
 		ni.nan = 1;
@@ -699,7 +738,7 @@ oj_sparse2(ParseInfo pi) {
 	case '\0':
 	    return;
 	default:
-	    oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "unexpected character");
+	    oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "unexpected character '%c' [0x%02x]", c, c);
 	    return;
 	}
 	if (err_has(&pi->err)) {
@@ -707,23 +746,28 @@ oj_sparse2(ParseInfo pi) {
 	}
 	if (stack_empty(&pi->stack)) {
 	    if (Qundef != pi->proc) {
+		VALUE	args[3];
+		long	len = pi->rd.pos - start;
+
+		*args = stack_head_val(&pi->stack);
+		args[1] = LONG2NUM(start);
+		args[2] = LONG2NUM(len);
+
 		if (Qnil == pi->proc) {
-		    rb_yield(stack_head_val(&pi->stack));
+		    rb_yield_values2(3, args);
 		} else {
 #if HAS_PROC_WITH_BLOCK
-		    VALUE	args[1];
-
-		    *args = stack_head_val(&pi->stack);
-		    rb_proc_call_with_block(pi->proc, 1, args, Qnil);
+		    rb_proc_call_with_block(pi->proc, 3, args, Qnil);
 #else
 		    oj_set_error_at(pi, rb_eNotImpError, __FILE__, __LINE__,
 				    "Calling a Proc with a block not supported in this version. Use func() {|x| } syntax instead.");
 		    return;
 #endif
 		}
-	    } else {
+	    } else if (!pi->has_callbacks) {
 		first = 0;
 	    }
+	    start = pi->rd.pos;
 	}
     }
 }
@@ -746,18 +790,28 @@ oj_pi_sparse(int argc, VALUE *argv, ParseInfo pi, int fd) {
 	rb_raise(rb_eArgError, "Wrong number of arguments to parse.");
     }
     input = argv[0];
-    if (2 == argc) {
-	oj_parse_options(argv[1], &pi->options);
+    if (2 <= argc) {
+	if (T_HASH == rb_type(argv[1])) {
+	    oj_parse_options(argv[1], &pi->options);
+	} else if (3 <= argc && T_HASH == rb_type(argv[2])) {
+	    oj_parse_options(argv[2], &pi->options);
+	}
     }
-    if (Qnil == input && Yes == pi->options.nilnil) {
-	return Qnil;
+    if (Qnil == input) {
+	if (Yes == pi->options.nilnil) {
+	    return Qnil;
+	} else {
+	    rb_raise(rb_eTypeError, "Nil is not a valid JSON source.");
+	}
+    } else if (CompatMode == pi->options.mode && T_STRING == rb_type(input) && No == pi->options.nilnil && 0 == RSTRING_LEN(input)) {
+	rb_raise(oj_json_parser_error_class, "An empty string is not a valid JSON string.");
     }
     if (rb_block_given_p()) {
 	pi->proc = Qnil;
     } else {
 	pi->proc = Qundef;
     }
-    oj_reader_init(&pi->rd, input, fd);
+    oj_reader_init(&pi->rd, input, fd, CompatMode == pi->options.mode);
     pi->json = 0; // indicates reader is in use
 
     if (Yes == pi->options.circular) {
@@ -770,10 +824,13 @@ oj_pi_sparse(int argc, VALUE *argv, ParseInfo pi, int fd) {
     }
     // GC can run at any time. When it runs any Object created by C will be
     // freed. We protect against this by wrapping the value stack in a ruby
-    // data object and poviding a mark function for ruby objects on the
+    // data object and providing a mark function for ruby objects on the
     // value stack (while it is in scope).
     wrapped_stack = oj_stack_init(&pi->stack);
     rb_protect(protect_parse, (VALUE)pi, &line);
+    if (Qundef == pi->stack.head->val && !empty_ok(&pi->options)) {
+	oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "Empty input");
+    }
     result = stack_head_val(&pi->stack);
     DATA_PTR(wrapped_stack) = 0;
     if (No == pi->options.allow_gc) {
@@ -814,6 +871,22 @@ oj_pi_sparse(int argc, VALUE *argv, ParseInfo pi, int fd) {
 	rb_jump_tag(line);
     }
     if (err_has(&pi->err)) {
+	if (Qnil != pi->err_class) {
+	    pi->err.clas = pi->err_class;
+	}
+	if (CompatMode == pi->options.mode) {
+	    // The json gem requires the error message be UTF-8 encoded. In
+	    // additional the complete JSON source should be returned but that
+	    // is not possible without stored all the bytes read and reading
+	    // the remaining bytes on the stream. Both seem like a very bad
+	    // idea.
+	    VALUE	args[] = { oj_encode(rb_str_new2(pi->err.msg)) };
+
+	    rb_exc_raise(rb_class_new_instance(1, args, pi->err.clas));
+	} else {
+	    oj_err_raise(&pi->err);
+	}
+
 	oj_err_raise(&pi->err);
     }
     return result;

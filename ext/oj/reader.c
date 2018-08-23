@@ -1,31 +1,6 @@
 /* reader.c
  * Copyright (c) 2011, Peter Ohler
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- * 
- *  - Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 
- *  - Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- * 
- *  - Neither the name of Peter Ohler nor the names of its contributors may be
- *    used to endorse or promote products derived from this software without
- *    specific prior written permission.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <stdlib.h>
@@ -54,7 +29,7 @@ static int		read_from_io_partial(Reader reader);
 //static int		read_from_str(Reader reader);
 
 void
-oj_reader_init(Reader reader, VALUE io, int fd) {
+oj_reader_init(Reader reader, VALUE io, int fd, bool to_s) {
     VALUE	io_class = rb_obj_class(io);
     VALUE	stat;
     VALUE	ftype;
@@ -66,6 +41,7 @@ oj_reader_init(Reader reader, VALUE io, int fd) {
     reader->read_end = reader->head;
     reader->pro = 0;
     reader->str = 0;
+    reader->pos = 0;
     reader->line = 1;
     reader->col = 0;
     reader->free_head = 0;
@@ -100,7 +76,15 @@ oj_reader_init(Reader reader, VALUE io, int fd) {
     } else if (rb_respond_to(io, oj_read_id)) {
 	reader->read_func = read_from_io;
 	reader->io = io;
-    } else {
+    } else if (to_s) {
+	volatile VALUE	rstr = rb_funcall(io, oj_to_s_id, 0);
+	
+	reader->read_func = 0;
+	reader->in_str = StringValuePtr(rstr);
+	reader->head = (char*)reader->in_str;
+	reader->tail = reader->head;
+	reader->read_end = reader->head + RSTRING_LEN(rstr);
+    } else {	
 	rb_raise(rb_eArgError, "parser io argument must be a String or respond to readpartial() or read().\n");
     }
 }
@@ -109,7 +93,7 @@ int
 oj_reader_read(Reader reader) {
     int		err;
     size_t	shift = 0;
-    
+
     if (0 == reader->read_func) {
 	return -1;
     }
@@ -165,7 +149,7 @@ rescue_cb(VALUE rbuf, VALUE err) {
     if (rb_eTypeError != clas && rb_eEOFError != clas) {
 	Reader	reader = (Reader)rbuf;
 
-	rb_raise(err, "at line %d, column %d\n", reader->line, reader->col);
+	rb_raise(clas, "at line %d, column %d\n", reader->line, reader->col);
     }
     return Qfalse;
 }
@@ -185,6 +169,7 @@ partial_io_cb(VALUE rbuf) {
     }
     str = StringValuePtr(rstr);
     cnt = RSTRING_LEN(rstr);
+    //printf("*** partial read %lu bytes, str: '%s'\n", cnt, str);
     strcpy(reader->tail, str);
     reader->read_end = reader->tail + cnt;
 

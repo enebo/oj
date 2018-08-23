@@ -3,12 +3,55 @@
 ^c^d hide subtree
 ^c^s show subtree
 
+Strict Dump Performance
+JSON::Ext.dump 20000 times in 0.173 seconds or 115493.546 dump/sec.
+Oj:strict.dump 20000 times in 0.050 seconds or 401475.753 dump/sec.
+
+Summary:
+   System  time (secs)  rate (ops/sec)
+   ---------  -----------  --------------
+   Oj:strict       0.050      401475.753
+   JSON::Ext       0.173      115493.546
+
+Comparison Matrix
+(performance factor, 2.0 means row is twice as fast as column)
+           Oj:strict  JSON::Ext
+           ---------  ---------  ---------
+           Oj:strict       1.00       3.48
+           JSON::Ext       0.29       1.00
+
+- big decimal
+ - just in custom mode, maybe in strict?
+
+ - encode_big_decimal_as_string
+  - add as fix for rails change
+
+
+- rails
+   
+ - Process::Status
+ - ActiveSupport::TimeWithZone
+ - ActiveModel::Errors
+ - ActiveSupport::Multibyte::Chars
+ - ActiveRecord::Relation
+
+- debug
+ - instrument for parsing floats/bigdecimal
+  - branch
+
+ - option to allow invalid unicode through
+ - unit tests for 32 bit - test_float_parse
+  - look at RUBY_PLATFORM maybe?
+ - look at env var for OJ_DEBUG when doing ruby extconf.rb
+ - add printf for keys spots in parse and dump
+ 
+- invalid character option
+ - don't check options
+  - replace with best attempt such as \ud83d => \xED\xA0\xBD
+  - that would be the normal replacement
+ - allow_invalid_unicode
+
 - streaming parser for scp and saj
-
-- use these instead of num2long
- LONG_LONG rb_num2ll _((VALUE));
- unsigned LONG_LONG rb_num2ull _((VALUE));
-
 
 ---------------------------
 Tried a separate thread for the parser and the results were poor. The parsing is

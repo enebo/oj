@@ -92,7 +92,7 @@ static char*	read_quoted_value(ParseInfo pi);
 static void	skip_comment(ParseInfo pi);
 
 static VALUE	protect_open_proc(VALUE x);
-static VALUE	parse_json(VALUE clas, char *json, int given, int allocated);
+static VALUE	parse_json(VALUE clas, char *json, bool given, bool allocated);
 static void	each_leaf(Doc doc, VALUE self);
 static int	move_step(Doc doc, const char *path, int loc);
 static Leaf	get_doc_leaf(Doc doc, const char *path);
@@ -115,7 +115,7 @@ static VALUE	doc_each_value(int argc, VALUE *argv, VALUE self);
 static VALUE	doc_dump(int argc, VALUE *argv, VALUE self);
 static VALUE	doc_size(VALUE self);
 
-VALUE	oj_doc_class = 0;
+VALUE	oj_doc_class = Qundef;
 
 // This is only for CentOS 5.4 with Ruby 1.9.3-p0.
 #ifdef NEEDS_STPCPY
@@ -358,7 +358,7 @@ leaf_float_value(Leaf leaf) {
 
 static VALUE
 leaf_array_value(Doc doc, Leaf leaf) {
-    VALUE	a = rb_ary_new();
+    volatile VALUE	a = rb_ary_new();
 
     if (0 != leaf->elements) {
 	Leaf	first = leaf->elements->next;
@@ -374,12 +374,12 @@ leaf_array_value(Doc doc, Leaf leaf) {
 
 static VALUE
 leaf_hash_value(Doc doc, Leaf leaf) {
-    VALUE	h = rb_hash_new();
+    volatile VALUE	h = rb_hash_new();
 
     if (0 != leaf->elements) {
-	Leaf	first = leaf->elements->next;
-	Leaf	e = first;
-	VALUE	key;
+	Leaf		first = leaf->elements->next;
+	Leaf		e = first;
+	volatile VALUE	key;
 
 	do {
 	    key = rb_str_new2(e->key);
@@ -778,17 +778,51 @@ free_doc_cb(void *x) {
     }
 }
 
+static void
+mark_leaf(Leaf leaf) {
+    switch (leaf->value_type) {
+    case COL_VAL:
+	if (NULL != leaf->elements) {
+	    Leaf	first = leaf->elements->next;
+	    Leaf	e = first;
+
+	    do {
+		mark_leaf(e);
+		e = e->next;
+	    } while (e != first);
+	}
+	break;
+    case RUBY_VAL:
+	rb_gc_mark(leaf->value);
+	break;
+
+    default:
+	break;
+    }
+}
+
+static void
+mark_doc(void *ptr) {
+    if (NULL != ptr) {
+	Doc	doc = (Doc)ptr;
+	
+	rb_gc_mark(doc->self);
+	mark_leaf(doc->data);
+    }
+}
+
 static VALUE
-parse_json(VALUE clas, char *json, int given, int allocated) {
+parse_json(VALUE clas, char *json, bool given, bool allocated) {
     struct _ParseInfo	pi;
-    VALUE		result = Qnil;
+    volatile VALUE	result = Qnil;
     Doc			doc;
     int			ex = 0;
+    volatile VALUE	self;
 
     if (given) {
 	doc = ALLOCA_N(struct _Doc, 1);
     } else {
-	doc = ALLOC_N(struct _Doc, 1);
+	doc = ALLOC(struct _Doc);
     }
     /* skip UTF-8 BOM if present */
     if (0xEF == (uint8_t)*json && 0xBB == (uint8_t)json[1] && 0xBF == (uint8_t)json[2]) {
@@ -813,14 +847,17 @@ parse_json(VALUE clas, char *json, int given, int allocated) {
     }
 #endif
     // last arg is free func void* func(void*)
-    doc->self = rb_data_object_alloc(clas, doc, 0, free_doc_cb);
-    rb_gc_register_address(&doc->self);
+#if HAS_DATA_OBJECT_WRAP
+    self = rb_data_object_wrap(clas, doc, mark_doc, free_doc_cb);
+#else
+    self = rb_data_object_alloc(clas, doc, mark_doc, free_doc_cb);
+#endif
+    doc->self = self;
     doc->json = json;
     DATA_PTR(doc->self) = doc;
     result = rb_protect(protect_open_proc, (VALUE)&pi, &ex);
     if (given || 0 != ex) {
-	rb_gc_unregister_address(&doc->self);
-	DATA_PTR(doc->self) = 0;
+	DATA_PTR(doc->self) = NULL;
 	doc_free(pi.doc);
 	if (allocated && 0 != ex) { // will jump so caller will not free
 	    xfree(json);
@@ -861,6 +898,35 @@ get_doc_leaf(Doc doc, const char *path) {
 	return get_leaf(stack, lp, path);
     }
     return leaf;
+}
+
+static const char*
+next_slash(const char *s) {
+    for (; '\0' != *s; s++) {
+	if ('\\' == *s) {
+	    s++;
+	    if ('\0' == *s) {
+		break;
+	    }
+	} else if ('/' == *s) {
+	    return s;
+	}
+    }
+    return NULL;
+}
+
+static bool
+key_match(const char *pat, const char *key, int plen) {
+    for (; 0 < plen; plen--, pat++, key++) {
+	if ('\\' == *pat) {
+	    plen--;
+	    pat++;
+	}
+	if (*pat != *key) {
+	    return false;
+	}
+    }
+    return '\0' == *key;
 }
 
 static Leaf
@@ -908,7 +974,7 @@ get_leaf(Leaf *stack, Leaf *lp, const char *path) {
 		} while (e != first);
 	    } else if (T_HASH == type) {
 		const char	*key = path;
-		const char	*slash = strchr(path, '/');
+		const char	*slash = next_slash(path);
 		int		klen;
 
 		if (0 == slash) {
@@ -919,7 +985,7 @@ get_leaf(Leaf *stack, Leaf *lp, const char *path) {
 		    path += klen + 1;
 		}
 		do {
-		    if (0 == strncmp(key, e->key, klen) && '\0' == e->key[klen]) {
+		    if (key_match(key, e->key, klen)) {
 			lp++;
 			*lp = e;
 			leaf = get_leaf(stack, lp, path);
@@ -1018,7 +1084,7 @@ move_step(Doc doc, const char *path, int loc) {
 		} while (e != first);
 	    } else if (T_HASH == leaf->rtype) {
 		const char	*key = path;
-		const char	*slash = strchr(path, '/');
+		const char	*slash = next_slash(path);
 		int		klen;
 
 		if (0 == slash) {
@@ -1029,7 +1095,7 @@ move_step(Doc doc, const char *path, int loc) {
 		    path += klen + 1;
 		}
 		do {
-		    if (0 == strncmp(key, e->key, klen) && '\0' == e->key[klen]) {
+		    if (key_match(key, e->key, klen)) {
 			doc->where++;
 			*doc->where = e;
 			loc = move_step(doc, path, loc + 1);
@@ -1066,14 +1132,14 @@ each_value(Doc doc, Leaf leaf) {
 
 // doc functions
 
-/* call-seq: open(json) { |doc| ... } => Object
+/* @overload open(json) { |doc| ... } => Object
  *
  * Parses a JSON document String and then yields to the provided block if one
  * is given with an instance of the Oj::Doc as the single yield parameter. If
  * a block is not given then an Oj::Doc instance is returned and must be
  * closed with a call to the #close() method when no longer needed.
  *
- * @param [String] json JSON document string
+ *   @param [String] json JSON document string
  * @yieldparam [Oj::Doc] doc parsed JSON document
  * @yieldreturn [Object] returns the result of the yield as the result of the method call
  * @example
@@ -1085,11 +1151,11 @@ each_value(Doc doc, Leaf leaf) {
  */
 static VALUE
 doc_open(VALUE clas, VALUE str) {
-    char	*json;
-    size_t	len;
-    VALUE	obj;
-    int		given = rb_block_given_p();
-    int		allocate;
+    char		*json;
+    size_t		len;
+    volatile VALUE	obj;
+    int			given = rb_block_given_p();
+    int			allocate;
 
     Check_Type(str, T_STRING);
     len = RSTRING_LEN(str) + 1;
@@ -1107,14 +1173,14 @@ doc_open(VALUE clas, VALUE str) {
     return obj;
 }
 
-/* call-seq: open_file(filename) { |doc| ... } => Object
+/* @overload open_file(filename) { |doc| ... } => Object
  *
  * Parses a JSON document from a file and then yields to the provided block if
  * one is given with an instance of the Oj::Doc as the single yield
  * parameter. If a block is not given then an Oj::Doc instance is returned and
  * must be closed with a call to the #close() method when no longer needed.
  *
- * @param [String] filename name of file that contains a JSON document
+ *   @param [String] filename name of file that contains a JSON document
  * @yieldparam [Oj::Doc] doc parsed JSON document
  * @yieldreturn [Object] returns the result of the yield as the result of the method call
  * @example
@@ -1127,13 +1193,13 @@ doc_open(VALUE clas, VALUE str) {
  */
 static VALUE
 doc_open_file(VALUE clas, VALUE filename) {
-    char	*path;
-    char	*json;
-    FILE	*f;
-    size_t	len;
-    VALUE	obj;
-    int		given = rb_block_given_p();
-    int		allocate;
+    char		*path;
+    char		*json;
+    FILE		*f;
+    size_t		len;
+    volatile VALUE	obj;
+    int			given = rb_block_given_p();
+    int			allocate;
 
     Check_Type(filename, T_STRING);
     path = StringValuePtr(filename);
@@ -1163,11 +1229,34 @@ doc_open_file(VALUE clas, VALUE filename) {
     return obj;
 }
 
+static int
+esc_strlen(const char *s) {
+    int	cnt = 0;
+
+    for (; '\0' != *s; s++, cnt++) {
+	if ('/' == *s) {
+	    cnt++;
+	}
+    }
+    return cnt;
+}
+
+static char*
+append_key(char *p, const char *key) {
+    for (; '\0' != *key; p++, key++) {
+	if ('/' == *key) {
+	    *p++ = '\\';
+	}
+	*p = *key;
+    }
+    return p;
+}
+
 /* Document-method: parse
  * @see Oj::Doc.open
  */
 
-/* call-seq: where?() => String
+/* @overload where?() => String
  *
  * Returns a String that describes the absolute path to the current location
  * in the JSON document.
@@ -1188,7 +1277,7 @@ doc_where(VALUE self) {
 	for (lp = doc->where_path; lp <= doc->where; lp++) {
 	    leaf = *lp;
 	    if (T_HASH == leaf->parent_type) {
-		size += strlen((*lp)->key) + 1;
+		size += esc_strlen((*lp)->key) + 1;
 	    } else if (T_ARRAY == leaf->parent_type) {
 		size += ((*lp)->index < 100) ? 3 : 11;
 	    }
@@ -1198,18 +1287,19 @@ doc_where(VALUE self) {
 	for (lp = doc->where_path; lp <= doc->where; lp++) {
 	    leaf = *lp;
 	    if (T_HASH == leaf->parent_type) {
-		p = stpcpy(p, (*lp)->key);
+		p = append_key(p, (*lp)->key);
 	    } else if (T_ARRAY == leaf->parent_type) {
 		p = ulong_fill(p, (*lp)->index);
 	    }
 	    *p++ = '/';
 	}
 	*--p = '\0';
+
 	return rb_str_new(path, p - path);
     }
 }
 
-/* call-seq: local_key() => String, Fixnum, nil
+/* @overload local_key() => String, Fixnum, nil
  *
  * Returns the final key to the current location.
  * @example
@@ -1219,9 +1309,9 @@ doc_where(VALUE self) {
  */
 static VALUE
 doc_local_key(VALUE self) {
-    Doc		doc = self_doc(self);
-    Leaf	leaf = *doc->where;
-    VALUE	key = Qnil;
+    Doc			doc = self_doc(self);
+    Leaf		leaf = *doc->where;
+    volatile VALUE	key = Qnil;
 
     if (T_HASH == leaf->parent_type) {
 	key = rb_str_new2(leaf->key);
@@ -1232,7 +1322,7 @@ doc_local_key(VALUE self) {
     return key;
 }
 
-/* call-seq: home() => nil
+/* @overload home() => nil
  *
  * Moves the document marker or location to the hoot or home position. The
  * same operation can be performed with a Oj::Doc.move('/').
@@ -1249,13 +1339,13 @@ doc_home(VALUE self) {
     return oj_slash_string;
 }
 
-/* call-seq: type(path=nil) => Class
+/* @overload type(path=nil) => Class
  *
  * Returns the Class of the data value at the location identified by the path
  * or the current location if the path is nil or not provided. This method
  * does not create the Ruby Object at the location specified so the overhead
  * is low.
- * @param [String] path path to the location to get the type of if provided
+ *   @param [String] path path to the location to get the type of if provided
  * @example
  *   Oj::Doc.open('[1,2]') { |doc| doc.type() }	     #=> Array
  *   Oj::Doc.open('[1,2]') { |doc| doc.type('/1') }  #=> Fixnum
@@ -1277,7 +1367,11 @@ doc_type(int argc, VALUE *argv, VALUE self) {
 	case T_TRUE:	type = rb_cTrueClass;	break;
 	case T_FALSE:	type = rb_cFalseClass;	break;
 	case T_STRING:	type = rb_cString;	break;
+#ifdef RUBY_INTEGER_UNIFICATION
+	case T_FIXNUM:	type = rb_cInteger;	break;
+#else
 	case T_FIXNUM:	type = rb_cFixnum;	break;
+#endif
 	case T_FLOAT:	type = rb_cFloat;	break;
 	case T_ARRAY:	type = rb_cArray;	break;
 	case T_HASH:	type = rb_cHash;	break;
@@ -1287,24 +1381,24 @@ doc_type(int argc, VALUE *argv, VALUE self) {
     return type;
 }
 
-/* call-seq: fetch(path=nil) => nil, true, false, Fixnum, Float, String, Array, Hash
+/* @overload fetch(path=nil) => nil, true, false, Fixnum, Float, String, Array, Hash
  *
  * Returns the value at the location identified by the path or the current
  * location if the path is nil or not provided. This method will create and
  * return an Array or Hash if that is the type of Object at the location
  * specified. This is more expensive than navigating to the leaves of the JSON
  * document.
- * @param [String] path path to the location to get the type of if provided
+ *   @param [String] path path to the location to get the type of if provided
  * @example
  *   Oj::Doc.open('[1,2]') { |doc| doc.fetch() }      #=> [1, 2]
  *   Oj::Doc.open('[1,2]') { |doc| doc.fetch('/1') }  #=> 1
  */
 static VALUE
 doc_fetch(int argc, VALUE *argv, VALUE self) {
-    Doc		doc;
-    Leaf	leaf;
-    VALUE	val = Qnil;
-    const char	*path = 0;
+    Doc			doc;
+    Leaf		leaf;
+    volatile VALUE	val = Qnil;
+    const char		*path = 0;
 
     doc = self_doc(self);
     if (1 <= argc) {
@@ -1320,12 +1414,12 @@ doc_fetch(int argc, VALUE *argv, VALUE self) {
     return val;
 }
 
-/* call-seq: each_leaf(path=nil) => nil
+/* @overload each_leaf(path=nil) => nil
  *
  * Yields to the provided block for each leaf node with the identified
  * location of the JSON document as the root. The parameter passed to the
  * block on yield is the Doc instance after moving to the child location.
- * @param [String] path if provided it identified the top of the branch to process the leaves of
+ *   @param [String] path if provided it identified the top of the branch to process the leaves of
  * @yieldparam [Doc] Doc at the child location
  * @example
  *   Oj::Doc.open('[3,[2,1]]') { |doc|
@@ -1369,11 +1463,11 @@ doc_each_leaf(int argc, VALUE *argv, VALUE self) {
     return Qnil;
 }
 
-/* call-seq: move(path) => nil
+/* @overload move(path) => nil
  *
  * Moves the document marker to the path specified. The path can an absolute
  * path or a relative path.
- * @param [String] path path to the location to move to
+ *   @param [String] path path to the location to move to
  * @example
  *   Oj::Doc.open('{"one":[1,2]') { |doc| doc.move('/one/2'); doc.where? }  #=> "/one/2"
  */
@@ -1395,13 +1489,13 @@ doc_move(VALUE self, VALUE str) {
     return Qnil;
 }
 
-/* call-seq: each_child(path=nil) { |doc| ... } => nil
+/* @overload each_child(path=nil) { |doc| ... } => nil
  *
  * Yields to the provided block for each immediate child node with the
  * identified location of the JSON document as the root. The parameter passed
  * to the block on yield is the Doc instance after moving to the child
  * location.
- * @param [String] path if provided it identified the top of the branch to process the chilren of
+ *   @param [String] path if provided it identified the top of the branch to process the chilren of
  * @yieldparam [Doc] Doc at the child location
  * @example
  *   Oj::Doc.open('[3,[2,1]]') { |doc|
@@ -1455,13 +1549,13 @@ doc_each_child(int argc, VALUE *argv, VALUE self) {
     return Qnil;
 }
 
-/* call-seq: each_value(path=nil) { |val| ... } => nil
+/* @overload each_value(path=nil) { |val| ... } => nil
  *
  * Yields to the provided block for each leaf value in the identified location
  * of the JSON document. The parameter passed to the block on yield is the
  * value of the leaf. Only those leaves below the element specified by the
  * path parameter are processed.
- * @param [String] path if provided it identified the top of the branch to process the leaf values of
+ *   @param [String] path if provided it identified the top of the branch to process the leaf values of
  * @yieldparam [Object] val each leaf value
  * @example
  *   Oj::Doc.open('[3,[2,1]]') { |doc|
@@ -1496,12 +1590,12 @@ doc_each_value(int argc, VALUE *argv, VALUE self) {
     return Qnil;
 }
 
-/* call-seq: dump(path=nil) => String
+/* @overload dump(path, filename)
  *
  * Dumps the document or nodes to a new JSON document. It uses the default
  * options for generating the JSON.
- * @param [String] path if provided it identified the top of the branch to dump to JSON
- * @param [String] filename if provided it is the filename to write the output to
+ *   @param path [String] if provided it identified the top of the branch to dump to JSON
+ *   @param filename [String] if provided it is the filename to write the output to
  * @example
  *   Oj::Doc.open('[3,[2,1]]') { |doc|
  *       doc.dump('/2')
@@ -1526,7 +1620,7 @@ doc_dump(int argc, VALUE *argv, VALUE self) {
 	}
     }
     if (0 != (leaf = get_doc_leaf(doc, path))) {
-	VALUE	rjson;
+	volatile VALUE	rjson;
 
 	if (0 == filename) {
 	    char	buf[4096];
@@ -1534,7 +1628,8 @@ doc_dump(int argc, VALUE *argv, VALUE self) {
 
 	    out.buf = buf;
 	    out.end = buf + sizeof(buf) - 10;
-	    out.allocated = 0;
+	    out.allocated = false;
+	    out.omit_nil = oj_default_options.dump_opts.omit_nil;
 	    oj_dump_leaf_to_json(leaf, &oj_default_options, &out);
 	    rjson = rb_str_new2(out.buf);
 	    if (out.allocated) {
@@ -1549,7 +1644,7 @@ doc_dump(int argc, VALUE *argv, VALUE self) {
     return Qnil;
 }
 
-/* call-seq: size() => Fixnum
+/* @overload size() => Fixnum
  *
  * Returns the number of nodes in the JSON document where a node is any one of
  * the basic JSON components.
@@ -1562,7 +1657,7 @@ doc_size(VALUE self) {
     return ULONG2NUM(((Doc)DATA_PTR(self))->size);
 }
 
-/* call-seq: close() => nil
+/* @overload close() => nil
  *
  * Closes an open document. No further calls to the document will be valid
  * after closing.
@@ -1588,6 +1683,12 @@ doc_close(VALUE self) {
 // hack to keep the doc generator happy
 Oj = rb_define_module("Oj");
 #endif
+
+static VALUE
+doc_not_implemented(VALUE self) {
+    rb_raise(rb_eNotImpError, "Not implemented.");
+    return Qnil;
+}
 
 /* Document-class: Oj::Doc
  *
@@ -1653,4 +1754,7 @@ oj_init_doc() {
     rb_define_method(oj_doc_class, "dump", doc_dump, -1);
     rb_define_method(oj_doc_class, "size", doc_size, 0);
     rb_define_method(oj_doc_class, "close", doc_close, 0);
+
+    rb_define_method(oj_doc_class, "clone", doc_not_implemented, 0);
+    rb_define_method(oj_doc_class, "dup", doc_not_implemented, 0);
 }

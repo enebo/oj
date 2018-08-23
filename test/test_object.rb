@@ -1,5 +1,5 @@
 #!/usr/bin/env ruby
-# encoding: UTF-8
+# encoding: utf-8
 
 $: << File.dirname(__FILE__)
 
@@ -27,6 +27,49 @@ class ObjectJuice < Minitest::Test
       self.new(h['x'], h['y'])
     end
   end # Jeez
+
+  class Jam
+    attr_accessor :x, :y
+
+    def initialize(x, y)
+      @x = x
+      @y = y
+    end
+
+    def eql?(o)
+      self.class == o.class && @x == o.x && @y == o.y
+    end
+    alias == eql?
+
+  end # Jam
+
+  class Jazz < Jam
+    def initialize(x, y)
+      super
+    end
+    def to_hash()
+      { 'json_class' => self.class.to_s, 'x' => @x, 'y' => @y }
+    end
+    def self.json_create(h)
+      self.new(h['x'], h['y'])
+    end
+  end # Jazz
+
+  class Orange < Jam
+    def initialize(x, y)
+      super
+    end
+
+    def as_json()
+      { :json_class => self.class,
+        :x => @x,
+        :y => @y }
+    end
+
+    def self.json_create(h)
+      self.new(h['x'], h['y'])
+    end
+  end
 
   module One
     module Two
@@ -131,6 +174,46 @@ class ObjectJuice < Minitest::Test
     alias == eql?
   end
 
+  class Raw
+    attr_accessor :json
+
+    def initialize(j)
+      @json = j
+    end
+
+    def to_json(*a)
+      @json
+    end
+
+    def self.create(h)
+      h
+    end
+  end # Raw
+
+  module Ichi
+    module Ni
+      def self.direct(h)
+        h
+      end
+
+      module San
+        class Shi
+
+          attr_accessor :hash
+
+          def initialize(h)
+            @hash = h
+          end
+
+          def dump()
+            @hash
+          end
+
+        end # Shi
+      end # San
+    end # Ni
+  end # Ichi
+
   def setup
     @default_options = Oj.default_options
   end
@@ -168,6 +251,12 @@ class ObjectJuice < Minitest::Test
     dump_and_load(2.48e16, false)
     dump_and_load(2.48e100 * 1.0e10, false)
     dump_and_load(-2.48e100 * 1.0e10, false)
+    dump_and_load(1/0.0, false)
+    # NaN does not always == NaN
+    json = Oj.dump(0/0.0, :mode => :object)
+    assert_equal('3.3e14159265358979323846', json)
+    loaded = Oj.load(json);
+    assert_equal(true, loaded.nan?)
   end
 
   def test_string
@@ -180,6 +269,7 @@ class ObjectJuice < Minitest::Test
   def test_symbol
     dump_and_load(:abc, false)
     dump_and_load(":abc", false)
+    dump_and_load(':xyz'.to_sym, false)
   end
 
   def test_encode
@@ -255,15 +345,20 @@ class ObjectJuice < Minitest::Test
 
   # BigDecimal
   def test_bigdecimal_object
-    dump_and_load(BigDecimal.new('3.14159265358979323846'), false)
+    dump_and_load(BigDecimal('3.14159265358979323846'), false)
   end
 
   def test_bigdecimal_load
-    orig = BigDecimal.new('80.51')
+    orig = BigDecimal('80.51')
     json = Oj.dump(orig, :mode => :object, :bigdecimal_as_decimal => true)
     bg = Oj.load(json, :mode => :object, :bigdecimal_load => true)
     assert_equal(BigDecimal, bg.class)
     assert_equal(orig, bg)
+    # Infinity is the same for Float and BigDecimal
+    json = Oj.dump(BigDecimal('Infinity'), :mode => :object)
+    assert_equal('Infinity', json)
+    json = Oj.dump(BigDecimal('-Infinity'), :mode => :object)
+    assert_equal('-Infinity', json)
   end
 
   # Stream IO
@@ -303,6 +398,22 @@ class ObjectJuice < Minitest::Test
 }
     obj = Oj.object_load(json, :symbol_keys => true)
     assert_equal({ :x => true, :y => 58, :z => [1, 2, 3]}, obj)
+  end
+
+  def test_class_object
+    dump_and_load(ObjectJuice, false)
+  end
+
+  def test_module_object
+    dump_and_load(One, false)
+  end
+
+  def test_non_str_hash_object
+    json = Oj.dump({ 1 => true, :sim => nil }, :mode => :object)
+    h = Oj.load(json, :mode => :strict)
+    assert_equal({"^#1" => [1, true], ":sim" => nil}, h)
+    h = Oj.load(json, :mode => :object)
+    assert_equal({ 1 => true, :sim => nil }, h)
   end
 
   # comments
@@ -347,11 +458,7 @@ class ObjectJuice < Minitest::Test
   end
 
   def test_xml_time
-    if RUBY_VERSION.start_with?('1.8')
-      t = Time.parse('2015-01-05T21:37:07.123456789-08:00')
-    else
-      t = Time.new(2015, 1, 5, 21, 37, 7.123456789, -8 * 3600)
-    end
+    t = Time.new(2015, 1, 5, 21, 37, 7.123456789, -8 * 3600)
     # The fractional seconds are not always recreated exactly which causes a
     # mismatch so instead the seconds, nsecs, and gmt_offset are checked
     # separately along with utc.
@@ -369,11 +476,7 @@ class ObjectJuice < Minitest::Test
   end
 
   def test_xml_time_utc
-    if RUBY_VERSION.start_with?('1.8')
-      t = Time.parse('2015-01-05T21:37:07.123456789Z')
-    else
-      t = Time.utc(2015, 1, 5, 21, 37, 7.123456789)
-    end
+    t = Time.utc(2015, 1, 5, 21, 37, 7.123456789)
     # The fractional seconds are not always recreated exactly which causes a
     # mismatch so instead the seconds, nsecs, and gmt_offset are checked
     # separately along with utc.
@@ -390,11 +493,7 @@ class ObjectJuice < Minitest::Test
   end
 
   def test_ruby_time
-    if RUBY_VERSION.start_with?('1.8')
-      t = Time.parse('2015-01-05T21:37:07.123456789-08:00')
-    else
-      t = Time.new(2015, 1, 5, 21, 37, 7.123456789, -8 * 3600)
-    end
+    t = Time.new(2015, 1, 5, 21, 37, 7.123456789, -8 * 3600)
     # The fractional seconds are not always recreated exactly which causes a
     # mismatch so instead the seconds, nsecs, and gmt_offset are checked
     # separately along with utc.
@@ -412,11 +511,7 @@ class ObjectJuice < Minitest::Test
   end
 
   def test_ruby_time_12345
-    if RUBY_VERSION.start_with?('1.8')
-      t = Time.parse('2015-01-05T21:37:07.123456789+03:25')
-    else
-      t = Time.new(2015, 1, 5, 21, 37, 7.123456789, 12345/60*60)
-    end
+    t = Time.new(2015, 1, 5, 21, 37, 7.123456789, 12345/60*60)
     # The fractional seconds are not always recreated exactly which causes a
     # mismatch so instead the seconds, nsecs, and gmt_offset are checked
     # separately along with utc.
@@ -435,11 +530,7 @@ class ObjectJuice < Minitest::Test
   end
 
   def test_ruby_time_utc
-    if RUBY_VERSION.start_with?('1.8')
-      t = Time.parse('2015-01-05T21:37:07.123456789Z')
-    else
-      t = Time.utc(2015, 1, 5, 21, 37, 7.123456789)
-    end
+    t = Time.utc(2015, 1, 5, 21, 37, 7.123456789)
     # The fractional seconds are not always recreated exactly which causes a
     # mismatch so instead the seconds, nsecs, and gmt_offset are checked
     # separately along with utc.
@@ -457,11 +548,10 @@ class ObjectJuice < Minitest::Test
   end
 
   def test_time_early
-    if RUBY_VERSION.start_with?('1.8')
-      t = Time.parse('1954-01-05T21:37:07.123456789-08:00')
-    else
-      t = Time.new(1954, 1, 5, 21, 37, 7.123456789, -8 * 3600)
-    end
+    # Windows does not support dates before 1970.
+    return if RbConfig::CONFIG['host_os'] =~ /(mingw|mswin)/
+
+    t = Time.new(1954, 1, 5, 21, 37, 7.123456789, -8 * 3600)
     # The fractional seconds are not always recreated exactly which causes a
     # mismatch so instead the seconds, nsecs, and gmt_offset are checked
     # separately along with utc.
@@ -479,11 +569,7 @@ class ObjectJuice < Minitest::Test
   end
 
   def test_time_unix_zone
-    if RUBY_VERSION.start_with?('1.8')
-      t = Time.parse('2015-01-05T21:37:07.123456789-08:00')
-    else
-      t = Time.new(2015, 1, 5, 21, 37, 7.123456789, -8 * 3600)
-    end
+    t = Time.new(2015, 1, 5, 21, 37, 7.123456789, -8 * 3600)
     # The fractional seconds are not always recreated exactly which causes a
     # mismatch so instead the seconds, nsecs, and gmt_offset are checked
     # separately along with utc.
@@ -500,32 +586,26 @@ class ObjectJuice < Minitest::Test
     assert_equal(t.utc_offset, loaded.utc_offset)
   end
 
-  unless RUBY_VERSION.start_with?('1.8')
-    def test_time_unix_zone_12345
-      t = Time.new(2015, 1, 5, 21, 37, 7.123456789, 12345)
-      # The fractional seconds are not always recreated exactly which causes a
-      # mismatch so instead the seconds, nsecs, and gmt_offset are checked
-      # separately along with utc.
-      json = Oj.dump(t, :mode => :object, :time_format => :unix_zone)
-      #puts json
-      loaded = Oj.object_load(json);
-      assert_equal(t.tv_sec, loaded.tv_sec)
-      if t.respond_to?(:tv_nsec)
-        assert_equal(t.tv_nsec, loaded.tv_nsec)
-      else
-        assert_equal(t.tv_usec, loaded.tv_usec)
-      end
-      assert_equal(t.utc?, loaded.utc?)
-      assert_equal(t.utc_offset, loaded.utc_offset)
+  def test_time_unix_zone_12345
+    t = Time.new(2015, 1, 5, 21, 37, 7.123456789, 12345)
+    # The fractional seconds are not always recreated exactly which causes a
+    # mismatch so instead the seconds, nsecs, and gmt_offset are checked
+    # separately along with utc.
+    json = Oj.dump(t, :mode => :object, :time_format => :unix_zone)
+    #puts json
+    loaded = Oj.object_load(json);
+    assert_equal(t.tv_sec, loaded.tv_sec)
+    if t.respond_to?(:tv_nsec)
+      assert_equal(t.tv_nsec, loaded.tv_nsec)
+    else
+      assert_equal(t.tv_usec, loaded.tv_usec)
     end
+    assert_equal(t.utc?, loaded.utc?)
+    assert_equal(t.utc_offset, loaded.utc_offset)
   end
 
   def test_time_unix_zone_utc
-    if RUBY_VERSION.start_with?('1.8')
-      t = Time.parse('2015-01-05T21:37:07.123456789Z')
-    else
-      t = Time.utc(2015, 1, 5, 21, 37, 7.123456789)
-    end
+    t = Time.utc(2015, 1, 5, 21, 37, 7.123456789)
     # The fractional seconds are not always recreated exactly which causes a
     # mismatch so instead the seconds, nsecs, and gmt_offset are checked
     # separately along with utc.
@@ -557,7 +637,7 @@ class ObjectJuice < Minitest::Test
     begin
       Oj.object_load(json)
     rescue Exception => e
-      assert_equal("Oj::ParseError", e.class().name)
+      assert_equal("ArgumentError", e.class().name)
       return
     end
     assert(false, "*** expected an exception")
@@ -605,12 +685,141 @@ class ObjectJuice < Minitest::Test
     assert_equal({ 1 => true, 'nil' => nil, :sim => 4 }, h)
   end
 
+  def test_json_object_object
+    obj = Jeez.new(true, 58)
+    json = Oj.dump(obj, :mode => :object, :indent => 2)
+    assert(%{{
+  "^o":"ObjectJuice::Jeez",
+  "x":true,
+  "y":58
+}
+} == json ||
+%{{
+  "^o":"ObjectJuice::Jeez",
+  "y":58,
+  "x":true
+}
+} == json)
+    obj2 = Oj.load(json, :mode => :object)
+    assert_equal(obj, obj2)
+  end
+
+  def test_to_hash_object_object
+    obj = Jazz.new(true, 58)
+    json = Oj.dump(obj, :mode => :object, :indent => 2)
+    assert(%{{
+  "^o":"ObjectJuice::Jazz",
+  "x":true,
+  "y":58
+}
+} == json ||
+%{{
+  "^o":"ObjectJuice::Jazz",
+  "y":58,
+  "x":true
+}
+} == json)
+    obj2 = Oj.load(json, :mode => :object)
+    assert_equal(obj, obj2)
+  end
+
+  def test_as_json_object_object
+    obj = Orange.new(true, 58)
+    json = Oj.dump(obj, :mode => :object, :indent => 2)
+    assert(%{{
+  "^o":"ObjectJuice::Orange",
+  "x":true,
+  "y":58
+}
+} == json ||
+%{{
+  "^o":"ObjectJuice::Orange",
+  "y":58,
+  "x":true
+}
+} == json)
+    obj2 = Oj.load(json, :mode => :object)
+    assert_equal(obj, obj2)
+  end
+
+  def test_object_object_no_cache
+    obj = Jam.new(true, 58)
+    json = Oj.dump(obj, :mode => :object, :indent => 2)
+    assert(%{{
+  "^o":"ObjectJuice::Jam",
+  "x":true,
+  "y":58
+}
+} == json ||
+%{{
+  "^o":"ObjectJuice::Jam",
+  "y":58,
+  "x":true
+}
+} == json)
+    obj2 = Oj.load(json, :mode => :object, :class_cache => false)
+    assert_equal(obj, obj2)
+  end
+
+  def test_ignore
+    obj = Jeez.new(true, 58)
+    json = Oj.dump({ 'a' => 7, 'b' => obj }, :mode => :object, :indent => 2, :ignore => [ Jeez ])
+    assert_equal(%|{
+  "a":7
+}
+|, json)
+  end
+
+  def test_exception
+    err = nil
+    begin
+      raise StandardError.new('A Message')
+    rescue Exception => e
+      err = e
+    end
+    json = Oj.dump(err, :mode => :object, :indent => 2)
+    #puts "*** #{json}"
+    e2 = Oj.load(json, :mode => :strict)
+    assert_equal(err.class.to_s, e2['^o'])
+    assert_equal(err.message, e2['~mesg'])
+    assert_equal(err.backtrace, e2['~bt'])
+    e2 = Oj.load(json, :mode => :object)
+    if 'rubinius' == $ruby
+      assert_equal(e.class, e2.class);
+      assert_equal(e.message, e2.message);
+      assert_equal(e.backtrace, e2.backtrace);
+    else
+      assert_equal(e, e2);
+    end
+  end
+
+  def test_range_object
+    Oj.default_options = { :mode => :object }
+    json = Oj.dump(1..7, :mode => :object, :indent => 0)
+    if 'rubinius' == $ruby
+      assert(%{{"^O":"Range","begin":1,"end":7,"exclude_end?":false}} == json)
+    else
+      assert_equal(%{{"^u":["Range",1,7,false]}}, json)
+    end
+    dump_and_load(1..7, false)
+    dump_and_load(1..1, false)
+    dump_and_load(1...7, false)
+  end
+
   def test_circular_hash
     h = { 'a' => 7 }
     h['b'] = h
     json = Oj.dump(h, :mode => :object, :indent => 2, :circular => true)
     h2 = Oj.object_load(json, :circular => true)
     assert_equal(h2['b'].__id__, h2.__id__)
+  end
+
+
+  def test_json_object_missing_fields
+    json = %{{ "^u": [ "ObjectJuice::Stuck",1]}}
+
+    obj = Oj.load(json, mode: :object)
+    assert_nil(obj['b'])
   end
 
   def test_circular_array
@@ -621,11 +830,57 @@ class ObjectJuice < Minitest::Test
     assert_equal(a2[1].__id__, a2.__id__)
   end
 
+  def test_circular_array2
+    a = [7]
+    a << a
+    json = Oj.dump(a, :mode => :object, :indent => 2, :circular => true)
+    assert_equal(%{[
+  "^i1",
+  7,
+  "^r1"
+]
+}, json)
+    a2 = Oj.load(json, :mode => :object, :circular => true)
+    assert_equal(a2[1].__id__, a2.__id__)
+  end
+
+  def test_circular_hash2
+    h = { 'a' => 7 }
+    h['b'] = h
+    json = Oj.dump(h, :mode => :object, :indent => 2, :circular => true)
+    ha = Oj.load(json, :mode => :strict)
+    assert_equal({'^i' => 1, 'a' => 7, 'b' => '^r1'}, ha)
+    Oj.load(json, :mode => :object, :circular => true)
+    assert_equal(h['b'].__id__, h.__id__)
+  end
+
   def test_circular_object
     obj = Jeez.new(nil, 58)
     obj.x = obj
     json = Oj.dump(obj, :mode => :object, :indent => 2, :circular => true)
     obj2 = Oj.object_load(json, :circular => true)
+    assert_equal(obj2.x.__id__, obj2.__id__)
+  end
+
+  def test_circular_object2
+    obj = Jam.new(nil, 58)
+    obj.x = obj
+    json = Oj.dump(obj, :mode => :object, :indent => 2, :circular => true)
+    assert(%{{
+  "^o":"ObjectJuice::Jam",
+  "^i":1,
+  "x":"^r1",
+  "y":58
+}
+} == json ||
+%{{
+  "^o":"ObjectJuice::Jam",
+  "^i":1,
+  "y":58,
+  "x":"^r1"
+}
+} == json)
+    obj2 = Oj.load(json, :mode => :object, :circular => true)
     assert_equal(obj2.x.__id__, obj2.__id__)
   end
 
@@ -639,6 +894,25 @@ class ObjectJuice < Minitest::Test
     assert_equal(h['b'].__id__, obj.__id__)
   end
 
+  def test_circular2
+    h = { 'a' => 7 }
+    obj = Jam.new(h, 58)
+    obj.x['b'] = obj
+    json = Oj.dump(obj, :mode => :object, :indent => 2, :circular => true)
+    ha = Oj.load(json, :mode => :strict)
+    assert_equal({'^o' => 'ObjectJuice::Jam', '^i' => 1, 'x' => { '^i' => 2, 'a' => 7, 'b' => '^r1' }, 'y' => 58 }, ha)
+    Oj.load(json, :mode => :object, :circular => true)
+    assert_equal(obj.x.__id__, h.__id__)
+    assert_equal(h['b'].__id__, obj.__id__)
+  end
+
+  def test_omit_nil
+    jam = Jam.new({'a' => 1, 'b' => nil }, nil)
+
+    json = Oj.dump(jam, :omit_nil => true, :mode => :object)
+    assert_equal(%|{"^o":"ObjectJuice::Jam","x":{"a":1}}|, json)
+  end
+
   def test_odd_date
     dump_and_load(Date.new(2012, 6, 19), false)
   end
@@ -646,6 +920,17 @@ class ObjectJuice < Minitest::Test
   def test_odd_datetime
     dump_and_load(DateTime.new(2012, 6, 19, 13, 5, Rational(4, 3)), false)
     dump_and_load(DateTime.new(2012, 6, 19, 13, 5, Rational(7123456789, 1000000000)), false)
+  end
+
+  def test_bag
+    json = %{{
+  "^o":"ObjectJuice::Jem",
+  "x":true,
+  "y":58 }}
+    obj = Oj.load(json, :mode => :object, :auto_define => true)
+    assert_equal('ObjectJuice::Jem', obj.class.name)
+    assert_equal(true, obj.x)
+    assert_equal(58, obj.y)
   end
 
   def test_odd_string
@@ -659,6 +944,22 @@ class ObjectJuice < Minitest::Test
     json = Oj.dump(Date.new(2015, 3, 7), :mode => :object)
     assert_equal(%|{"^O":"Date","jd":2457089}|, json)
     dump_and_load(Date.new(2012, 6, 19), false)
+  end
+
+  def test_odd_raw
+    Oj.register_odd_raw(Raw, Raw, :create, :to_json)
+    json = Oj.dump(Raw.new(%|{"a":1}|), :mode => :object)
+    assert_equal(%|{"^O":"ObjectJuice::Raw","to_json":{"a":1}}|, json)
+    h = Oj.load(json, :mode => :object)
+    assert_equal({'a' => 1}, h)
+  end
+
+  def test_odd_mod
+    Oj.register_odd(Ichi::Ni, Ichi::Ni, :direct, :dump)
+    json = Oj.dump(Ichi::Ni::San::Shi.new({'a' => 1}), :mode => :object)
+    assert_equal(%|{"^O":"ObjectJuice::Ichi::Ni::San::Shi","dump":{"a":1}}|, json)
+    h = Oj.load(json, :mode => :object)
+    assert_equal({'a' => 1}, h)
   end
 
   def test_auto_string
@@ -682,7 +983,11 @@ class ObjectJuice < Minitest::Test
     json = Oj.dump(obj, :indent => 2, :mode => :object)
     puts json if trace
     loaded = Oj.object_load(json);
-    assert_equal(obj, loaded)
+    if obj.nil?
+      assert_nil(loaded)
+    else
+      assert_equal(obj, loaded)
+    end
     loaded
   end
 

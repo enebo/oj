@@ -9,11 +9,21 @@ Gem::Specification.new do |s|
   s.date = Date.today.to_s
   s.email = "peter@ohler.com"
   s.homepage = "http://www.ohler.com/oj"
+  s.metadata = {
+    "bug_tracker_uri" => "https://github.com/ohler55/oj/issues",
+    "changelog_uri" => "https://github.com/ohler55/oj/blob/master/CHANGELOG.md",
+    "documentation_uri" => "http://www.ohler.com/oj/doc/index.html",
+    "homepage_uri" => "http://www.ohler.com/oj/",
+    "source_code_uri" => "https://github.com/ohler55/oj",
+    "wiki_uri" => "https://github.com/ohler55/oj/wiki"
+  }
   s.summary = "A fast JSON parser and serializer."
-  s.description = %{The fastest JSON parser and object serializer. }
+  s.description = "The fastest JSON parser and object serializer."
   s.licenses = ['MIT']
+  s.required_ruby_version = ">= 2.0"
 
-  s.files = Dir["{lib,ext,test}/**/*.{rb,h,c}"] + ['LICENSE', 'README.md']
+  s.files = Dir["{lib,ext,test}/**/*.{rb,h,c}"] + ['LICENSE', 'README.md'] + Dir["pages/*.md"]
+  s.test_files = Dir["test/**/*.rb"]
 
   if defined? JRUBY_VERSION
     s.files << "lib/oj.jar"
@@ -22,15 +32,11 @@ Gem::Specification.new do |s|
     s.extensions = ["ext/oj/extconf.rb"]
   end
 
-  s.require_paths = ["lib", "ext"]
+  s.extra_rdoc_files = ['README.md'] + Dir["pages/*.md"]
+  s.rdoc_options = ['--title', 'Oj', '--main', 'README.md']
 
-  s.has_rdoc = true
-  s.extra_rdoc_files = ['README.md']
-  s.rdoc_options = ['--main', 'README.md']
-
-  s.rubyforge_project = 'oj'
-
-  s.add_development_dependency 'rake-compiler', '~> 0.9'
+  s.add_development_dependency 'rake-compiler', '>= 0.9', '< 2.0'
   s.add_development_dependency 'minitest', '~> 5'
-  s.add_development_dependency 'rails', RUBY_VERSION <= '1.8.7' ? '~> 3' : '~> 4'
+  s.add_development_dependency 'test-unit', '~> 3.0'
+  s.add_development_dependency 'wwtd', '~> 0'
 end

@@ -1,1 +1,15 @@
---title ""
+--title "Oj API Documentation"
+--readme README.md
+--charset utf-8
+-
+pages/Advanced.md
+pages/Compatibility.md
+pages/Custom.md
+pages/Encoding.md
+pages/JsonGem.md
+pages/Modes.md
+pages/Options.md
+pages/Rails.md
+pages/Security.md
+CHANGELOG.md
+LICENSE

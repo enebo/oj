@@ -15,3 +15,6 @@ doc
 Gemfile.lock
 *.so
 .idea/*
+vendor
+gemfiles/*.lock
+

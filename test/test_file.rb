@@ -130,6 +130,8 @@ class FileJuice < Minitest::Test
     dump_and_load(t, false)
   end
   def test_time_object_early
+    # Windows does not support dates before 1970.
+    return if RbConfig::CONFIG['host_os'] =~ /(mingw|mswin)/
     t = Time.xmlschema("1954-01-05T00:00:00.123456")
     Oj.default_options = { :mode => :object, :time_format => :unix_zone }
     dump_and_load(t, false)
@@ -145,7 +147,7 @@ class FileJuice < Minitest::Test
 
   # Object with to_json()
   def test_json_object_compat
-    Oj.default_options = { :mode => :compat, :use_to_json => true }
+    Oj.default_options = { :mode => :compat, :use_to_json => true, :create_additions => true }
     obj = Jeez.new(true, 58)
     json = Oj.dump(obj, :indent => 2)
     assert(%{{"json_class":"FileJuice::Jeez","x":true,"y":58}
@@ -156,28 +158,18 @@ class FileJuice < Minitest::Test
     Oj.default_options = { :mode => :compat, :use_to_json => false }
   end
 
-  def test_as_json_object_compat_hash
-    Oj.default_options = { :mode => :compat, :use_to_json => true }
-    obj = Orange.new(true, 58)
-    json = Oj.dump(obj, :indent => 2)
-    assert(!json.nil?)
-    dump_and_load(obj, false)
-  end
-
   # Range
   def test_range_object
-    unless RUBY_VERSION.start_with?('1.8')
-      Oj.default_options = { :mode => :object }
-      json = Oj.dump(1..7, :mode => :object, :indent => 0)
-      if 'rubinius' == $ruby
-        assert(%{{"^O":"Range","begin":1,"end":7,"exclude_end?":false}} == json)
-      else
-        assert_equal(%{{"^u":["Range",1,7,false]}}, json)
-      end
-      dump_and_load(1..7, false)
-      dump_and_load(1..1, false)
-      dump_and_load(1...7, false)
+    Oj.default_options = { :mode => :object }
+    json = Oj.dump(1..7, :mode => :object, :indent => 0)
+    if 'rubinius' == $ruby
+      assert(%{{"^O":"Range","begin":1,"end":7,"exclude_end?":false}} == json)
+    else
+      assert_equal(%{{"^u":["Range",1,7,false]}}, json)
     end
+    dump_and_load(1..7, false)
+    dump_and_load(1..1, false)
+    dump_and_load(1...7, false)
   end
 
   # BigNum
@@ -190,20 +182,20 @@ class FileJuice < Minitest::Test
   def test_bigdecimal_strict
     mode = Oj.default_options[:mode]
     Oj.default_options = {:mode => :strict}
-    dump_and_load(BigDecimal.new('3.14159265358979323846'), false)
+    dump_and_load(BigDecimal('3.14159265358979323846'), false)
     Oj.default_options = {:mode => mode}
   end
 
   def test_bigdecimal_null
     mode = Oj.default_options[:mode]
     Oj.default_options = {:mode => :null}
-    dump_and_load(BigDecimal.new('3.14159265358979323846'), false)
+    dump_and_load(BigDecimal('3.14159265358979323846'), false)
     Oj.default_options = {:mode => mode}
   end
 
   def test_bigdecimal_object
     Oj.default_options = {:mode => :object}
-    dump_and_load(BigDecimal.new('3.14159265358979323846'), false)
+    dump_and_load(BigDecimal('3.14159265358979323846'), false)
   end
 
   # Date
@@ -234,6 +226,8 @@ class FileJuice < Minitest::Test
       end
       assert_equal(obj.utc?, loaded.utc?)
       assert_equal(obj.utc_offset, loaded.utc_offset)
+    elsif obj.nil?
+      assert_nil(loaded)
     else
       assert_equal(obj, loaded)
     end

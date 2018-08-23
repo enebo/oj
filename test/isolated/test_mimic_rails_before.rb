@@ -8,13 +8,14 @@ require 'helper'
 Oj.mimic_JSON
 begin
   require 'rails/all'
-rescue Exception
-  puts "*** require of rails failed"
-  Process.exit!(true)
+rescue LoadError => e
+  puts "Rails are not in the gemfile, skipping tests"
+  Process.exit
 end
 
 require 'isolated/shared'
 
+$rails_monkey = true
+
 class MimicRailsBefore < SharedMimicRailsTest
 end # MimicRailsBefore
-

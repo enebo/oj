@@ -1,31 +1,6 @@
 /* odd.c
  * Copyright (c) 2011, Peter Ohler
  * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- * 
- *  - Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- * 
- *  - Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- * 
- *  - Neither the name of Peter Ohler nor the names of its contributors may be
- *    used to endorse or promote products derived from this software without
- *    specific prior written permission.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <string.h>
@@ -53,6 +28,8 @@ set_class(Odd odd, const char *classname) {
     odd->clas = rb_const_get(rb_cObject, rb_intern(classname));
     odd->create_obj = odd->clas;
     odd->create_op = rb_intern("new");
+    odd->is_module = (T_MODULE == rb_type(odd->clas));
+    odd->raw = 0;
     for (np = odd->attr_names, idp = odd->attrs; 0 != *np; np++, idp++) {
 	*idp = rb_intern(*np);
     }
@@ -67,9 +44,6 @@ get_datetime_secs(VALUE obj) {
     long long	num = rb_num2ll(rb_funcall(rfrac, numerator_id, 0));
     long long	den = rb_num2ll(rb_funcall(rfrac, denominator_id, 0));
 
-#if DATETIME_1_8
-    num *= 86400;
-#endif
     num += sec * den;
 
     return rb_funcall(rb_cObject, rational_id, 2, rb_ll2inum(num), rb_ll2inum(den));
@@ -139,14 +113,24 @@ oj_odd_init() {
 
 Odd
 oj_get_odd(VALUE clas) {
-    Odd	odd;
+    Odd		odd;
+    const char	*classname = NULL;
 
     for (odd = odds + odd_cnt - 1; odds <= odd; odd--) {
 	if (clas == odd->clas) {
 	    return odd;
 	}
+	if (odd->is_module) {
+	    if (NULL == classname) {
+		classname = rb_class2name(clas);
+	    }
+	    if (0 == strncmp(odd->classname, classname, odd->clen) &&
+		':' == classname[odd->clen]) {
+		return odd;
+	    }
+	}
     }
-    return 0;
+    return NULL;
 }
 
 Odd
@@ -155,6 +139,11 @@ oj_get_oddc(const char *classname, size_t len) {
 
     for (odd = odds + odd_cnt - 1; odds <= odd; odd--) {
 	if (len == odd->clen && 0 == strncmp(classname, odd->classname, len)) {
+	    return odd;
+	}
+	if (odd->is_module &&
+	    0 == strncmp(odd->classname, classname, odd->clen) &&
+	    ':' == classname[odd->clen]) {
 	    return odd;
 	}
     }
@@ -195,7 +184,7 @@ oj_odd_set_arg(OddArgs args, const char *key, size_t klen, VALUE value) {
 }
 
 void
-oj_reg_odd(VALUE clas, VALUE create_object, VALUE create_method, int mcnt, VALUE *members) {
+oj_reg_odd(VALUE clas, VALUE create_object, VALUE create_method, int mcnt, VALUE *members, bool raw) {
     Odd		odd;
     const char	**np;
     ID		*ap;
@@ -215,6 +204,8 @@ oj_reg_odd(VALUE clas, VALUE create_object, VALUE create_method, int mcnt, VALUE
     odd->create_obj = create_object;
     odd->create_op = SYM2ID(create_method);
     odd->attr_cnt = mcnt;
+    odd->is_module = (T_MODULE == rb_type(clas));
+    odd->raw = raw;
     for (ap = odd->attrs, np = odd->attr_names, fp = odd->attrFuncs; 0 < mcnt; mcnt--, ap++, np++, members++, fp++) {
 	*fp = 0;
 	switch (rb_type(*members)) {

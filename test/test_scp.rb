@@ -5,6 +5,7 @@ $: << File.dirname(__FILE__)
 
 require 'helper'
 require 'socket'
+require 'stringio'
 
 $json = %{{
   "array": [
@@ -73,6 +74,7 @@ class AllHandler < Oj::ScHandler
 end # AllHandler
 
 class Closer < AllHandler
+  attr_accessor :io
   def initialize(io)
     super()
     @io = io
@@ -259,7 +261,27 @@ class ScpTest < Minitest::Test
   def test_double
     handler = AllHandler.new()
     json = %{{"one":true,"two":false}{"three":true,"four":false}}
-    Oj.sc_parse(handler, json) { |j| j }
+    Oj.sc_parse(handler, json)
+    assert_equal([[:hash_start],
+                  [:hash_key, 'one'],
+                  [:hash_set, 'one', true],
+                  [:hash_key, 'two'],
+                  [:hash_set, 'too', false],
+                  [:hash_end],
+                  [:add_value, {}],
+                  [:hash_start],
+                  [:hash_key, 'three'],
+                  [:hash_set, 'three', true],
+                  [:hash_key, 'four'],
+                  [:hash_set, 'four', false],
+                  [:hash_end],
+                  [:add_value, {}]], handler.calls)
+  end
+
+  def test_double_io
+    handler = AllHandler.new()
+    json = %{{"one":true,"two":false}{"three":true,"four":false}}
+    Oj.sc_parse(handler, StringIO.new(json))
     assert_equal([[:hash_start],
                   [:hash_key, 'one'],
                   [:hash_set, 'one', true],
@@ -298,6 +320,9 @@ class ScpTest < Minitest::Test
   end
 
   def test_pipe
+    # Windows does not support fork
+    return if RbConfig::CONFIG['host_os'] =~ /(mingw|mswin)/
+
     handler = AllHandler.new()
     json = %{{"one":true,"two":false}}
     IO.pipe do |read_io, write_io|
@@ -322,6 +347,9 @@ class ScpTest < Minitest::Test
   end unless RUBY_ENGINE == 'jruby' # no fork in jruby.
 
   def test_pipe_close
+    # Windows does not support fork
+    return if RbConfig::CONFIG['host_os'] =~ /(mingw|mswin)/
+
     json = %{{"one":true,"two":false}}
     IO.pipe do |read_io, write_io|
       if fork
@@ -340,7 +368,13 @@ class ScpTest < Minitest::Test
                       [:hash_set, 'one', true]], handler.calls)
       else
         read_io.close
-        write_io.write json
+        write_io.write json[0..11]
+        sleep(0.1)
+        begin
+          write_io.write json[12..-1]
+        rescue Exception => e
+          # ignore, should fail to write
+        end
         write_io.close
         Process.exit(0)
       end
@@ -357,8 +391,15 @@ class ScpTest < Minitest::Test
     end
     Thread.start(json) do |j|
       c = server.accept()
-      c.puts json
-      c.close
+      c.puts json[0..11]
+      10.times {
+        break if c.closed?
+        sleep(0.1)
+      }
+      unless c.closed?
+        c.puts json[12..-1]
+        c.close
+      end
     end
     begin
       sock = TCPSocket.new('localhost', 8080)
