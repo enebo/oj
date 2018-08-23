@@ -48,6 +48,7 @@ import static oj.options.DumpType.ObjectNew;
 import static oj.options.DumpType.ObjectType;
 import static oj.Options.*;
 import static oj.NumInfo.OJ_INFINITY;
+import static org.jruby.util.StringSupport.CR_7BIT;
 
 
 /**
@@ -60,6 +61,7 @@ public class Dump {
     private static final byte[] C_KEY = {'"', '^', 'c', '"', ':'};
     private static final byte[] O_KEY = {'"', '^', 'o', '"', ':'};
     private static final byte[] I_KEY = {'"', '^', 'i', '"', ':'};
+    private static final byte[] T_KEY = {'"', '^', 't', '"', ':'};
     private static final byte[] U_KEY = {'"', '^', 'u', '"', ':', '['};
     private static final byte[] SELF_KEY = {'"', 's', 'e', 'l', 'f', '"', ':'};
     private static final byte[] NULL_VALUE = {'n', 'u', 'l', 'l'};
@@ -157,7 +159,7 @@ public class Dump {
     }
 
     static void fill_indent(Out out, int cnt) {
-        if (0 < out.indent) {
+        if (out.indent > 0) {
             cnt *= out.indent;
             out.append('\n');
             for (; 0 < cnt; cnt--) {
@@ -417,13 +419,8 @@ public class Dump {
             is_sym = false; // just to make sure
         }
         if (cnt == size) {
-            if (is_sym) {
-                out.append(':');
-            }
-
-            for (; str_i < cnt; str_i++) {
-                out.append(str.get(str_i));
-            }
+            if (is_sym) out.append(':');
+            out.append(str.unsafeBytes(), str.begin(), cnt);
             out.append('"');
         } else {
             if (is_sym) {
@@ -468,20 +465,28 @@ public class Dump {
         dump_cstr(context, obj.getByteList(), false, false, out);
     }
 
-    static void dump_str_obj(ThreadContext context, IRubyObject obj, RubyClass clas, int depth, Out out) {
-        if (null != clas && !(obj instanceof RubyString)) {
-            dump_obj_attrs(context, obj, clas, 0, depth, out);
-        } else {
-            ByteList str = ((RubyString) obj).getByteList();
-            boolean escape = false;
-            if (str.realSize() >=2 ) {
-                int s = str.get(0);
-                int s1 = str.get(1);
-                escape = ':' == s || ('^' == s && ('r' == s1 || 'i' == s1));
-            }
+    static void dump_str_obj(ThreadContext context, RubyString string, Out out) {
+        ByteList str = string.getByteList();
 
-            dump_cstr(context, str, false, escape, out);
+        if (string.isAsciiOnly()) { // Fast path.  JRuby already knows if it is a clean ASCII string.
+            out.append('"');
+            out.append(str.unsafeBytes(), str.begin(), str.realSize());
+            out.append('"');
+        } else {
+            dump_cstr(context, str, false, isEscapeString(str), out);
         }
+    }
+
+    static boolean isEscapeString(ByteList str) {
+        if (str.realSize() >=2 ) {
+            int s = str.get(0);
+            if (s == ':') return true;
+            if (s == '^'){
+                s = str.get(1);
+                return s == 'r' || s == 'i';
+            }
+        }
+        return false;
     }
 
     static void dump_sym_comp(ThreadContext context, RubySymbol obj, Out out) {
@@ -652,7 +657,7 @@ public class Dump {
 
         fill_indent(out, depth);
         if (key instanceof RubyString) {
-            dump_str_obj(context, key, null, depth, out);
+            dump_str_obj(context, (RubyString) key, out);
             out.append(':');
             dump_val(context, value, depth, out, null);
         } else if (key instanceof RubySymbol) {
@@ -1023,11 +1028,7 @@ public class Dump {
     static void dump_data_obj(ThreadContext context, IRubyObject obj, int depth, Out out) {
         if (obj instanceof org.jruby.RubyTime) {
             out.append('{');
-            out.append('"');
-            out.append('^');
-            out.append('t');
-            out.append('"');
-            out.append(':');
+            out.append(T_KEY);
             switch (out.opts.time_format) {
                 case RubyTime: // Does not output fractional seconds
                 case XmlTime:
@@ -1419,7 +1420,7 @@ public class Dump {
                             break;
                         case ObjectMode:
                         default:
-                            dump_str_obj(context, obj, clas, depth, out);
+                            dump_str_obj(context, (RubyString) obj, out);
                             break;
                     }
                 } else if (obj.getMetaClass() == context.runtime.getArray()) {
