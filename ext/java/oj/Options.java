@@ -71,6 +71,7 @@ public class Options {
     IRubyObject array_class;	// class to use in place of Array on load
     DumpOpts dump_opts;
     RxClass str_rx;
+    // FIXME: Consider primitive array for this
     List<RubyModule> ignore; // array of classes to ignore;
 
     

@@ -645,6 +645,9 @@ public class Dump {
     }
 
     static void hash_cb_object(ThreadContext context, IRubyObject key, IRubyObject value, Out out) {
+        if (out.opts.ignore != null && dump_ignore(out, value)) return;
+        if (out.omit_nil && value.isNil()) return;
+
         int		depth = out.depth;
 
         fill_indent(out, depth);
@@ -1040,10 +1043,11 @@ public class Dump {
             }
             out.append('}');
         } else if (obj instanceof RubyBigDecimal) {
-            if (Yes == out.opts.bigdec_as_num) {
-                dump_raw(stringToByteList(context, obj, "to_s"), out);
+            ByteList str = stringToByteList(context, obj, "to_s");
+            if (out.opts.bigdec_as_num != No) {
+                dump_raw(str, out);
             } else {
-                dump_cstr(context, stringToByteList(context, obj, "to_s"), false, false, out);
+                dump_cstr(context, str, false, false, out);
             }
         } else {
             dump_nil(out);
@@ -1160,6 +1164,11 @@ public class Dump {
         boolean first = true;
         for (Variable<Object> variable: variables) {
             String name = variable.getName();
+            // FIXME: We may crash if non ruby object is internal????
+            IRubyObject value = (IRubyObject) variable.getValue();
+
+            if (out.opts.ignore != null && dump_ignore(out, value)) continue;
+            if (out.omit_nil && value.isNil()) continue;
 
             if (first) {
                 first = false;
@@ -1175,8 +1184,7 @@ public class Dump {
                 dump_cstr(context, "~" + name, false, false, out);
             }
             out.append(':');
-            // FIXME: We may crash if non ruby object is internal
-            dump_val(context, (IRubyObject) variable.getValue(), d2, out, null);
+            dump_val(context, value, d2, out, null);
         }
         out.depth = depth;
         fill_indent(out, depth);
@@ -1481,6 +1489,8 @@ public class Dump {
         Out out = new Out(oj);
         FileOutputStream f = null;
 
+        out.omit_nil = copts.dump_opts.omit_nil;
+
         obj_to_json(context, obj, copts, out);
 
         try {
@@ -1500,6 +1510,8 @@ public class Dump {
 
     static void oj_write_obj_to_stream(ThreadContext context, OjLibrary oj, IRubyObject obj, IRubyObject stream, Options copts) {
         Out out = new Out(oj);
+
+        out.omit_nil = copts.dump_opts.omit_nil;
 
         obj_to_json(context, obj, copts, out);
 
@@ -1772,6 +1784,18 @@ public class Dump {
         while (!sw.types.empty()) {
             pop(context, sw);
         }
+    }
+
+    // Unlike C version we assume check has been made that there is an ignore list
+    // and we are in the correct mode.
+    static boolean dump_ignore(Out out, IRubyObject value) {
+        RubyModule clas = value.getMetaClass();
+
+        for (RubyModule module: out.opts.ignore) {
+            if (module == clas) return true;
+        }
+
+        return false;
     }
 
 }

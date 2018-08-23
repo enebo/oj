@@ -1,5 +1,7 @@
 package oj;
 
+import oj.options.DumpCaller;
+import oj.options.NanDump;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
@@ -299,6 +301,8 @@ public class RubyOj extends RubyModule {
             copts.escape_mode = JSONEsc;
         }
 
+        copts.dump_opts.omit_nil = setTrueFalse(context, ropts, "omit_nil");
+
         copts.circular = setYesNo(context, ropts, "circular");
         copts.auto_define = setYesNo(context, ropts, "auto_define");
         copts.sym_key = setYesNo(context, ropts, "symbol_keys");
@@ -326,6 +330,16 @@ public class RubyOj extends RubyModule {
 
         throw context.runtime.newArgumentError(symbolName + "must be true, false, or nil");
     }
+
+    private static boolean setTrueFalse(ThreadContext context, RubyHash options, String symbolName) {
+        IRubyObject v = options.fastARef(context.runtime.newSymbol(symbolName));
+        if (v == context.nil || v == null) return false;
+        if (v == context.tru) return true;
+        if (v == context.fals) return false;
+
+        throw context.runtime.newArgumentError(symbolName + "must be true, false, or nil");
+    }
+
 
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject mimic_JSON(ThreadContext context, IRubyObject self, IRubyObject[] args) {
@@ -505,17 +519,21 @@ public class RubyOj extends RubyModule {
         return new StringParserSource(byteSource);
     }
 
-    @JRubyMethod(module = true, rest = true)
+    @JRubyMethod(module = true, required = 1, rest = true)
     public static IRubyObject dump(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         OjLibrary oj = resolveOj(self);
         ByteList buf = Parse.newByteList();
         Out out = new Out(oj);
         Options	copts = oj.default_options.dup(context);
 
+        if (copts.mode == CompatMode) copts.dump_opts.nan_dump = NanDump.WordNan;
+
         if (2 == args.length) {
             parse_options(context, args[1], copts);
         }
         out.buf = buf;
+        out.omit_nil = copts.dump_opts.omit_nil;
+        out.caller = DumpCaller.CALLER_DUMP;
 
         Dump.obj_to_json(context, args[0], copts, out);
 

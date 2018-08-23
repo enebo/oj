@@ -867,10 +867,13 @@ public abstract class Parse {
     }
 
     public IRubyObject endHash() {
+        if (options.trace == Yes) trace_parse_hash_end();
         return context.nil;
     }
 
     public IRubyObject startHash() {
+        if (options.trace == Yes) trace_parse_call("start_hash");
+
         return RubyHash.newHash(context.runtime);
     }
 
@@ -947,4 +950,12 @@ public abstract class Parse {
         bytelist.setEncoding(UTF8Encoding.INSTANCE);
         return bytelist;
     }
+
+    protected void trace_parse_call(String start_hash) {
+    }
+
+    protected void trace_parse_hash_end() {
+    }
+
+
 }

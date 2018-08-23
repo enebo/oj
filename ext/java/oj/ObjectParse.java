@@ -20,9 +20,6 @@ import org.jruby.util.ByteList;
 
 import static oj.Options.Yes;
 
-/**
- * Created by enebo on 8/28/15.
- */
 public class ObjectParse extends Parse {
     private RubyClass structClass;
     private RubyClass timeClass;
@@ -503,6 +500,8 @@ public class ObjectParse extends Parse {
                 return;
             }
         }
+
+        if (options.trace == Yes) trace_parse_call("set_string");
     }
 
     @Override
@@ -542,6 +541,8 @@ public class ObjectParse extends Parse {
                 return;
             }
         }
+
+        if (options.trace == Yes) trace_parse_call("add_number");
     }
 
     @Override
@@ -603,6 +604,8 @@ public class ObjectParse extends Parse {
                 return;
             }
         }
+
+        if (options.trace == Yes) trace_parse_call("add_value");
     }
 
     @Override
@@ -644,6 +647,8 @@ public class ObjectParse extends Parse {
             }
         }
         ((RubyArray) stack_peek().val).append(str_to_value(value, orig));
+
+        if (options.trace == Yes) trace_parse_call("append_string");
     }
 
     private void circArraySet(int i, IRubyObject value) {
@@ -659,16 +664,22 @@ public class ObjectParse extends Parse {
     @Override
     public void appendNum(NumInfo ni) {
         ((RubyArray) stack_peek().val).append(ni.toNumber(context));
+
+        if (options.trace == Yes) trace_parse_call("append_number");
     }
 
     @Override
     public void addCStr(ByteList value, int orig) {
         this.value = str_to_value(value, orig);
+
+        if (options.trace == Yes) trace_parse_call("add_string");
     }
 
     @Override
     public void addNum(NumInfo ni) {
         value = ni.toNumber(context);
+
+        if (options.trace == Yes) trace_parse_call("add_num");
     }
 
     @Override
