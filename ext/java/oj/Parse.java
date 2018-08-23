@@ -928,7 +928,7 @@ public abstract class Parse {
         }
 
         clas = resolveClassName(clas, name, autoDefine);
-        if (clas == null) parseError("class " + className + " is not defined");
+        if (clas == null) throw context.runtime.newArgumentError("class " + className + " is not defined");
 
         return clas;
     }
