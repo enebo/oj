@@ -5,6 +5,7 @@ import org.jruby.RubyArray;
 import org.jruby.RubyClass;
 import org.jruby.RubyException;
 import org.jruby.RubyHash;
+import org.jruby.RubyModule;
 import org.jruby.RubyNil;
 import org.jruby.RubyObject;
 import org.jruby.RubyString;
@@ -484,7 +485,7 @@ public class ObjectParse extends Parse {
                     set_obj_ivar(parent, kval, str_to_value(value, orig));
                 }
                 break;
-            } else if (parent.val instanceof RubyClass) {
+            } else if (parent.val instanceof RubyModule) {
                 if (null == parent.oddArgs) {
                     parseError(parent.val.getMetaClass().getName() + " is not an odd class");
                     return;
@@ -520,7 +521,7 @@ public class ObjectParse extends Parse {
             } else if (parent.val instanceof RubyHash) {
                 ((RubyHash) parent.val).op_aset(context, calc_hash_key(kval, parent.k1), ni.toNumber(context));
                 break;
-            } else if (parent.val instanceof RubyClass) {
+            } else if (parent.val instanceof RubyModule) {
                 if (null == parent.oddArgs) {
                     parseError(parent.val.getMetaClass().getName() + " is not an odd class");
                     return;
@@ -587,7 +588,7 @@ public class ObjectParse extends Parse {
                     set_obj_ivar(parent, kval, value);
                 }
                 break;
-            } else if (parent.val instanceof RubyClass) {
+            } else if (parent.val instanceof RubyModule) {
                 if (null == parent.oddArgs) {
                     parseError(parent.val.getMetaClass().getName() + " is not an odd class");
                     return;
@@ -614,7 +615,7 @@ public class ObjectParse extends Parse {
 
         if (context.nil == parent.val) {
             parent.val = RubyHash.newHash(context.runtime);
-        } else if (null != parent.oddArgs) {
+        } else if (parent.oddArgs != null) {
             OddArgs	oa = parent.oddArgs;
 
             parent.val = oa.odd.createObj.callMethod(context,  oa.odd.createOp, oa.args);

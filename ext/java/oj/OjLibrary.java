@@ -54,8 +54,19 @@ public class OjLibrary implements Library {
     }
 
     public Odd getOdd(RubyClass clas) {
+        String classname = null;
+
         for (Odd odd: odds) {
-            if (odd.clas == clas) return odd;
+            if (odd.clas == clas) return odd; // exact match
+
+            if (odd.isModule) {  // partial match (e.g. Foo::Bar::Gar finds Foo::Bar entry).
+                if (classname == null) classname = clas.getName();
+
+                int len = odd.classname.length();
+
+                if (classname.length() > len && classname.charAt(len) == ':' &&
+                        classname.substring(0, len).equals(odd.classname)) return odd;
+            }
         }
 
         return null;
@@ -64,6 +75,13 @@ public class OjLibrary implements Library {
     public Odd getOdd(String classname) {
         for (Odd odd: odds) {
             if (classname.equals(odd.classname)) return odd;
+
+            if (odd.isModule) { // exact match failed so see if perhaps this is a compound type with modules as lhs
+                int len = odd.classname.length();
+
+                if (classname.length() > len && classname.charAt(len) == ':' &&
+                        classname.substring(0, len).equals(odd.classname)) return odd;
+            }
         }
 
         return null;
@@ -73,7 +91,7 @@ public class OjLibrary implements Library {
         return default_options.dup(context);
     }
 
-    public void registerOdd(RubyClass clas, IRubyObject createObject, RubySymbol createMethod, IRubyObject[] newArgs) {
+    public void registerOdd(RubyModule clas, IRubyObject createObject, RubySymbol createMethod, IRubyObject[] newArgs, boolean raw) {
         String[] ids = new String[newArgs.length];
         for (int i = 0; i < newArgs.length; i++) {
             ids[i] = newArgs[i].asJavaString();
@@ -82,7 +100,12 @@ public class OjLibrary implements Library {
         Odd odd = new Odd(clas, ids);
         odd.createOp = createMethod.asJavaString();
         odd.createObj = createObject;
+        odd.isModule = !(clas instanceof RubyClass);
 
+        addOrReplaceOdd(odd);
+    }
+
+    private void addOrReplaceOdd(Odd odd) {
         int length = odds.size();
         for (int i = 0; i < length; i++) {
             if (odds.get(i).clas == odd.clas) {
@@ -90,6 +113,7 @@ public class OjLibrary implements Library {
                 return;
             }
         }
+
         odds.add(odd);
     }
 }

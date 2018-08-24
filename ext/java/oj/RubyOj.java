@@ -574,16 +574,9 @@ public class RubyOj extends RubyModule {
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject register_odd(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         OjLibrary oj = resolveOj(self);
-        if (3 > args.length) {
-            throw context.runtime.newArgumentError("incorrect number of arguments.");
-        }
-
-        if (!(args[0] instanceof RubyClass)) {
-            throw context.runtime.newArgumentError("expecting class.");
-        }
-        if (!(args[2] instanceof RubySymbol)) {
-            throw context.runtime.newArgumentError("expecting symbol.");
-        }
+        if (3 > args.length) throw context.runtime.newArgumentError("incorrect number of arguments.");
+        if (!(args[0] instanceof RubyModule)) throw context.runtime.newArgumentError("expecting class or module.");
+        if (!(args[2] instanceof RubySymbol)) throw context.runtime.newArgumentError("expecting symbol.");
 
         if (MAX_ODD_ARGS < args.length - 2) {
             throw context.runtime.newArgumentError("too many members.");
@@ -592,7 +585,7 @@ public class RubyOj extends RubyModule {
         IRubyObject[] newArgs = new IRubyObject[args.length - 3];
         System.arraycopy(args, 3, newArgs, 0, newArgs.length);
 
-        oj.registerOdd((RubyClass) args[0], args[1], (RubySymbol) args[2], newArgs);
+        oj.registerOdd((RubyModule) args[0], args[1], (RubySymbol) args[2], newArgs, false);
 
         return context.nil;
     }

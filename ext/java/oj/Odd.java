@@ -2,35 +2,33 @@ package oj;
 
 import oj.attr_get_func.GetDateTimeSecs;
 import org.jruby.Ruby;
-import org.jruby.RubyClass;
+import org.jruby.RubyModule;
 import org.jruby.runtime.builtin.IRubyObject;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Created by enebo on 6/20/18.
- */
 public class Odd {
     String classname;
-    RubyClass clas;
+    RubyModule clas;
     IRubyObject createObj;
     String createOp;
     String[] attrs;
     AttrGetFunc[] attrFuncs;
+    boolean isModule;
 
     private static AttrGetFunc getDateTimeSecs = new GetDateTimeSecs();
 
     public Odd(Ruby runtime, String classname, String[] attrNames) {
         this.classname = classname;
         this.attrs = attrNames;
-        this.clas = (RubyClass) runtime.getObject().getConstant(classname);
+        this.clas = (RubyModule) runtime.getObject().getConstant(classname);
         this.createObj = clas;
         this.createOp = "new";
         this.attrFuncs = new AttrGetFunc[attrNames.length];
     }
 
-    public Odd(RubyClass clas, String[] attrNames) {
+    public Odd(RubyModule clas, String[] attrNames) {
         this.classname = clas.getName();
         this.attrs = attrNames;
         this.clas = clas;

@@ -48,7 +48,6 @@ import static oj.options.DumpType.ObjectNew;
 import static oj.options.DumpType.ObjectType;
 import static oj.Options.*;
 import static oj.NumInfo.OJ_INFINITY;
-import static org.jruby.util.StringSupport.CR_7BIT;
 
 
 /**
@@ -1291,7 +1290,6 @@ public class Dump {
 
 
     static void dump_odd(ThreadContext context, IRubyObject obj, Odd odd, RubyClass clas, int depth, Out out) {
-        String idp;
         AttrGetFunc fp;
         IRubyObject	v;
         String name;
