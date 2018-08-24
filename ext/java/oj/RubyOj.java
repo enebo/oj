@@ -1,11 +1,9 @@
 package oj;
 
 import oj.options.DumpCaller;
-import oj.options.NanDump;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
-import org.jruby.RubyClass;
 import org.jruby.RubyFile;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyHash;
@@ -23,6 +21,7 @@ import org.jruby.util.ByteList;
 import org.jruby.util.TypeConverter;
 
 import static oj.Options.*;
+import static oj.options.NanDump.*;
 
 // FIXME: I think all default_options need to clone for every parse.
 
@@ -56,10 +55,10 @@ public class RubyOj extends RubyModule {
         RubyHash opts = RubyHash.newHash(runtime);
         IRubyObject Qnil = context.nil;
 
-        if (oj.default_options.dump_opts.indent_size == 0) {
+        if (oj.default_options.dump_opts.indent_str == ByteList.EMPTY_BYTELIST) {
             opts.fastASet(runtime.newSymbol("indent"), runtime.newFixnum(oj.default_options.indent));
         } else {
-            opts.fastASet(runtime.newSymbol("indent"), runtime.newFixnum(oj.default_options.dump_opts.indent_size));
+            opts.fastASet(runtime.newSymbol("indent"), runtime.newString(oj.default_options.dump_opts.indent_str.dup()));
         }
         opts.fastASet(runtime.newSymbol("second_precision"), runtime.newFixnum(oj.default_options.sec_prec));
         opts.fastASet(runtime.newSymbol("circular"), yesNo(context, oj.default_options.circular));
@@ -142,10 +141,10 @@ public class RubyOj extends RubyModule {
                 break;
         }
         opts.fastASet(runtime.newSymbol("create_id"), (null == oj.default_options.create_id) ? Qnil : runtime.newString(oj.default_options.create_id));
-        opts.fastASet(runtime.newSymbol("space"), (0 == oj.default_options.dump_opts.after_size) ? Qnil : runtime.newString(oj.default_options.dump_opts.after_sep));
-        opts.fastASet(runtime.newSymbol("space_before"), (0 == oj.default_options.dump_opts.before_size) ? Qnil : runtime.newString(oj.default_options.dump_opts.before_sep));
-        opts.fastASet(runtime.newSymbol("object_nl"), (0 == oj.default_options.dump_opts.hash_size) ? Qnil : runtime.newString(oj.default_options.dump_opts.hash_nl));
-        opts.fastASet(runtime.newSymbol("array_nl"), (0 == oj.default_options.dump_opts.array_size) ? Qnil : runtime.newString(oj.default_options.dump_opts.array_nl));
+        opts.fastASet(runtime.newSymbol("space"), (ByteList.EMPTY_BYTELIST == oj.default_options.dump_opts.after_sep) ? Qnil : runtime.newString(oj.default_options.dump_opts.after_sep));
+        opts.fastASet(runtime.newSymbol("space_before"), (ByteList.EMPTY_BYTELIST == oj.default_options.dump_opts.before_sep) ? Qnil : runtime.newString(oj.default_options.dump_opts.before_sep));
+        opts.fastASet(runtime.newSymbol("object_nl"), (ByteList.EMPTY_BYTELIST == oj.default_options.dump_opts.hash_nl) ? Qnil : runtime.newString(oj.default_options.dump_opts.hash_nl));
+        opts.fastASet(runtime.newSymbol("array_nl"), (ByteList.EMPTY_BYTELIST == oj.default_options.dump_opts.array_nl) ? Qnil : runtime.newString(oj.default_options.dump_opts.array_nl));
 
         RubySymbol nan = runtime.newSymbol("nan");
         switch (oj.default_options.dump_opts.nan_dump) {
@@ -193,10 +192,16 @@ public class RubyOj extends RubyModule {
         IRubyObject v;
 
         if (null != (v = ropts.fastARef(runtime.newSymbol("indent")))) {
-            if (!(v instanceof RubyFixnum)) {
+            if (v.isNil()) {
+                copts.indent = 0;
+            } else if (v instanceof RubyFixnum) {
+                copts.indent = RubyNumeric.num2int(v);
+            } else if (v instanceof RubyString) {
+                copts.dump_opts.indent_str = ((RubyString) v).getByteList();
+                copts.indent = 0;
+            } else {
                 throw runtime.newArgumentError(":indent_str must be a Fixnum.");
             }
-            copts.indent = RubyNumeric.num2int(v);
         }
 
         if (null != (v = ropts.fastARef(runtime.newSymbol("float_precision")))) {
@@ -300,6 +305,49 @@ public class RubyOj extends RubyModule {
         } else if (Qfalse == v) {
             copts.escape_mode = JSONEsc;
         }
+
+        v = ropts.fastARef(runtime.newSymbol("space"));
+        if (v != null && !v.isNil()) {
+            copts.dump_opts.after_sep = ((RubyString) TypeConverter.checkStringType(runtime, v)).getByteList();
+        }
+
+        v = ropts.fastARef(runtime.newSymbol("space_before"));
+        if (v != null && !v.isNil()) {
+            copts.dump_opts.before_sep = ((RubyString) TypeConverter.checkStringType(runtime, v)).getByteList();
+        }
+
+        v = ropts.fastARef(runtime.newSymbol("object_nl"));
+        if (v != null && !v.isNil()) {
+            copts.dump_opts.hash_nl = ((RubyString) TypeConverter.checkStringType(runtime, v)).getByteList();
+        }
+
+        v = ropts.fastARef(runtime.newSymbol("array_nl"));
+        if (v != null && !v.isNil()) {
+            copts.dump_opts.array_nl = ((RubyString) TypeConverter.checkStringType(runtime, v)).getByteList();
+        }
+
+        v = ropts.fastARef(runtime.newSymbol("nan"));
+        if (v != null) {
+            if (runtime.newSymbol("null") == v) {
+                copts.dump_opts.nan_dump = NullNan;
+            } else if (runtime.newSymbol("huge") == v) {
+                copts.dump_opts.nan_dump = HugeNan;
+            } else if (runtime.newSymbol("word") == v) {
+                copts.dump_opts.nan_dump = WordNan;
+            } else if (runtime.newSymbol("raise") == v) {
+                copts.dump_opts.nan_dump = RaiseNan;
+            } else if (runtime.newSymbol("auto") == v) {
+                copts.dump_opts.nan_dump = AutoNan;
+            } else {
+                throw runtime.newArgumentError(":nan must be :null, :huge, :word, :raise, or :auto.");
+            }
+        }
+
+        copts.dump_opts.use = 0 < copts.dump_opts.indent_str.getRealSize() ||
+                0 < copts.dump_opts.after_sep.getRealSize() ||
+                0 < copts.dump_opts.before_sep.getRealSize() ||
+                0 < copts.dump_opts.hash_nl.getRealSize() ||
+                0 < copts.dump_opts.array_nl.getRealSize();
 
         copts.dump_opts.omit_nil = setTrueFalse(context, ropts, "omit_nil");
 
@@ -526,7 +574,7 @@ public class RubyOj extends RubyModule {
         Out out = new Out(oj);
         Options	copts = oj.default_options.dup(context);
 
-        if (copts.mode == CompatMode) copts.dump_opts.nan_dump = NanDump.WordNan;
+        if (copts.mode == CompatMode) copts.dump_opts.nan_dump = WordNan;
 
         if (2 == args.length) {
             parse_options(context, args[1], copts);

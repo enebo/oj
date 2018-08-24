@@ -60,6 +60,7 @@ public class Dump {
     private static final byte[] C_KEY = {'"', '^', 'c', '"', ':'};
     private static final byte[] O_KEY = {'"', '^', 'o', '"', ':'};
     private static final byte[] I_KEY = {'"', '^', 'i', '"', ':'};
+    private static final byte[] PARTIAL_I_KEY = {'"', '^', 'i'};
     private static final byte[] T_KEY = {'"', '^', 't', '"', ':'};
     private static final byte[] U_KEY = {'"', '^', 'u', '"', ':', '['};
     private static final byte[] SELF_KEY = {'"', 's', 'e', 'l', 'f', '"', ':'};
@@ -509,69 +510,48 @@ public class Dump {
         out.append('}');
     }
 
-    static void dump_array(ThreadContext context, IRubyObject a, RubyClass clas, int depth, Out out) {
-        int		i, cnt;
-        int		d2 = depth + 1;
-        long	id = check_circular(a, out);
+    static void dump_array(ThreadContext context, RubyArray array, int depth, Out out) {
+        int d2 = depth + 1;
+        long id = check_circular(array, out);
 
-        if (id < 0) {
-            return;
-        }
-        if (null != clas && !(a instanceof RubyArray) && ObjectMode == out.opts.mode) {
-            dump_obj_attrs(context, a, clas, 0, depth, out);
-            return;
-        }
-        cnt = ((RubyArray) a).getLength();
+        if (id < 0) return; // duplicate found (written out in check_circular)
+
         out.append('[');
-        if (0 < id) {
+        if (id > 0) {
             fill_indent(out, d2);
-            out.append('"');
-            out.append('^');
-            out.append('i');
+            out.append(PARTIAL_I_KEY);
             dump_ulong(id, out);
             out.append('"');
         }
 
-        if (0 == cnt) {
+        if (array.isEmpty()) {
             out.append(']');
         } else {
-            if (0 < id) {
-                out.append(',');
-            }
+            if (id > 0) out.append(',');
 
-            cnt--;
-            for (i = 0; i <= cnt; i++) {
-                if (null == out.opts.dump_opts) {
-                    fill_indent(out, d2);
-                } else {
-                    if (0 < out.opts.dump_opts.array_size) {
-                        out.append(out.opts.dump_opts.array_nl);
-                    }
-                    if (0 < out.opts.dump_opts.indent_size) {
-                        for (int j = d2; 0 < j; j--) {
-                            out.append(out.opts.dump_opts.indent_str);
-                        }
-                    }
-                }
-                dump_val(context, ((RubyArray) a).eltOk(i), d2, out, null);
-                if (i < cnt) {
-                    out.append(',');
-                }
+            int cnt = array.getLength() - 1;
+
+            for (int i = 0; i <= cnt; i++) {
+                indent(out, d2, out.opts.dump_opts.array_nl);
+                dump_val(context, array.eltInternal(i), d2, out, null);
+                if (i < cnt) out.append(',');
             }
-            if (null == out.opts.dump_opts) {
-                fill_indent(out, depth);
-            } else {
-                //printf("*** d2: %u  indent_str: %u '%s'\n", d2, out.opts.dump_opts.indent_size, out.opts.dump_opts.indent_str);
-                if (0 < out.opts.dump_opts.array_size) {
-                    out.append(out.opts.dump_opts.array_nl);
-                }
-                if (0 < out.opts.dump_opts.indent_size) {
-                    for (int j = depth; 0 < j; j--) {
-                        out.append(out.opts.dump_opts.indent_str);
-                    }
-                }
-            }
+            indent(out, depth, out.opts.dump_opts.array_nl);
             out.append(']');
+        }
+    }
+
+    static void indent(Out out, int depth, ByteList nl) {
+        if (out.opts.dump_opts.use) {
+            if (nl != ByteList.EMPTY_BYTELIST) out.append(nl);
+
+            if (out.opts.dump_opts.indent_str != ByteList.EMPTY_BYTELIST) {
+                for (int j = depth; 0 < j; j--) {
+                    out.append(out.opts.dump_opts.indent_str);
+                }
+            }
+        } else {
+            fill_indent(out, depth);
         }
     }
 
@@ -581,28 +561,28 @@ public class Dump {
         if (!(key instanceof RubyString)) {
             throw context.runtime.newTypeError("In :strict mode all Hash keys must be Strings, not " + key.getMetaClass().getName());
         }
-        if (null == out.opts.dump_opts) {
-            fill_indent(out, depth);
-            dump_str_comp(context, (RubyString) key, out);
-            out.append(':');
-        } else {
-            if (0 < out.opts.dump_opts.hash_size) {
+        if (out.opts.dump_opts.use) {
+            if (out.opts.dump_opts.hash_nl != ByteList.EMPTY_BYTELIST) {
                 out.append(out.opts.dump_opts.hash_nl);
             }
-            if (0 < out.opts.dump_opts.indent_size) {
+            if (out.opts.dump_opts.indent_str != ByteList.EMPTY_BYTELIST) {
                 int	i;
                 for (i = depth; 0 < i; i--) {
                     out.append(out.opts.dump_opts.indent_str);
                 }
             }
             dump_str_comp(context, (RubyString) key, out);
-            if (0 < out.opts.dump_opts.before_size) {
+            if (out.opts.dump_opts.before_sep != ByteList.EMPTY_BYTELIST) {
                 out.append(out.opts.dump_opts.before_sep);
             }
             out.append(':');
-            if (0 < out.opts.dump_opts.after_size) {
+            if (out.opts.dump_opts.after_sep != ByteList.EMPTY_BYTELIST) {
                 out.append(out.opts.dump_opts.after_sep);
             }
+        } else {
+            fill_indent(out, depth);
+            dump_str_comp(context, (RubyString) key, out);
+            out.append(':');
         }
         dump_val(context, value, depth, out, null);
         out.depth = depth;
@@ -612,19 +592,7 @@ public class Dump {
     static void hash_cb_compat(ThreadContext context, IRubyObject key, IRubyObject value, Out out) {
         int		depth = out.depth;
 
-        if (null == out.opts.dump_opts) {
-            fill_indent(out, depth);
-        } else {
-            if (0 < out.opts.dump_opts.hash_size) {
-                out.append(out.opts.dump_opts.hash_nl);
-            }
-            if (0 < out.opts.dump_opts.indent_size) {
-                int	i;
-                for (i = depth; 0 < i; i--) {
-                    out.append(out.opts.dump_opts.indent_str);
-                }
-            }
-        }
+        indent(out, depth, out.opts.dump_opts.hash_nl);
 
         if (key instanceof RubyString) {
             dump_str_comp(context, (RubyString) key, out);
@@ -634,16 +602,16 @@ public class Dump {
             /*rb_raise(rb_eTypeError, "In :compat mode all Hash keys must be Strings or Symbols, not %s.\n", rb_class2name(rb_obj_class(key)));*/
             dump_cstr(context, stringToByteList(context, key, "to_s"), false, false, out);
         }
-        if (null == out.opts.dump_opts) {
-            out.append(':');
-        } else {
-            if (0 < out.opts.dump_opts.before_size) {
+        if (out.opts.dump_opts.use) {
+            if (out.opts.dump_opts.before_sep != ByteList.EMPTY_BYTELIST) {
                 out.append(out.opts.dump_opts.before_sep);
             }
             out.append(':');
-            if (0 < out.opts.dump_opts.after_size) {
+            if (out.opts.dump_opts.after_sep != ByteList.EMPTY_BYTELIST) {
                 out.append(out.opts.dump_opts.after_sep);
             }
+        } else {
+            out.append(':');
         }
         dump_val(context, value, depth, out, null);
         out.depth = depth;
@@ -760,20 +728,7 @@ public class Dump {
             if (',' == out.get(-1)) {
                 out.pop(); // backup to overwrite last comma
             }
-            if (null == out.opts.dump_opts) {
-                fill_indent(out, depth);
-            } else {
-                if (0 < out.opts.dump_opts.hash_size) {
-                    out.append(out.opts.dump_opts.hash_nl);
-                }
-                if (0 < out.opts.dump_opts.indent_size) {
-                    int	i;
-
-                    for (i = depth; 0 < i; i--) {
-                        out.append(out.opts.dump_opts.indent_str);
-                    }
-                }
-            }
+            indent(out, depth, out.opts.dump_opts.hash_nl);
             out.append('}');
         }
     }
@@ -1149,7 +1104,7 @@ public class Dump {
             out.append(',');
             fill_indent(out, d2);
             out.append(SELF_KEY);
-            dump_array(context, obj, null, depth + 1, out);
+            dump_array(context, (RubyArray) obj, depth + 1, out);
         } else if (obj instanceof RubyHash) {
             out.append(',');
             fill_indent(out, d2);
@@ -1424,7 +1379,7 @@ public class Dump {
                             break;
                     }
                 } else if (obj.getMetaClass() == context.runtime.getArray()) {
-                    dump_array(context, obj, clas, depth, out);
+                    dump_array(context, (RubyArray) obj, depth, out);
                 } else if (obj.getMetaClass() == context.runtime.getHash()) {
                     dump_hash(context, obj, clas, depth, out.opts.mode, out);
                 } else if (obj instanceof RubyComplex || obj instanceof RubyRegexp) {
