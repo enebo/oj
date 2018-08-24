@@ -413,13 +413,14 @@ public class Dump {
             out.append('0');
             out.append('0');
             dump_hex(str.get(str_i), out);
-            // FIXME: removed cnt-- and size-- here but our cnt I think differs from passed in one in C.
+            cnt--;
+            size--;
             str_i++;
             is_sym = false; // just to make sure
         }
         if (cnt == size) {
             if (is_sym) out.append(':');
-            out.append(str.unsafeBytes(), str.begin(), cnt);
+            out.append(str.unsafeBytes(), str.begin() + str_i, cnt);
             out.append('"');
         } else {
             if (is_sym) {
@@ -467,12 +468,13 @@ public class Dump {
     static void dump_str_obj(ThreadContext context, RubyString string, Out out) {
         ByteList str = string.getByteList();
 
-        if (string.isAsciiOnly()) { // Fast path.  JRuby already knows if it is a clean ASCII string.
+        boolean escape = isEscapeString(str);
+        if (string.isAsciiOnly() && !escape) { // Fast path.  JRuby already knows if it is a clean ASCII string.
             out.append('"');
             out.append(str.unsafeBytes(), str.begin(), str.realSize());
             out.append('"');
         } else {
-            dump_cstr(context, str, false, isEscapeString(str), out);
+            dump_cstr(context, str, false, escape, out);
         }
     }
 
