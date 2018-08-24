@@ -590,22 +590,11 @@ public class RubyOj extends RubyModule {
         return context.nil;
     }
 
-    @JRubyMethod(module = true, rest = true)
-    public static IRubyObject saj_parse(ThreadContext context, IRubyObject self, IRubyObject[] args) {
-        Ruby runtime = context.runtime;
-        ByteList json = null;
-        IRubyObject	input = args[1];
+    @JRubyMethod(module = true)
+    public static IRubyObject saj_parse(ThreadContext context, IRubyObject self, IRubyObject handler, IRubyObject input) {
+        ByteList json = input instanceof RubyString ? ((RubyString) input).getByteList() : getInput(context, input);
 
-
-        if (args.length < 2) {
-            throw runtime.newArgumentError("Wrong number of arguments to saj_parse.\n");
-        }
-        if (input instanceof RubyString) {
-            json = ((RubyString) input).getByteList();
-        } else {
-            json = getInput(context, input);
-        }
-        new SajParse(new StringParserSource(json), context).parse(args[0]);
+        new SajParse(new StringParserSource(json), context).parse(handler);
 
         return context.nil;
     }
