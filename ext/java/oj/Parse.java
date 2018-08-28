@@ -53,8 +53,8 @@ public abstract class Parse {
     public Options options;
     public IRubyObject handler;
     public NumInfo ni;
-    // C version uses head value of stack even when stack is empty.  We are using
-    // Java Stack and we cannot do that.  Store into this field instead.
+    // C version uses head value of stack when stack is empty to hold this value.
+    // We are using Java built-in Stack and we cannot do that.
     public IRubyObject value;
     protected OjLibrary oj = null;
     protected List<IRubyObject> circ_array;
@@ -74,23 +74,13 @@ public abstract class Parse {
     }
 
     public IRubyObject stack_head_val() {
-        if (stack.empty()) {
-            if (value != null) {
-                return value;
-            }
-
-            return context.nil;
-        }
+        if (stack.empty()) return value != null ? value : context.nil;
 
         return stack.firstElement().val;
     }
 
     public Val stack_peek() {
-        if (stack.empty()) {
-            return null;
-        }
-
-        return stack.peek();
+        return stack.empty() ? null : stack.peek();
     }
 
     public void err_init() {

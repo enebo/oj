@@ -1303,13 +1303,10 @@ public class Dump {
 
 
     static void dump_odd(ThreadContext context, IRubyObject obj, Odd odd, RubyClass clas, int depth, Out out) {
-        AttrGetFunc fp;
-        IRubyObject	v;
-        String name;
         int	d2 = depth + 1;
 
         out.append('{');
-        if (null != clas) {
+        if (clas != null) {
             ByteList class_name = ((RubyString) clas.name()).getByteList();
 
             fill_indent(out, d2);
@@ -1317,29 +1314,38 @@ public class Dump {
             dump_cstr(context, class_name, false, false, out);
             out.append(',');
         }
-
-        int index = 0;
-        for (; index < odd.attrs.length; index++) {
-            fp = odd.attrFuncs[index];
-            name = odd.attrs[index];
-            if (null != fp) {
-                v = fp.execute(context, obj);
-            } else if (-1 == name.indexOf('.')) {
-                v = obj.callMethod(context, name);
-            } else {
-                v = obj;
-                for (String segment: name.split("\\.")) {
-                    v = v.callMethod(context, segment);
-                }
-            }
-            fill_indent(out, d2);
-            dump_cstr(context, name, false, false, out);
+        if (odd.raw) {
+            RubyString str = (RubyString) obj.callMethod(context, odd.attrs[0]).checkStringType();
+            out.append('"');
+            out.append(odd.attrs[0]);
+            out.append('"');
             out.append(':');
-            dump_val(context, v, d2, out, null);
-            out.append(',');
+            out.append(str.getByteList());
+        } else {
+            for (int index = 0; index < odd.attrs.length; index++) {
+                String name = odd.attrs[index];
+                IRubyObject value = oddValue(context, obj, name, odd, index);
+                fill_indent(out, d2);
+                dump_cstr(context, name, false, false, out);
+                out.append(':');
+                dump_val(context, value, d2, out, null);
+                out.append(',');
+            }
+            out.pop(); // remove last ','
         }
-        out.pop();
         out.append('}');
+    }
+
+    private static IRubyObject oddValue(ThreadContext context, IRubyObject obj, String name, Odd odd, int index) {
+        if (odd.attrFuncs[index] != null) return odd.attrFuncs[index].execute(context, obj);
+
+        if (name.indexOf('.') == -1) return obj.callMethod(context, name);
+
+        IRubyObject value = obj;
+        for (String segment : name.split("\\.")) {
+            value = value.callMethod(context, segment);
+        }
+        return value;
     }
 
     static void raise_strict(IRubyObject obj) {

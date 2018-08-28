@@ -16,6 +16,7 @@ public class Odd {
     String[] attrs;
     AttrGetFunc[] attrFuncs;
     boolean isModule;
+    boolean raw;
 
     private static AttrGetFunc getDateTimeSecs = new GetDateTimeSecs();
 

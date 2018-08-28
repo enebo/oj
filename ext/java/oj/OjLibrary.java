@@ -91,7 +91,7 @@ public class OjLibrary implements Library {
         return default_options.dup(context);
     }
 
-    public void registerOdd(RubyModule clas, IRubyObject createObject, RubySymbol createMethod, IRubyObject[] newArgs, boolean raw) {
+    public void registerOdd(RubyModule clas, IRubyObject createObject, RubySymbol createMethod, IRubyObject[] newArgs) {
         String[] ids = new String[newArgs.length];
         for (int i = 0; i < newArgs.length; i++) {
             ids[i] = newArgs[i].asJavaString();
@@ -101,9 +101,21 @@ public class OjLibrary implements Library {
         odd.createOp = createMethod.asJavaString();
         odd.createObj = createObject;
         odd.isModule = !(clas instanceof RubyClass);
+        odd.raw = false;
 
         addOrReplaceOdd(odd);
     }
+
+    public void registerRawOdd(RubyModule clas, IRubyObject createObject, RubySymbol createMethod, IRubyObject dumpMethod) {
+        Odd odd = new Odd(clas, new String[] { dumpMethod.asJavaString() });
+        odd.createOp = createMethod.asJavaString();
+        odd.createObj = createObject;
+        odd.isModule = !(clas instanceof RubyClass);
+        odd.raw = true;
+
+        addOrReplaceOdd(odd);
+    }
+
 
     private void addOrReplaceOdd(Odd odd) {
         int length = odds.size();

@@ -632,10 +632,9 @@ public class RubyOj extends RubyModule {
         return context.nil;
     }
 
-    @JRubyMethod(module = true, rest = true)
+    @JRubyMethod(module = true, required = 3, rest = true)
     public static IRubyObject register_odd(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         OjLibrary oj = resolveOj(self);
-        if (3 > args.length) throw context.runtime.newArgumentError("incorrect number of arguments.");
         if (!(args[0] instanceof RubyModule)) throw context.runtime.newArgumentError("expecting class or module.");
         if (!(args[2] instanceof RubySymbol)) throw context.runtime.newArgumentError("expecting symbol.");
 
@@ -646,7 +645,19 @@ public class RubyOj extends RubyModule {
         IRubyObject[] newArgs = new IRubyObject[args.length - 3];
         System.arraycopy(args, 3, newArgs, 0, newArgs.length);
 
-        oj.registerOdd((RubyModule) args[0], args[1], (RubySymbol) args[2], newArgs, false);
+        oj.registerOdd((RubyModule) args[0], args[1], (RubySymbol) args[2], newArgs);
+
+        return context.nil;
+    }
+
+    @JRubyMethod(module = true, required = 4)
+    public static IRubyObject register_odd_raw(ThreadContext context, IRubyObject self, IRubyObject[] args) {
+        OjLibrary oj = resolveOj(self);
+        if (!(args[0] instanceof RubyModule)) throw context.runtime.newArgumentError("expecting class or module.");
+        if (!(args[2] instanceof RubySymbol)) throw context.runtime.newArgumentError("expecting symbol.");
+        if (!(args[3] instanceof RubySymbol) && !(args[3] instanceof RubyString)) throw context.runtime.newArgumentError("expecting symbol or string.");
+
+        oj.registerRawOdd((RubyModule) args[0], args[1], (RubySymbol) args[2], args[3]);
 
         return context.nil;
     }
