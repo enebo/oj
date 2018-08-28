@@ -20,6 +20,8 @@ import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 import org.jruby.util.TypeConverter;
 
+import java.util.ArrayList;
+
 import static oj.Options.*;
 import static oj.options.NanDump.*;
 
@@ -368,6 +370,17 @@ public class RubyOj extends RubyModule {
         copts.allow_nan = setYesNo(context, ropts, "allow_nan");
         copts.trace = setYesNo(context, ropts, "trace");
         copts.create_ok = setYesNo(context, ropts, "create_additions");
+
+        v = ropts.fastARef(runtime.newSymbol("ignore"));
+        if (v != null && !v.isNil()) {
+            RubyArray array = (RubyArray) TypeConverter.checkArrayType(runtime, v);
+            int length = array.size();
+            copts.ignore = new ArrayList<>(length);
+            for (int i = 0; i < length; i++) {
+                // FIXME: we don't know what is in this array...check for module/class
+                copts.ignore.add((RubyModule) array.eltInternal(i));
+            }
+        }
     }
 
     private static char setYesNo(ThreadContext context, RubyHash options, String symbolName) {
