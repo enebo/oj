@@ -10,7 +10,6 @@ import java.util.Stack;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
-import org.jruby.RubyBasicObject;
 import org.jruby.RubyBoolean;
 import org.jruby.RubyClass;
 import org.jruby.RubyFixnum;
@@ -40,7 +39,10 @@ public abstract class Parse {
 //    static final boolean HAS_PROC_WITH_BLOCK = false;
     static final int DEC_MAX = 15;
     static final int EXP_MAX = 100000;
-    static final ByteList INFINITY = new ByteList(new byte[] { 'I', 'n', 'f', 'i', 'n', 'i', 't', 'y'});
+    static final ByteList INFINITY = new ByteList(Dump.INFINITY_VALUE);
+    static final ByteList INF_VALUE = new ByteList(Dump.INF_VALUE);
+    static final ByteList NINF_VALUE = new ByteList(Dump.NINF_VALUE);
+    static final ByteList NAN_VALUE = new ByteList(Dump.NAN_NUMERIC_VALUE);
 
     protected ParserSource source;
     protected ThreadContext context;
@@ -540,6 +542,18 @@ public abstract class Parse {
             ni.str_length = source.currentOffset - start;
         }
         source.advance(-1);
+        if (ni.big) {
+            ByteList value = source.subStr(ni.str_start, ni.str_length);
+
+            if (new ByteList(INF_VALUE).equals(value)) {
+                ni.infinity = true;
+            } else if  (new ByteList(NINF_VALUE).equals(value)) {
+                ni.infinity = true;
+                ni.neg = true;
+            } else if  (new ByteList(NAN_VALUE).equals(value)) {
+                ni.nan = true;
+            }
+        }
         if (BigDec == options.bigdec_load) {
             ni.big = true;
         }

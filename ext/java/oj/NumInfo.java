@@ -71,6 +71,7 @@ public class NumInfo {
                 rnum = runtime.newFloat(Double.NaN);
             } else if (1 == div && 0 == exp) { // fixnum
                 if (big) {
+                    // BIG already makes bytelist once to check for inf/nan so an instance var could be made to not do it twice.
                     if (256 > len) {
                         rnum = ConvertBytes.byteListToInum19(runtime, parse.source.subStr(str_start, str_length), 10, true);
                     } else {

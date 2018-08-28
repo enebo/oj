@@ -11,6 +11,7 @@ import java.util.TimeZone;
 
 import jnr.posix.util.Platform;
 import oj.options.DumpType;
+import oj.options.NanDump;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.RubyArray;
 import org.jruby.RubyBignum;
@@ -67,8 +68,13 @@ public class Dump {
     private static final byte[] NULL_VALUE = {'n', 'u', 'l', 'l'};
     private static final byte[] TRUE_VALUE = {'t', 'r', 'u', 'e'};
     private static final byte[] FALSE_VALUE = {'f', 'a', 'l', 's', 'e'};
-    private static final byte[] INFINITY_VALUE = {'I', 'n', 'f', 'i', 'n', 'i', 't', 'y'};
+    public static final byte[] INFINITY_VALUE = {'I', 'n', 'f', 'i', 'n', 'i', 't', 'y'};
+    private static final byte[] NINFINITY_VALUE = {'-', 'I', 'n', 'f', 'i', 'n', 'i', 't', 'y'};
     private static final byte[] NAN_VALUE = {'N', 'a', 'N'};
+    public static final byte[] INF_VALUE = {'3', '.', '0', 'e', '1', '4', '1', '5', '9', '2', '6', '5', '3', '5', '8', '9', '7', '9', '3', '2', '3', '8', '4', '6'};
+    public static final byte[] NINF_VALUE = {'-', '3', '.', '0', 'e', '1', '4', '1', '5', '9', '2', '6', '5', '3', '5', '8', '9', '7', '9', '3', '2', '3', '8', '4', '6'};
+    public static final byte[] NAN_NUMERIC_VALUE = {'3', '.', '3', 'e', '1', '4', '1', '5', '9', '2', '6', '5', '3', '5', '8', '9', '7', '9', '3', '2', '3', '8', '4', '6'};
+    private static final byte[] ZERO_POINT_ZERO = {'0', '.', '0'};
 
     static String	hex_chars = "0123456789abcdef";
 
@@ -191,6 +197,10 @@ public class Dump {
         out.append(hex_chars.charAt(d));
         d = c & 0x0F;
         out.append(hex_chars.charAt(d));
+    }
+
+    static void dump_raw(byte[] str, Out out) {
+        out.append(str);
     }
 
     static void dump_raw(ByteList str, Out out) {
@@ -321,44 +331,14 @@ public class Dump {
     static void dump_float(ThreadContext context, RubyFloat obj, Out out) {
         double d = obj.getDoubleValue();
 
-        if (0.0 == d) {
-            out.append('0');
-            out.append('.');
-            out.append('0');
-        } else if (OJ_INFINITY == d) {
-            switch (out.opts.mode) {
-                case StrictMode:
-                    raise_strict(obj);
-                case NullMode:
-                    out.append(NULL_VALUE);
-                    break;
-                default:
-                    out.append(INFINITY_VALUE);
-                    break;
-            }
-        } else if (-OJ_INFINITY == d) {
-            switch (out.opts.mode) {
-                case StrictMode:
-                    raise_strict(obj);
-                case NullMode:
-                    out.append(NULL_VALUE);
-                    break;
-                default:
-                    out.append('-');
-                    out.append(INFINITY_VALUE);
-                    break;
-            }
+        if (d == 0.0) {
+            out.append(ZERO_POINT_ZERO);
+        } else if (d == OJ_INFINITY) {
+            dumpInfNanForFloat(out, obj, INF_VALUE, INFINITY_VALUE);
+        } else if (d == -OJ_INFINITY) {
+            dumpInfNanForFloat(out, obj, NINF_VALUE, NINFINITY_VALUE);
         } else if (Double.isNaN(d)) {
-            switch (out.opts.mode) {
-                case StrictMode:
-                    raise_strict(obj);
-                case NullMode:
-                    out.append(NULL_VALUE);
-                    break;
-                default:
-                    out.append(NAN_VALUE);
-                    break;
-            }
+            dumpNanNanForFloat(out, obj);
         /*} else if (d == (double)(long)d) {  // FIXME: Precision overflow?
             cnt = snprintf(buf, sizeof(buf), "%.1f", d);*/
         } else if (0 == out.opts.float_prec) {
@@ -373,6 +353,54 @@ public class Dump {
             ByteList buf = new ByteList();
             Sprintf.sprintf(buf, out.opts.float_fmt, obj);
             out.append(buf);
+        }
+    }
+
+    private static final void dumpNanNanForFloat(Out out, IRubyObject value) {
+        if (out.opts.mode == ObjectMode) {
+            out.append(NAN_NUMERIC_VALUE);
+        } else {
+            NanDump nd = out.opts.dump_opts.nan_dump;
+
+            if (nd == NanDump.AutoNan) {
+                switch (out.opts.mode) {
+                    case CompatMode: nd = NanDump.WordNan; break;
+                    case StrictMode: nd = NanDump.RaiseNan; break;
+                    case NullMode: nd = NanDump.NullNan; break;
+                }
+            }
+
+            switch(nd) {
+                case RaiseNan: raise_strict(value); break;
+                case WordNan: out.append(NAN_VALUE); break;
+                case NullNan: out.append(NULL_VALUE); break;
+                case HugeNan:
+                default: out.append(NAN_NUMERIC_VALUE); break;
+            }
+        }
+    }
+    private static final void dumpInfNanForFloat(Out out, IRubyObject value, byte[] inf_value, byte[] infinity_value) {
+        if (out.opts.mode == ObjectMode) {
+            out.append(inf_value);
+        } else {
+            NanDump nd = out.opts.dump_opts.nan_dump;
+
+            if (nd == NanDump.AutoNan) {
+                switch (out.opts.mode) {
+                    case CompatMode: nd = NanDump.WordNan; break;
+                    case StrictMode: nd = NanDump.RaiseNan; break;
+                    case NullMode: nd = NanDump.NullNan; break;
+                    case CustomMode:  nd = NanDump.NullNan; break;
+                }
+            }
+
+            switch(nd) {
+                case RaiseNan: raise_strict(value); break;
+                case WordNan: out.append(infinity_value); break;
+                case NullNan: out.append(NULL_VALUE); break;
+                case HugeNan:
+                default: out.append(inf_value); break;
+            }
         }
     }
 
@@ -1003,12 +1031,34 @@ public class Dump {
             ByteList str = stringToByteList(context, obj, "to_s");
             if (out.opts.bigdec_as_num != No) {
                 dump_raw(str, out);
+            } else if (INFINITY_VALUE.equals(str)) {
+                dump_raw(nan_str(obj, out.opts.dump_opts.nan_dump, out.opts.mode, true), out);
+            } else if (NINFINITY_VALUE.equals(str)) {
+                dump_raw(nan_str(obj, out.opts.dump_opts.nan_dump, out.opts.mode, false), out);
             } else {
                 dump_cstr(context, str, false, false, out);
             }
         } else {
             dump_nil(out);
         }
+    }
+
+    private static byte[] nan_str(IRubyObject value, NanDump nd, char mode, boolean positive) {
+        if (nd == NanDump.AutoNan) {
+            switch (mode) {
+                case CompatMode: nd = NanDump.WordNan; break;
+                case StrictMode: nd = NanDump.RaiseNan; break;
+            }
+        }
+        switch(nd) {
+            case RaiseNan: raise_strict(value); break;
+            case WordNan: return positive ? INFINITY_VALUE : NINFINITY_VALUE;
+            case NullNan: return NULL_VALUE;
+            case HugeNan:
+                return INF_VALUE;
+        }
+
+        return null; // C source does this but this I believe will crash in both impls...let's see....
     }
 
      // FIXME: both C and Java can crash potentially I added check here but
@@ -1068,8 +1118,14 @@ public class Dump {
 
         if (0 <= id) {
             if (obj instanceof RubyBigDecimal) {
-                ByteList rstr = stringToByteList(context, obj, "to_s");
-                dump_raw(rstr, out);
+                ByteList str = stringToByteList(context, obj, "to_s");
+                if (INFINITY_VALUE.equals(str)) {
+                    dump_raw(nan_str(obj, out.opts.dump_opts.nan_dump, out.opts.mode, true), out);
+                } else if (NINFINITY_VALUE.equals(str)) {
+                    dump_raw(nan_str(obj, out.opts.dump_opts.nan_dump, out.opts.mode, false), out);
+                } else {
+                    dump_raw(str, out);
+                }
             } else {
                 dump_obj_attrs(context, obj, obj.getMetaClass(), id, depth, out);
             }
