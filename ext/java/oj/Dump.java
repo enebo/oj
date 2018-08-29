@@ -584,6 +584,8 @@ public class Dump {
     }
 
     static void hash_cb_strict(ThreadContext context, IRubyObject key, IRubyObject value, Out out) {
+        if (out.omit_nil && value.isNil()) return;
+
         int		depth = out.depth;
 
         if (!(key instanceof RubyString)) {
@@ -1484,6 +1486,7 @@ public class Dump {
         out.circ_cnt = 0;
         out.opts = copts;
         out.hash_cnt = 0;
+        out.omit_nil = copts.dump_opts.omit_nil;
         if (Yes == copts.circular) {
             out.new_circ_cache();
         }
