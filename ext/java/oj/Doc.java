@@ -301,11 +301,12 @@ public class Doc extends RubyObject {
         if (leaf != null) {
             OjLibrary oj = RubyOj.oj(context);
             Options options = OjLibrary.getDefaultOptions(context);
-            if (null == filename) {
-                Out out = Dump.leaf_to_json(context, oj, leaf, options);
+            Out out = new Out(oj);
+            if (filename == null) {
+                new LeafDump(context, out).leafToJSON(leaf, options);
                 return context.runtime.newString(out.buf);
             } else {
-                Dump.leaf_to_file(context, oj, leaf, filename, options);
+                new LeafDump(context, out).leafToFile(leaf, filename, options);
             }
         }
         return context.nil;

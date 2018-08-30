@@ -1,5 +1,6 @@
 package oj;
 
+import oj.options.DumpType;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyClass;
@@ -11,7 +12,10 @@ import org.jruby.runtime.Block;
 import org.jruby.runtime.ObjectAllocator;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
+import org.jruby.util.ByteList;
 import org.jruby.util.TypeConverter;
+
+import static oj.options.DumpType.*;
 
 /** Document-class: Oj::StringWriter
  *
@@ -24,6 +28,7 @@ import org.jruby.util.TypeConverter;
  */
 public class StringWriter extends RubyObject {
     public StrWriter sw;
+    private Dump dump;
 
     private static ObjectAllocator ALLOCATOR = new ObjectAllocator() {
         @Override
@@ -44,12 +49,15 @@ public class StringWriter extends RubyObject {
 
     @JRubyMethod(optional = 1)
     public IRubyObject initialize(ThreadContext context, IRubyObject[] argv) {
-        sw = new StrWriter(context, RubyOj.oj(context));
+        OjLibrary oj = RubyOj.oj(context);
+        sw = new StrWriter(context, oj);
 
         if (1 == argv.length) {
             RubyOj.parse_options(context, argv[0], sw.opts);
         }
         sw.out.indent = sw.opts.indent;
+
+        dump = Dump.createDump(context, sw.out, sw.opts.mode);
 
         return this;
     }
@@ -64,7 +72,7 @@ public class StringWriter extends RubyObject {
     @JRubyMethod
     public IRubyObject push_key(ThreadContext context, IRubyObject key) {
         RubyString string = (RubyString) TypeConverter.checkStringType(context.runtime, key);
-        Dump.push_key(context, sw, string.getByteList());
+        push_key(context, sw, string.getByteList());
         return context.nil;
     }
 
@@ -76,11 +84,11 @@ public class StringWriter extends RubyObject {
      */
     @JRubyMethod
     public IRubyObject push_object(ThreadContext context, Block block) {
-        Dump.push_object(context, sw, null);
+        push_object(context, sw, null);
 
         if (block.isGiven()) {
             block.yield(context, context.nil);
-            Dump.pop(context, sw);
+            pop(context, sw);
         }
         return context.nil;
     }
@@ -88,15 +96,15 @@ public class StringWriter extends RubyObject {
     @JRubyMethod
     public IRubyObject push_object(ThreadContext context, IRubyObject key, Block block) {
         if (context.nil == key) {
-            Dump.push_object(context, sw, null);
+            push_object(context, sw, null);
         } else {
             RubyString string = (RubyString) TypeConverter.checkStringType(context.runtime, key);
-            Dump.push_object(context, sw, string.getByteList());
+            push_object(context, sw, string.getByteList());
         }
 
         if (block.isGiven()) {
             block.yield(context, context.nil);
-            Dump.pop(context, sw);
+            pop(context, sw);
         }
 
         return context.nil;
@@ -110,11 +118,11 @@ public class StringWriter extends RubyObject {
      */
     @JRubyMethod
     public IRubyObject push_array(ThreadContext context, Block block) {
-        Dump.push_array(context, sw, null);
+        push_array(context, sw, null);
 
         if (block.isGiven()) {
             block.yield(context, context.nil);
-            Dump.pop(context, sw);
+            pop(context, sw);
         }
         return context.nil;
     }
@@ -122,15 +130,15 @@ public class StringWriter extends RubyObject {
     @JRubyMethod
     public IRubyObject push_array(ThreadContext context, IRubyObject key, Block block) {
         if (context.nil == key) {
-            Dump.push_array(context, sw, null);
+            push_array(context, sw, null);
         } else {
             RubyString string = (RubyString) TypeConverter.checkStringType(context.runtime, key);
-            Dump.push_array(context, sw, string.getByteList());
+            push_array(context, sw, string.getByteList());
         }
 
         if (block.isGiven()) {
             block.yield(context, context.nil);
-            Dump.pop(context, sw);
+            pop(context, sw);
         }
         return context.nil;
     }
@@ -143,17 +151,17 @@ public class StringWriter extends RubyObject {
      */
     @JRubyMethod
     public IRubyObject push_value(ThreadContext context, IRubyObject value) {
-        Dump.push_value(context, sw, value, null);
+        push_value(context, sw, value, null);
         return context.nil;
     }
 
     @JRubyMethod
     public IRubyObject push_value(ThreadContext context, IRubyObject value, IRubyObject key) {
         if (context.nil == key) {
-            Dump.push_value(context, sw, value, null);
+            push_value(context, sw, value, null);
         } else {
             RubyString string = (RubyString) TypeConverter.checkStringType(context.runtime, key);
-            Dump.push_value(context, sw, value, string.getByteList());
+            push_value(context, sw, value, string.getByteList());
         }
         return context.nil;
     }
@@ -169,7 +177,7 @@ public class StringWriter extends RubyObject {
     @JRubyMethod
     public IRubyObject push_json(ThreadContext context, IRubyObject value) {
         RubyString string = (RubyString) TypeConverter.checkStringType(context.runtime, value);
-        Dump.push_json(context, sw, string.getByteList(), null);
+        push_json(context, sw, string.getByteList(), null);
         return context.nil;
     }
 
@@ -178,10 +186,10 @@ public class StringWriter extends RubyObject {
         RubyString string = (RubyString) TypeConverter.checkStringType(context.runtime, value);
 
         if (context.nil == key) {
-            Dump.push_json(context, sw, string.getByteList(), null);
+            push_json(context, sw, string.getByteList(), null);
         } else {
             RubyString keyString = (RubyString) TypeConverter.checkStringType(context.runtime, key);
-            Dump.push_json(context, sw, string.getByteList(), keyString.getByteList());
+            push_json(context, sw, string.getByteList(), keyString.getByteList());
         }
         return context.nil;
     }
@@ -194,7 +202,7 @@ public class StringWriter extends RubyObject {
      */
     @JRubyMethod
     public IRubyObject pop(ThreadContext context) {
-        Dump.pop(context, sw);
+        pop(context, sw);
         return context.nil;
     }
 
@@ -205,7 +213,7 @@ public class StringWriter extends RubyObject {
      */
     @JRubyMethod
     public IRubyObject pop_all(ThreadContext context) {
-        Dump.pop_all(context, sw);
+        pop_all(context, sw);
         return context.nil;
     }
 
@@ -234,5 +242,115 @@ public class StringWriter extends RubyObject {
         rstr.setEncoding(UTF8Encoding.INSTANCE);
 
         return rstr;
+    }
+
+
+    void key_check(ThreadContext context, StrWriter sw, ByteList key) {
+        DumpType type = sw.peekTypes();
+
+        if (null == key && (ObjectNew == type || ObjectType == type)) {
+            throw context.runtime.newStandardError("Can not push onto an Object without a key.");
+        }
+    }
+
+    void push_type(ThreadContext context, StrWriter sw, DumpType type) {
+        sw.types.push(type);
+    }
+
+    void maybe_comma(StrWriter sw) {
+        DumpType type = sw.peekTypes();
+        if (type == ObjectNew) {
+            sw.types.set(sw.types.size() - 1, ObjectType);
+        } else if (type == ArrayNew) {
+            sw.types.set(sw.types.size() - 1, ArrayType);
+        } else if (type == ObjectType || type == ArrayType) {
+            // Always have a few characters available in the out.buf.
+            sw.out.append(',');
+        }
+    }
+
+    void push_key(ThreadContext context, StrWriter sw, ByteList key) {
+        DumpType type = sw.peekTypes();
+
+        if (sw.keyWritten) {
+            throw context.runtime.newStandardError("Can not push more than one key before pushing a non-key.");
+        }
+        if (ObjectNew != type && ObjectType != type) {
+            throw context.runtime.newStandardError("Can only push a key onto an Object.");
+        }
+
+        maybe_comma(sw);
+        if (!sw.types.empty()) dump.fill_indent(sw.types.size());
+
+        dump.dump_cstr(key, false, false);
+        sw.out.append(':');
+        sw.keyWritten = true;
+    }
+
+    void push_object(ThreadContext context, StrWriter sw, ByteList key) {
+        dump_key(context, sw, key);
+        sw.out.append('{');
+        push_type(context, sw, ObjectNew);
+    }
+
+    void push_array(ThreadContext context, StrWriter sw, ByteList key) {
+        dump_key(context, sw, key);
+        sw.out.append('[');
+        push_type(context, sw, ArrayNew);
+    }
+
+    void push_value(ThreadContext context, StrWriter sw, IRubyObject val, ByteList key) {
+        dump_key(context, sw, key);
+        dump.dump_val(val, sw.types.size(), null);
+    }
+
+    void push_json(ThreadContext context, StrWriter sw, ByteList json, ByteList key) {
+        dump_key(context, sw, key);
+        dump.dump_raw(json);
+    }
+
+    void dump_key(ThreadContext context, StrWriter sw, ByteList key) {
+        if (sw.keyWritten) {
+            sw.keyWritten = false;
+        } else {
+            key_check(context, sw, key);
+            maybe_comma(sw);
+            if (!sw.types.empty()) {
+                dump.fill_indent(sw.types.size());
+            }
+            if (null != key) {
+                dump.dump_cstr(key, false, false);
+                sw.out.append(':');
+            }
+        }
+    }
+
+    void pop(ThreadContext context, StrWriter sw) {
+        if (sw.keyWritten) {
+            sw.keyWritten = false;
+            throw context.runtime.newStandardError("Can not pop after writing a key but no value.");
+        }
+
+        if (sw.types.empty()) {
+            throw context.runtime.newStandardError("Can not pop with no open array or object.");
+        }
+
+        DumpType type = sw.types.pop();
+
+        dump.fill_indent(sw.types.size());
+        if (type == ObjectNew || type == ObjectType) {
+            sw.out.append('}');
+        } else if (type == ArrayNew || type == ArrayType) {
+            sw.out.append(']');
+        }
+        if (sw.types.empty() && 0 <= sw.out.indent) {
+            sw.out.append('\n');
+        }
+    }
+
+    void pop_all(ThreadContext context, StrWriter sw) {
+        while (!sw.types.empty()) {
+            pop(context, sw);
+        }
     }
 }

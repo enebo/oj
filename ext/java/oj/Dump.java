@@ -1,18 +1,9 @@
 package oj;
 
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.Formatter;
-import java.util.List;
-import java.util.TimeZone;
-
 import jnr.posix.util.Platform;
-import oj.options.DumpType;
 import oj.options.NanDump;
 import org.jcodings.specific.UTF8Encoding;
+import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyBignum;
 import org.jruby.RubyBoolean;
@@ -40,88 +31,160 @@ import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.runtime.builtin.Variable;
 import org.jruby.util.ByteList;
 import org.jruby.util.Sprintf;
-import org.jruby.util.StringSupport;
 import org.jruby.util.TypeConverter;
 
-import static oj.options.DumpType.ArrayNew;
-import static oj.options.DumpType.ArrayType;
-import static oj.options.DumpType.ObjectNew;
-import static oj.options.DumpType.ObjectType;
-import static oj.Options.*;
-import static oj.NumInfo.OJ_INFINITY;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Formatter;
+import java.util.List;
+import java.util.TimeZone;
 
+import static oj.NumInfo.OJ_INFINITY;
+import static oj.Options.*;
+import static oj.Options.Yes;
 
 /**
- * Created by enebo on 9/9/15.
+ * Created by enebo on 8/29/18.
  */
-public class Dump {
+public abstract class Dump {
+    protected ThreadContext context;
+    protected Ruby runtime;
+    protected Out out;
+
+    static Dump createDump(ThreadContext context, Out out, int mode) {
+        switch (mode) {
+            case NullMode: return new NullDump(context, out);
+            case StrictMode: return new StrictDump(context, out);
+            case CompatMode: return new CompatDump(context, out);
+            case ObjectMode:
+            default: //FIXME consider not defaulting or understand what default is.
+                return new ObjectDump(context, out);
+        }
+    }
+
+    public Dump(ThreadContext context, Out out) {
+        this.context = context;
+        this.runtime = context.runtime;
+        this.out = out;
+    }
+
+    // Entry Point
+    public void obj_to_json(IRubyObject obj, Options copts) {
+        obj_to_json_using_params(obj, copts, IRubyObject.NULL_ARRAY);
+    }
+
+    // Entry Point
+    public void write_obj_to_file(IRubyObject obj, String path, Options copts) {
+        FileOutputStream f = null;
+
+        out.omit_nil = copts.dump_opts.omit_nil;
+
+        obj_to_json(obj, copts);
+
+        try {
+            f = new FileOutputStream(path);
+
+            out.write(f);
+        } catch (FileNotFoundException e) {
+            throw context.runtime.newIOErrorFromException(e);
+        } catch (IOException e) {
+            throw context.runtime.newIOErrorFromException(e);
+        } finally {
+            if (f != null) {
+                try { f.close(); } catch (IOException e) {}
+            }
+        }
+    }
+
+    // Entry Point
+    public void write_obj_to_stream(IRubyObject obj, IRubyObject stream, Options copts) {
+        out.omit_nil = copts.dump_opts.omit_nil;
+
+        obj_to_json(obj, copts);
+
+        // Note: Removed Windows path as it called native write on fileno and JRuby does work the same way.
+        if (obj instanceof StringIO) {
+            ((StringIO) obj).write(context, context.runtime.newString(out.buf));
+        } else if (stream.respondsTo("write")) {
+            stream.callMethod(context, "write", context.runtime.newString(out.buf));
+        } else {
+            throw context.runtime.newArgumentError("to_stream() expected an IO Object.");
+        }
+    }
+
     static int MAX_DEPTH = 1000;
 
-    private static final byte[] BIG_O_KEY = {'"', '^', 'O', '"', ':'};
-    private static final byte[] C_KEY = {'"', '^', 'c', '"', ':'};
-    private static final byte[] O_KEY = {'"', '^', 'o', '"', ':'};
-    private static final byte[] I_KEY = {'"', '^', 'i', '"', ':'};
-    private static final byte[] PARTIAL_I_KEY = {'"', '^', 'i'};
-    private static final byte[] T_KEY = {'"', '^', 't', '"', ':'};
-    private static final byte[] U_KEY = {'"', '^', 'u', '"', ':', '['};
-    private static final byte[] SELF_KEY = {'"', 's', 'e', 'l', 'f', '"', ':'};
-    private static final byte[] NULL_VALUE = {'n', 'u', 'l', 'l'};
-    private static final byte[] TRUE_VALUE = {'t', 'r', 'u', 'e'};
-    private static final byte[] FALSE_VALUE = {'f', 'a', 'l', 's', 'e'};
+    protected static final byte[] BIG_O_KEY = {'"', '^', 'O', '"', ':'};
+    protected static final byte[] C_KEY = {'"', '^', 'c', '"', ':'};
+    protected static final byte[] O_KEY = {'"', '^', 'o', '"', ':'};
+    protected static final byte[] I_KEY = {'"', '^', 'i', '"', ':'};
+    protected static final byte[] PARTIAL_I_KEY = {'"', '^', 'i'};
+    protected static final byte[] PARTIAL_R_KEY = {'"', '^', 'r'};
+    protected static final byte[] T_KEY = {'"', '^', 't', '"', ':'};
+    protected static final byte[] U_KEY = {'"', '^', 'u', '"', ':', '['};
+    protected static final byte[] SELF_KEY = {'"', 's', 'e', 'l', 'f', '"', ':'};
+    protected static final byte[] NULL_VALUE = {'n', 'u', 'l', 'l'};
+    protected static final byte[] TRUE_VALUE = {'t', 'r', 'u', 'e'};
+    protected static final byte[] FALSE_VALUE = {'f', 'a', 'l', 's', 'e'};
     public static final byte[] INFINITY_VALUE = {'I', 'n', 'f', 'i', 'n', 'i', 't', 'y'};
-    private static final byte[] NINFINITY_VALUE = {'-', 'I', 'n', 'f', 'i', 'n', 'i', 't', 'y'};
-    private static final byte[] NAN_VALUE = {'N', 'a', 'N'};
+    protected static final byte[] NINFINITY_VALUE = {'-', 'I', 'n', 'f', 'i', 'n', 'i', 't', 'y'};
+    protected static final byte[] NAN_VALUE = {'N', 'a', 'N'};
     public static final byte[] INF_VALUE = {'3', '.', '0', 'e', '1', '4', '1', '5', '9', '2', '6', '5', '3', '5', '8', '9', '7', '9', '3', '2', '3', '8', '4', '6'};
     public static final byte[] NINF_VALUE = {'-', '3', '.', '0', 'e', '1', '4', '1', '5', '9', '2', '6', '5', '3', '5', '8', '9', '7', '9', '3', '2', '3', '8', '4', '6'};
     public static final byte[] NAN_NUMERIC_VALUE = {'3', '.', '3', 'e', '1', '4', '1', '5', '9', '2', '6', '5', '3', '5', '8', '9', '7', '9', '3', '2', '3', '8', '4', '6'};
-    private static final byte[] ZERO_POINT_ZERO = {'0', '.', '0'};
+    protected static final byte[] ZERO_POINT_ZERO = {'0', '.', '0'};
+    protected static final ByteList INFINITY = new ByteList(INFINITY_VALUE);
+    protected static final ByteList NINFINITY = new ByteList(NINFINITY_VALUE);
 
     static String	hex_chars = "0123456789abcdef";
 
     // JSON standard except newlines are no escaped
     static int newline_friendly_chars[] = {
-        6,6,6,6,6,6,6,6,2,2,1,6,2,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-        1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+            6,6,6,6,6,6,6,6,2,2,1,6,2,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+            1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
 
     // JSON standard
     static int hibit_friendly_chars[] = {
-        6,6,6,6,6,6,6,6,2,2,2,6,2,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-        1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+            6,6,6,6,6,6,6,6,2,2,2,6,2,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+            1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
 
     // High bit set characters are always encoded as unicode. Worse case is 3
     // bytes per character in the output. That makes this conservative.
     static int	ascii_friendly_chars[] = {
-        6,6,6,6,6,6,6,6,2,2,2,6,2,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-        1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,6,
-        3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
-        3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
-        3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
-        3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3};
+            6,6,6,6,6,6,6,6,2,2,2,6,2,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+            1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,6,
+            3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+            3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+            3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+            3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3};
 
     // XSS safe mode
     static int xss_friendly_chars[] = {
-        6,6,6,6,6,6,6,6,2,2,2,6,2,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
-        1,1,2,1,1,1,6,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,6,1,6,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,
-        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,6,
-        3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
-        3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
-        3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
-        3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3};
+            6,6,6,6,6,6,6,6,2,2,2,6,2,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
+            1,1,2,1,1,1,6,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,6,1,6,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,6,
+            3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+            3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+            3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+            3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3};
 
 
     static int newline_friendly_size(ByteList str) {
@@ -164,7 +227,7 @@ public class Dump {
         return size - len * (int)'0';
     }
 
-    static void fill_indent(Out out, int cnt) {
+    protected void fill_indent(int cnt) {
         if (out.indent > 0) {
             cnt *= out.indent;
             out.append('\n');
@@ -191,7 +254,7 @@ public class Dump {
         }
     }
 
-     static void dump_hex(int c, Out out) {
+    static void dump_hex(int c, Out out) {
         int	d = (c >> 4) & 0x0F;
 
         out.append(hex_chars.charAt(d));
@@ -199,11 +262,11 @@ public class Dump {
         out.append(hex_chars.charAt(d));
     }
 
-    static void dump_raw(byte[] str, Out out) {
+    protected void dump_raw(byte[] str) {
         out.append(str);
     }
 
-    static void dump_raw(ByteList str, Out out) {
+    protected void dump_raw(ByteList str) {
         out.append(str);
     }
 
@@ -259,8 +322,8 @@ public class Dump {
     }
 
     // returns 0 if not using circular references, -1 if not further writing is
-// needed (duplicate), and a positive value if the object was added to the cache.
-    static long check_circular(IRubyObject obj, Out out) {
+    // needed (duplicate), and a positive value if the object was added to the cache.
+    protected long check_circular(IRubyObject obj, Out out) {
         Integer	id = 0;
 
         if (ObjectMode == out.opts.mode && Yes == out.opts.circular) {
@@ -270,9 +333,7 @@ public class Dump {
                 id = out.circ_cnt;
                 out.circ_cache.put(obj, id);
             } else {
-                out.append('"');
-                out.append('^');
-                out.append('r');
+                out.append(PARTIAL_R_KEY);
                 dump_ulong(id.longValue(), out);
                 out.append('"');
 
@@ -282,19 +343,19 @@ public class Dump {
         return id.longValue();
     }
 
-    static void dump_nil(Out out) {
+    protected void dump_nil() {
         out.append(NULL_VALUE);
     }
 
-    static void dump_true(Out out) {
+    protected void dump_true() {
         out.append(TRUE_VALUE);
     }
 
-    static void dump_false(Out out) {
+    protected void dump_false() {
         out.append(FALSE_VALUE);
     }
 
-    static void dump_fixnum(RubyFixnum obj, Out out) {
+    protected void dump_fixnum(RubyFixnum obj) {
         byte buf[] = new byte[32];
         int	b = buf.length - 1;
         long num = obj.getLongValue();
@@ -322,13 +383,14 @@ public class Dump {
         out.append(buf, b, size);
     }
 
-    static void dump_bignum(ThreadContext context, RubyBignum obj, Out out) {
+    protected void dump_bignum(RubyBignum obj) {
         // Note: This uses boxed call to to_s because 9.1 -> 9.2 changed return type on non-boxed version
         // from IRubyObject -> RubyString.
         out.append(obj.to_s(new IRubyObject[] { context.runtime.newFixnum(10) }).convertToString().getByteList());
     }
 
-    static void dump_float(ThreadContext context, RubyFloat obj, Out out) {
+    // fIXME: this may be for object only
+    protected void dump_float(RubyFloat obj) {
         double d = obj.getDoubleValue();
 
         if (d == 0.0) {
@@ -339,16 +401,10 @@ public class Dump {
             dumpInfNanForFloat(out, obj, NINF_VALUE, NINFINITY_VALUE);
         } else if (Double.isNaN(d)) {
             dumpNanNanForFloat(out, obj);
-        /*} else if (d == (double)(long)d) {  // FIXME: Precision overflow?
-            cnt = snprintf(buf, sizeof(buf), "%.1f", d);*/
         } else if (0 == out.opts.float_prec) {
             IRubyObject	rstr = Helpers.invoke(context, obj, "to_s");
-
-            if (!(rstr instanceof RubyString)) {
-                throw context.runtime.newArgumentError("Expected a String");
-            }
-
-            out.append(((RubyString) rstr).getByteList().bytes());
+            RubyString str = (RubyString) TypeConverter.checkStringType(context.runtime, rstr);
+            out.append(str.getByteList().bytes());
         } else {
             ByteList buf = new ByteList();
             Sprintf.sprintf(buf, out.opts.float_fmt, obj);
@@ -406,11 +462,11 @@ public class Dump {
 
     // FIXME: This is going to mess up blindly grabbing bytes if it mismatches UTF-8 (I believe all strings
     // will be UTF-8 or clean ascii 7-bit).
-    static void dump_cstr(ThreadContext context, String str, boolean is_sym, boolean escape1, Out out) {
-        dump_cstr(context, new ByteList(str.getBytes(), UTF8Encoding.INSTANCE), is_sym, escape1, out);
+    protected void dump_cstr(String str, boolean is_sym, boolean escape1) {
+        dump_cstr(new ByteList(str.getBytes(), UTF8Encoding.INSTANCE), is_sym, escape1);
     }
 
-    static void dump_cstr(ThreadContext context, ByteList str, boolean is_sym, boolean escape1, Out out) {
+    protected void dump_cstr(ByteList str, boolean is_sym, boolean escape1) {
         int	size;
         int[] cmap;
         int str_i = 0;
@@ -463,15 +519,15 @@ public class Dump {
                     case 2:
                         out.append('\\');
                         switch ((byte) str.get(str_i)) {
-                        case '\\':	out.append('\\');	break;
-                        case '\b':	out.append('b');	break;
-                        case '\t':	out.append('t');	break;
-                        case '\n':	out.append('n');	break;
-                        case '\f':	out.append('f');	break;
-                        case '\r':	out.append('r');	break;
-                        default:	out.append(str.get(str_i));	break;
-                    }
-                    break;
+                            case '\\':	out.append('\\');	break;
+                            case '\b':	out.append('b');	break;
+                            case '\t':	out.append('t');	break;
+                            case '\n':	out.append('n');	break;
+                            case '\f':	out.append('f');	break;
+                            case '\r':	out.append('r');	break;
+                            default:	out.append(str.get(str_i));	break;
+                        }
+                        break;
                     case 3: // Unicode
                         str_i = dump_unicode(context, str, str_i, cnt, out);
                         break;
@@ -490,55 +546,14 @@ public class Dump {
         }
     }
 
-    static void dump_str_comp(ThreadContext context, RubyString obj, Out out) {
-        dump_cstr(context, obj.getByteList(), false, false, out);
-    }
+    protected abstract void dump_bigdecimal(RubyBigDecimal bigdecimal, int depth);
+    protected abstract void dump_str(RubyString string);
+    protected abstract void dump_time(RubyTime time, int depth);
+    protected abstract void dump_sym(RubySymbol symbol);
+    protected abstract void dump_class(RubyModule clas);
+    protected abstract String modeName();
 
-    static void dump_str_obj(ThreadContext context, RubyString string, Out out) {
-        ByteList str = string.getByteList();
-
-        boolean escape = isEscapeString(str);
-        if (string.isAsciiOnly() && !escape) { // Fast path.  JRuby already knows if it is a clean ASCII string.
-            out.append('"');
-            out.append(str.unsafeBytes(), str.begin(), str.realSize());
-            out.append('"');
-        } else {
-            dump_cstr(context, str, false, escape, out);
-        }
-    }
-
-    static boolean isEscapeString(ByteList str) {
-        if (str.realSize() >=2 ) {
-            int s = str.get(0);
-            if (s == ':') return true;
-            if (s == '^'){
-                s = str.get(1);
-                return s == 'r' || s == 'i';
-            }
-        }
-        return false;
-    }
-
-    static void dump_sym_comp(ThreadContext context, RubySymbol obj, Out out) {
-        dump_cstr(context, ((RubyString) obj.to_s()).getByteList(), false, false, out);
-    }
-
-    static void dump_sym_obj(ThreadContext context, RubySymbol obj, Out out) {
-        dump_cstr(context, ((RubyString) obj.to_s()).getByteList(), true, false, out);
-    }
-
-    static void dump_class_comp(ThreadContext context, RubyModule clas, Out out) {
-        dump_cstr(context, new ByteList(clas.getName().getBytes()), false, false, out);
-    }
-
-    static void dump_class_obj(ThreadContext context, RubyModule clas, Out out) {
-        out.append('{');
-        out.append(C_KEY);
-        dump_cstr(context, new ByteList(clas.getName().getBytes()), false, false, out);
-        out.append('}');
-    }
-
-    static void dump_array(ThreadContext context, RubyArray array, int depth, Out out) {
+    protected void dump_array(RubyArray array, int depth) {
         int d2 = depth + 1;
         long id = check_circular(array, out);
 
@@ -546,7 +561,7 @@ public class Dump {
 
         out.append('[');
         if (id > 0) {
-            fill_indent(out, d2);
+            fill_indent(d2);
             out.append(PARTIAL_I_KEY);
             dump_ulong(id, out);
             out.append('"');
@@ -560,16 +575,16 @@ public class Dump {
             int cnt = array.getLength() - 1;
 
             for (int i = 0; i <= cnt; i++) {
-                indent(out, d2, out.opts.dump_opts.array_nl);
-                dump_val(context, array.eltInternal(i), d2, out, null);
+                indent(d2, out.opts.dump_opts.array_nl);
+                dump_val(array.eltInternal(i), d2, null);
                 if (i < cnt) out.append(',');
             }
-            indent(out, depth, out.opts.dump_opts.array_nl);
+            indent(depth, out.opts.dump_opts.array_nl);
             out.append(']');
         }
     }
 
-    static void indent(Out out, int depth, ByteList nl) {
+    protected void indent(int depth, ByteList nl) {
         if (out.opts.dump_opts.use) {
             if (nl != ByteList.EMPTY_BYTELIST) out.append(nl);
 
@@ -579,17 +594,17 @@ public class Dump {
                 }
             }
         } else {
-            fill_indent(out, depth);
+            fill_indent(depth);
         }
     }
 
-    static void hash_cb_strict(ThreadContext context, IRubyObject key, IRubyObject value, Out out) {
+    protected void visit_hash(IRubyObject key, IRubyObject value) {
         if (out.omit_nil && value.isNil()) return;
 
-        int		depth = out.depth;
+        int depth = out.depth;
 
         if (!(key instanceof RubyString)) {
-            throw context.runtime.newTypeError("In :strict mode all Hash keys must be Strings, not " + key.getMetaClass().getName());
+            throw context.runtime.newTypeError("In :" + modeName() + " mode all Hash keys must be Strings, not " + key.getMetaClass().getName());
         }
         if (out.opts.dump_opts.use) {
             if (out.opts.dump_opts.hash_nl != ByteList.EMPTY_BYTELIST) {
@@ -601,7 +616,7 @@ public class Dump {
                     out.append(out.opts.dump_opts.indent_str);
                 }
             }
-            dump_str_comp(context, (RubyString) key, out);
+            dump_str((RubyString) key);
             if (out.opts.dump_opts.before_sep != ByteList.EMPTY_BYTELIST) {
                 out.append(out.opts.dump_opts.before_sep);
             }
@@ -610,155 +625,43 @@ public class Dump {
                 out.append(out.opts.dump_opts.after_sep);
             }
         } else {
-            fill_indent(out, depth);
-            dump_str_comp(context, (RubyString) key, out);
+            fill_indent(depth);
+            dump_str((RubyString) key);
             out.append(':');
         }
-        dump_val(context, value, depth, out, null);
+        dump_val(value, depth, null);
         out.depth = depth;
         out.append(',');
     }
 
-    static void hash_cb_compat(ThreadContext context, IRubyObject key, IRubyObject value, Out out) {
-        int		depth = out.depth;
-
-        indent(out, depth, out.opts.dump_opts.hash_nl);
-
-        if (key instanceof RubyString) {
-            dump_str_comp(context, (RubyString) key, out);
-        } else if (key instanceof RubySymbol) {
-            dump_sym_comp(context, (RubySymbol) key, out);
-        } else {
-            /*rb_raise(rb_eTypeError, "In :compat mode all Hash keys must be Strings or Symbols, not %s.\n", rb_class2name(rb_obj_class(key)));*/
-            dump_cstr(context, stringToByteList(context, key, "to_s"), false, false, out);
-        }
-        if (out.opts.dump_opts.use) {
-            if (out.opts.dump_opts.before_sep != ByteList.EMPTY_BYTELIST) {
-                out.append(out.opts.dump_opts.before_sep);
-            }
-            out.append(':');
-            if (out.opts.dump_opts.after_sep != ByteList.EMPTY_BYTELIST) {
-                out.append(out.opts.dump_opts.after_sep);
-            }
-        } else {
-            out.append(':');
-        }
-        dump_val(context, value, depth, out, null);
-        out.depth = depth;
-        out.append(',');
-    }
-
-    static void hash_cb_object(ThreadContext context, IRubyObject key, IRubyObject value, Out out) {
-        if (out.opts.ignore != null && dump_ignore(out, value)) return;
-        if (out.omit_nil && value.isNil()) return;
-
-        int		depth = out.depth;
-
-        fill_indent(out, depth);
-        if (key instanceof RubyString) {
-            dump_str_obj(context, (RubyString) key, out);
-            out.append(':');
-            dump_val(context, value, depth, out, null);
-        } else if (key instanceof RubySymbol) {
-            dump_sym_obj(context, (RubySymbol) key, out);
-            out.append(':');
-            dump_val(context, value, depth, out, null);
-        } else {
-            int	d2 = depth + 1;
-            int	i;
-            boolean	started = false;
-            int	b;
-
-            out.append('"');
-            out.append('^');
-            out.append('#');
-            out.hash_cnt++;
-            for (i = 28; 0 <= i; i -= 4) {
-                b = (int)((out.hash_cnt >> i) & 0x0000000F);
-                if ('\0' != b) {
-                    started = true;
-                }
-                if (started) {
-                    out.append(hex_chars.charAt(b));
-                }
-            }
-            out.append('"');
-            out.append(':');
-            out.append('[');
-            fill_indent(out, d2);
-            dump_val(context, key, d2, out, null);
-            out.append(',');
-            fill_indent(out, d2);
-            dump_val(context, value, d2, out, null);
-            fill_indent(out, depth);
-            out.append(']');
-        }
-        out.depth = depth;
-        out.append(',');
-    }
-
-    static void dump_hash(final ThreadContext context, IRubyObject obj, RubyClass clas, int depth, int mode, Out out) {
-        int		cnt;
-
-        if (null != clas && !(obj instanceof RubyHash) && ObjectMode == mode) {
-            dump_obj_attrs(context, obj, clas, 0, depth, out);
-            return;
-        }
+    protected void dump_hash(IRubyObject obj, int depth) {
         RubyHash hash = (RubyHash) obj;
-        cnt = hash.size();
+        int cnt = hash.size();
         if (0 == cnt) {
             out.append('{');
             out.append('}');
         } else {
-            long	id = check_circular(obj, out);
+            long id = check_circular(hash, out);
+            if (id < 0) return;
 
-            if (0 > id) {
-                return;
-            }
             out.append('{');
-            if (0 < id) {
-                fill_indent(out, depth + 1);
-                out.append('"');
-                out.append('^');
-                out.append('i');
-                out.append('"');
-                out.append(':');
+            if (id > 0) {
+                fill_indent(depth + 1);
+                out.append(I_KEY);
                 dump_ulong(id, out);
                 out.append(',');
             }
             out.depth = depth + 1;
-            if (ObjectMode == mode) {
-                hash.visitAll(context,
-                        new RubyHash.VisitorWithState<Out>() {
-                            @Override
-                            public void visit(ThreadContext threadContext, RubyHash rubyHash, IRubyObject key, IRubyObject value, int index, Out out) {
-                                hash_cb_object(context, key, value, out);
-                            }
-                        },
-                        out);
-            } else if (CompatMode == mode) {
-                hash.visitAll(context,
-                        new RubyHash.VisitorWithState<Out>() {
-                            @Override
-                            public void visit(ThreadContext threadContext, RubyHash rubyHash, IRubyObject key, IRubyObject value, int index, Out out) {
-                                hash_cb_compat(context, key, value, out);
-                            }
-                        },
-                        out);
-            } else {
-                hash.visitAll(context,
-                        new RubyHash.VisitorWithState<Out>() {
-                            @Override
-                            public void visit(ThreadContext threadContext, RubyHash rubyHash, IRubyObject key, IRubyObject value, int index, Out out) {
-                                hash_cb_strict(context, key, value, out);
-                            }
-                        },
-                        out);
-            }
-            if (',' == out.get(-1)) {
-                out.pop(); // backup to overwrite last comma
-            }
-            indent(out, depth, out.opts.dump_opts.hash_nl);
+            hash.visitAll(context,
+                    new RubyHash.VisitorWithState<Out>() {
+                        @Override
+                        public void visit(ThreadContext threadContext, RubyHash rubyHash, IRubyObject key, IRubyObject value, int index, Out out) {
+                            visit_hash(key, value);
+                        }
+                    },
+                    out);
+            if (',' == out.get(-1)) out.pop(); // backup to overwrite last comma
+            indent(depth, out.opts.dump_opts.hash_nl);
             out.append('}');
         }
     }
@@ -776,7 +679,7 @@ public class Dump {
             timespec[0] = Platform.IS_32_BIT ? RubyNumeric.num2int(value) : RubyNumeric.num2long(value);
             timespec[1] = 0;
         } else {
-            RubyTime time;
+            org.jruby.RubyTime time;
             if (value instanceof RubyTime) {
                 time = ((RubyTime) value);
             } else {
@@ -790,7 +693,7 @@ public class Dump {
         return timespec;
     }
 
-    static void dump_time(ThreadContext context, IRubyObject obj, Out out, boolean withZone) {
+    protected void _dump_time(IRubyObject obj, boolean withZone) {
         long[] timespec = extractTimespec(context, obj);
         long sec = timespec[0];
         long nsec = timespec[1];
@@ -876,11 +779,39 @@ public class Dump {
         out.append(buf, b, size);
     }
 
-    static void dump_ruby_time(ThreadContext context, IRubyObject obj, Out out) {
-        dump_cstr(context, stringToByteList(context, obj, "to_s"), false, false, out);
+    protected void dump_obj_comp(IRubyObject obj, int depth, IRubyObject[] argv) {
+        if (obj.respondsTo("to_hash")) {
+            dump_to_hash(obj, depth);
+        } else if (obj.respondsTo("as_json")) {
+            dump_as_json(obj, depth);
+        } else if (Yes == out.opts.to_json && obj.respondsTo("to_json")) {
+            out.append(stringToByteList(obj, "to_json"));
+        } else {
+            if (obj instanceof RubyBigDecimal) {
+                ByteList rstr = stringToByteList(obj, "to_s");
+                if (Yes == out.opts.bigdec_as_num) {
+                    dump_raw(rstr);
+                } else {
+                    dump_cstr(rstr, false, false);
+                }
+                //FIXME: what if datetime does not exist?
+            } else  {
+                RubyClass dateTime = context.runtime.getClass("DateTime");
+                RubyClass date = context.runtime.getClass("Date");
+                if (dateTime != null && dateTime.isInstance(obj) || date != null && date.isInstance(obj) || obj instanceof RubyRational) {
+                    dump_cstr(stringToByteList(obj, "to_s"), false, false);
+                } else {
+                    dump_obj_attrs(obj, null, 0, depth);
+                }
+            }
+        }
     }
 
-    static void dump_xml_time(ThreadContext context, IRubyObject obj, Out out) {
+    protected void dump_ruby_time(IRubyObject obj) {
+        dump_cstr(stringToByteList(obj, "to_s"), false, false);
+    }
+
+    protected void dump_xml_time(IRubyObject obj) {
         long[] timespec = extractTimespec(context, obj);
         long sec = timespec[0];
         long nsec = timespec[1];
@@ -924,13 +855,13 @@ public class Dump {
                 formatter.format("%04d-%02d-%02dT%02d:%02d:%02dZ",
                         tm.get(Calendar.YEAR), tm.get(Calendar.MONTH) + 1, tm.get(Calendar.DAY_OF_MONTH),
                         tm.get(Calendar.HOUR_OF_DAY), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND));
-                dump_cstr(context, buf.toString(), false, false, out);
+                dump_cstr(buf.toString(), false, false);
             } else {
                 formatter.format("%04d-%02d-%02dT%02d:%02d:%02d%c%02d:%02d",
                         tm.get(Calendar.YEAR), tm.get(Calendar.MONTH) + 1, tm.get(Calendar.DAY_OF_MONTH),
                         tm.get(Calendar.HOUR_OF_DAY), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND),
                         tzsign, tzhour, tzmin);
-                dump_cstr(context, buf.toString(), false, false, out);
+                dump_cstr(buf.toString(), false, false);
             }
         } else if (0 == tzsecs && obj.callMethod(context, "utc?").isTrue()) {
             String format = "%04d-%02d-%02dT%02d:%02d:%02d.%09dZ";
@@ -941,7 +872,7 @@ public class Dump {
             formatter.format(format,
                     tm.get(Calendar.YEAR), tm.get(Calendar.MONTH) + 1, tm.get(Calendar.DAY_OF_MONTH),
                     tm.get(Calendar.HOUR_OF_DAY), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND), nsec);
-            dump_cstr(context, buf.toString(), false, false, out);
+            dump_cstr(buf.toString(), false, false);
         } else {
             String format = "%04d-%02d-%02dT%02d:%02d:%02d.%09d%c%02d:%02d";
 
@@ -952,122 +883,18 @@ public class Dump {
                     tm.get(Calendar.YEAR), tm.get(Calendar.MONTH) + 1, tm.get(Calendar.DAY_OF_MONTH),
                     tm.get(Calendar.HOUR_OF_DAY), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND), nsec,
                     tzsign, tzhour, tzmin);
-            dump_cstr(context, buf.toString(), false, false, out);
+            dump_cstr(buf.toString(), false, false);
         }
     }
 
-    static void dump_data_strict(ThreadContext context, IRubyObject obj, Out out) {
-        if (obj instanceof RubyBigDecimal) {
-            dump_raw(stringToByteList(context, obj, "to_s"), out);
-        } else {
-            raise_strict(obj);
-        }
-    }
+    protected abstract void dump_other(IRubyObject obj, int depth, IRubyObject[] args);
 
-    static void dump_data_null(ThreadContext context, IRubyObject obj, Out out) {
-        if (obj instanceof RubyBigDecimal) {
-            dump_raw(stringToByteList(context, obj, "to_s"), out);
-        } else {
-            dump_nil(out);
-        }
-    }
 
-    static void dump_data_comp(ThreadContext context, IRubyObject obj, int depth, Out out) {
-        if (obj.respondsTo("to_hash")) {
-            IRubyObject h = obj.callMethod(obj.getRuntime().getCurrentContext(), "to_hash");
-
-            if (!(h instanceof RubyHash)) {
-                throw context.runtime.newTypeError(obj, context.runtime.getHash());
-            }
-            dump_hash(context, h, null, depth, out.opts.mode, out);
-
-        } else if (Yes == out.opts.bigdec_as_num && obj instanceof RubyBigDecimal) {
-            dump_raw(stringToByteList(context, obj, "to_s"), out);
-        } else if (obj.respondsTo("as_json")) {
-            IRubyObject aj = obj.callMethod(obj.getRuntime().getCurrentContext(), "as_json");
-
-            // Catch the obvious brain damaged recursive dumping.
-            if (aj == obj) {
-                dump_cstr(context, stringToByteList(context, obj, "to_s"), false, false, out);
-            } else {
-                dump_val(context, aj, depth, out, null);
-            }
-        } else if (Yes == out.opts.to_json && obj.respondsTo("to_json")) {
-            out.append(stringToByteList(context, obj, "to_json"));
-        } else {
-            if (obj instanceof RubyTime) {
-                switch (out.opts.time_format) {
-                    case RubyTime:	dump_ruby_time(context, obj, out);	break;
-                    case XmlTime:	dump_xml_time(context, obj, out);	break;
-                    case UnixZTime:	dump_time(context, obj, out, true);		break;
-                    case UnixTime:
-                    default:		dump_time(context, obj, out, false);		break;
-                }
-            } else if (obj instanceof RubyBigDecimal) {
-                dump_cstr(context, stringToByteList(context, obj, "to_s"), false, false, out);
-            } else {
-                dump_cstr(context, stringToByteList(context, obj, "to_s"), false, false, out);
-            }
-        }
-    }
-
-    static void dump_data_obj(ThreadContext context, IRubyObject obj, int depth, Out out) {
-        if (obj instanceof org.jruby.RubyTime) {
-            out.append('{');
-            out.append(T_KEY);
-            switch (out.opts.time_format) {
-                case RubyTime: // Does not output fractional seconds
-                case XmlTime:
-                    dump_xml_time(context, obj, out);
-                    break;
-                case UnixZTime:
-                    dump_time(context, obj, out, true);
-                    break;
-                case UnixTime:
-                default:
-                    dump_time(context, obj, out, false);
-                    break;
-            }
-            out.append('}');
-        } else if (obj instanceof RubyBigDecimal) {
-            ByteList str = stringToByteList(context, obj, "to_s");
-            if (out.opts.bigdec_as_num != No) {
-                dump_raw(str, out);
-            } else if (INFINITY_VALUE.equals(str)) {
-                dump_raw(nan_str(obj, out.opts.dump_opts.nan_dump, out.opts.mode, true), out);
-            } else if (NINFINITY_VALUE.equals(str)) {
-                dump_raw(nan_str(obj, out.opts.dump_opts.nan_dump, out.opts.mode, false), out);
-            } else {
-                dump_cstr(context, str, false, false, out);
-            }
-        } else {
-            dump_nil(out);
-        }
-    }
-
-    private static byte[] nan_str(IRubyObject value, NanDump nd, char mode, boolean positive) {
-        if (nd == NanDump.AutoNan) {
-            switch (mode) {
-                case CompatMode: nd = NanDump.WordNan; break;
-                case StrictMode: nd = NanDump.RaiseNan; break;
-            }
-        }
-        switch(nd) {
-            case RaiseNan: raise_strict(value); break;
-            case WordNan: return positive ? INFINITY_VALUE : NINFINITY_VALUE;
-            case NullNan: return NULL_VALUE;
-            case HugeNan:
-                return INF_VALUE;
-        }
-
-        return null; // C source does this but this I believe will crash in both impls...let's see....
-    }
-
-     // FIXME: both C and Java can crash potentially I added check here but
+    // FIXME: both C and Java can crash potentially I added check here but
     // I should see if C oj crashes for these cases.
-    static ByteList stringToByteList(ThreadContext context, IRubyObject obj, String method) {
+    protected ByteList stringToByteList(IRubyObject obj, String method) {
         IRubyObject stringResult = obj.callMethod(context, method);
-        
+
         if (!(stringResult instanceof RubyString)) {
             throw context.runtime.newTypeError("Expected a String");
         }
@@ -1075,99 +902,56 @@ public class Dump {
         return ((RubyString) stringResult).getByteList();
     }
 
-    static void dump_obj_comp(ThreadContext context, IRubyObject obj, int depth, Out out, IRubyObject[] argv) {
-        if (obj.respondsTo("to_hash")) {
-            IRubyObject h = obj.callMethod(context, "to_hash");
+    protected void dump_to_hash(IRubyObject object, int depth) {
+        dump_hash(TypeConverter.checkHashType(runtime, object.callMethod(context, "to_hash")), depth);
+    }
 
-            if (!(h instanceof RubyHash)) {
-                throw context.runtime.newTypeError(h.getMetaClass().getName() + ".to_hash() did not return a Hash");
-            }
-            dump_hash(context, h, null, depth, out.opts.mode, out);
-        } else if (obj.respondsTo("as_json")) {
-            IRubyObject	aj = obj.callMethod(context, "as_json", argv);
+    protected void dump_as_json(IRubyObject object, int depth) {
+        IRubyObject aj = object.callMethod(context, "as_json");
 
-            // Catch the obvious brain damaged recursive dumping.
-            if (aj == obj) {
-                dump_cstr(context, stringToByteList(context, obj, "to_s"), false, false, out);
-            } else {
-                dump_val(context, aj, depth, out, null);
-            }
-        } else if (Yes == out.opts.to_json && obj.respondsTo("to_json")) {
-            out.append(stringToByteList(context, obj, "to_json"));
+        if (aj == object) {   // Catch the obvious brain damaged recursive dumping.
+            dump_cstr(stringToByteList(object, "to_s"), false, false);
         } else {
-            if (obj instanceof RubyBigDecimal) {
-                ByteList rstr = stringToByteList(context, obj, "to_s");
-                if (Yes == out.opts.bigdec_as_num) {
-                    dump_raw(rstr, out);
-                } else {
-                    dump_cstr(context, rstr, false, false, out);
-                }
-                //FIXME: what if datetime does not exist?
-            } else  {
-                RubyClass dateTime = context.runtime.getClass("DateTime");
-                RubyClass date = context.runtime.getClass("Date");
-                if (dateTime != null && dateTime.isInstance(obj) || date != null && date.isInstance(obj) || obj instanceof RubyRational) {
-                    dump_cstr(context, stringToByteList(context, obj, "to_s"), false, false, out);
-                } else {
-                    dump_obj_attrs(context, obj, null, 0, depth, out);
-                }
-            }
+            dump_val(aj, depth, null);
         }
     }
 
-     static void dump_obj_obj(ThreadContext context, IRubyObject obj, int depth, Out out) {
-        long id = check_circular(obj, out);
+    protected abstract void dump_complex(IRubyObject obj, int depth, IRubyObject[] args);
+    protected abstract void dump_regexp(IRubyObject obj, int depth, IRubyObject[] args);
 
-        if (0 <= id) {
-            if (obj instanceof RubyBigDecimal) {
-                ByteList str = stringToByteList(context, obj, "to_s");
-                if (INFINITY_VALUE.equals(str)) {
-                    dump_raw(nan_str(obj, out.opts.dump_opts.nan_dump, out.opts.mode, true), out);
-                } else if (NINFINITY_VALUE.equals(str)) {
-                    dump_raw(nan_str(obj, out.opts.dump_opts.nan_dump, out.opts.mode, false), out);
-                } else {
-                    dump_raw(str, out);
-                }
-            } else {
-                dump_obj_attrs(context, obj, obj.getMetaClass(), id, depth, out);
-            }
-        }
-    }
-
-
-    static void dump_obj_attrs(ThreadContext context, IRubyObject obj, RubyClass clas, long id, int depth, Out out) {
+    protected void dump_obj_attrs(IRubyObject obj, RubyClass clas, long id, int depth) {
         int		d2 = depth + 1;
 
         out.append('{');
-        if (null != clas) {
+        if (clas != null) {
             ByteList class_name = ((RubyString) clas.name()).getByteList();
 
-            fill_indent(out, d2);
+            fill_indent(d2);
             out.append(O_KEY);
-            dump_cstr(context, class_name, false, false, out);
+            dump_cstr(class_name, false, false);
         }
         if (0 < id) {
             out.append(',');
-            fill_indent(out, d2);
+            fill_indent(d2);
             out.append(I_KEY);
             dump_ulong(id, out);
         }
-        
+
         if (obj instanceof RubyString) {
             out.append(',');
-            fill_indent(out, d2);
+            fill_indent(d2);
             out.append(SELF_KEY);
-            dump_cstr(context, ((RubyString) obj).getByteList(), false, false, out);
+            dump_cstr(((RubyString) obj).getByteList(), false, false);
         } else if (obj instanceof RubyArray) {
             out.append(',');
-            fill_indent(out, d2);
+            fill_indent(d2);
             out.append(SELF_KEY);
-            dump_array(context, (RubyArray) obj, depth + 1, out);
+            dump_array((RubyArray) obj, depth + 1);
         } else if (obj instanceof RubyHash) {
             out.append(',');
-            fill_indent(out, d2);
+            fill_indent(d2);
             out.append(SELF_KEY);
-            dump_hash(context, obj, null, depth + 1, out.opts.mode, out);
+            dump_hash(obj, depth + 1);
         }
 
         List<Variable<Object>> variables = obj.getVariableList();
@@ -1191,129 +975,34 @@ public class Dump {
                 out.append(',');
             }
 
-            fill_indent(out, d2);
+            fill_indent(d2);
 
             if (name.charAt(0) == '@') {
-                dump_cstr(context, name.substring(1), false, false, out);
+                dump_cstr(name.substring(1), false, false);
             } else {
-                dump_cstr(context, "~" + name, false, false, out);
+                dump_cstr("~" + name, false, false);
             }
             out.append(':');
-            dump_val(context, value, d2, out, null);
+            dump_val(value, d2, null);
         }
         out.depth = depth;
-        fill_indent(out, depth);
+        fill_indent(depth);
         out.append('}');
     }
 
-    static void dump_struct_comp(ThreadContext context, IRubyObject obj, int depth, Out out) {
-        if (obj.respondsTo("to_hash")) {
-            IRubyObject h = obj.callMethod(context, "to_hash");
+    protected abstract void dump_range(RubyRange obj, int depth);
+    protected abstract void dump_struct(RubyStruct obj, int depth);
 
-            if (!(h instanceof RubyHash)) {
-                throw context.runtime.newTypeError(obj.getMetaClass().getName() + ".to_hash() did not return a Hash.");
-            }
-            dump_hash(context, h, null, depth, out.opts.mode, out);
-        } else if (obj.respondsTo("as_json")) {
-            IRubyObject aj = obj.callMethod(context, "as_json");
-
-            // Catch the obvious brain damaged recursive dumping.
-            if (aj == obj) {
-                dump_cstr(context, stringToByteList(context, obj, "to_s"), false, false, out);
-            } else {
-                dump_val(context, aj, depth, out, null);
-            }
-        } else if (Yes == out.opts.to_json && obj.respondsTo("to_json")) {
-            out.append(stringToByteList(context, obj, "to_json"));
-        } else {
-            dump_cstr(context, stringToByteList(context, obj, "to_s"), false, false, out);
-        }
-    }
-
-    static void dump_struct_obj(ThreadContext context, RubyStruct obj, int depth, Out out) {
-        String class_name = obj.getMetaClass().getName();
-        int		d2 = depth + 1;
-        int		d3 = d2 + 1;
-
-        out.append('{');
-        fill_indent(out, d2);
-        out.append(U_KEY);
-        if (class_name.charAt(0) == '#') {
-            RubyArray ma = obj.members();
-
-            int	cnt = ma.size();
-
-            out.append('[');
-            for (int i = 0; i < cnt; i++) {
-                RubySymbol name = (RubySymbol) ma.eltOk(i); // struct forces all members to be symbols
-
-                if (0 < i) {
-                    out.append(',');
-                }
-                out.append('"');
-                out.append(name.asString().getByteList());
-                out.append('"');
-            }
-            out.append(']');
-        } else {
-            fill_indent(out, d3);
-            out.append('"');
-            out.append(class_name);
-            out.append('"');
-        }
-        out.append(',');
-
-        boolean first = true;
-        for (Object n: obj.members()) {
-            IRubyObject name = (IRubyObject) n;
-
-            if (first) {
-                first = false;
-            } else {
-                out.append(',');
-            }
-
-            fill_indent(out, d3);
-            dump_val(context, obj.aref(name), d3, out, null);
-        }
-
-        out.append(']');
-        out.append('}');
-    }
-
-    static void dump_range_obj(ThreadContext context, RubyRange obj, int depth, Out out) {
-        String class_name = obj.getMetaClass().getName();
-        int		d2 = depth + 1;
-        int		d3 = d2 + 1;
-
-        out.append('{');
-        fill_indent(out, d2);
-        out.append(U_KEY);
-        fill_indent(out, d3);
-        out.append('"');
-        out.append(class_name);
-        out.append('"');
-        out.append(',');
-        dump_val(context, obj.begin(context), d3, out, null);
-        out.append(',');
-        dump_val(context, obj.end(context), d3, out, null);
-        out.append(',');
-        dump_val(context, obj.exclude_end_p(), d3, out, null);
-        out.append(']');
-        out.append('}');
-    }
-
-
-    static void dump_odd(ThreadContext context, IRubyObject obj, Odd odd, RubyClass clas, int depth, Out out) {
+    protected void dump_odd(IRubyObject obj, Odd odd, RubyClass clas, int depth) {
         int	d2 = depth + 1;
 
         out.append('{');
         if (clas != null) {
             ByteList class_name = ((RubyString) clas.name()).getByteList();
 
-            fill_indent(out, d2);
+            fill_indent(d2);
             out.append(BIG_O_KEY);
-            dump_cstr(context, class_name, false, false, out);
+            dump_cstr(class_name, false, false);
             out.append(',');
         }
         if (odd.raw) {
@@ -1327,10 +1016,10 @@ public class Dump {
             for (int index = 0; index < odd.attrs.length; index++) {
                 String name = odd.attrs[index];
                 IRubyObject value = oddValue(context, obj, name, odd, index);
-                fill_indent(out, d2);
-                dump_cstr(context, name, false, false, out);
+                fill_indent(d2);
+                dump_cstr(name, false, false);
                 out.append(':');
-                dump_val(context, value, d2, out, null);
+                dump_val(value, d2, null);
                 out.append(',');
             }
             out.pop(); // remove last ','
@@ -1354,457 +1043,81 @@ public class Dump {
         throw obj.getRuntime().newTypeError("Failed to dump " + obj.getMetaClass().getName() + " Object to JSON in strict mode.");
     }
 
-    static void dump_val(ThreadContext context, IRubyObject obj, int depth, Out out, IRubyObject[] argv) {
+    protected void dump_val(IRubyObject obj, int depth, IRubyObject[] argv) {
         if (MAX_DEPTH < depth) {
             throw new RaiseException(context.runtime, context.runtime.getNoMemoryError(), "Too deeply nested.", true);
         }
 
         if (obj instanceof RubyNil) {
-            dump_nil(out);
+            dump_nil();
         } else if (obj instanceof RubyBoolean) {
             if (obj == context.runtime.getTrue()) {
-                dump_true(out);
+                dump_true();
             } else {
-                dump_false(out);
+                dump_false();
             }
         } else if (obj instanceof RubyFixnum) {
-            dump_fixnum((RubyFixnum) obj, out);
+            dump_fixnum((RubyFixnum) obj);
         } else if (obj instanceof RubyFloat) {
-            dump_float(context, (RubyFloat) obj, out);
+            dump_float((RubyFloat) obj);
         } else if (obj instanceof RubyModule) {  // Also will be RubyClass
-            switch (out.opts.mode) {
-                case StrictMode:	raise_strict(obj);		break;
-                case NullMode:		dump_nil(out);			break;
-                case CompatMode:	dump_class_comp(context, (RubyModule) obj, out);	break;
-                case ObjectMode:
-                default:		dump_class_obj(context, (RubyModule) obj, out);	break;
-            }
+            dump_class((RubyModule) obj);
         } else if (obj instanceof RubySymbol) {
-            switch (out.opts.mode) {
-                case StrictMode:
-                    raise_strict(obj);
-                    break;
-                case NullMode:
-                    dump_nil(out);
-                    break;
-                case CompatMode:
-                    dump_sym_comp(context, (RubySymbol) obj, out);
-                    break;
-                case ObjectMode:
-                default:
-                    dump_sym_obj(context, (RubySymbol) obj, out);
-                    break;
-            }
-        } else if (obj instanceof RubyStruct || obj instanceof RubyRange) { // In MRI T_STRUCT is also Range
-            switch (out.opts.mode) {
-                case StrictMode:
-                    raise_strict(obj);
-                    break;
-                case NullMode:
-                    dump_nil(out);
-                    break;
-                case CompatMode:
-                    dump_struct_comp(context, obj, depth, out);
-                    break;
-                case ObjectMode:
-                default:
-                    if (obj instanceof RubyRange) {
-                        dump_range_obj(context, (RubyRange) obj, depth, out);
-                    } else {
-                        dump_struct_obj(context, (RubyStruct) obj, depth, out);
-                    }
-                    break;
-            }
+            dump_sym((RubySymbol) obj);
+        } else if (obj instanceof RubyStruct) {
+            dump_struct((RubyStruct) obj, depth);
+        } else if (obj instanceof RubyRange) { // In MRI T_STRUCT is also Range
+            dump_range((RubyRange) obj, depth);
         } else {
-            // Most developers have enough sense not to subclass primitive types but
-            // since these classes could potentially be subclassed a check for odd
-            // classes is performed.
-            {
-                RubyClass clas = obj.getMetaClass();
-                Odd odd;
+            // FIXME: this else section can be another overridable method so this can
+            // be supered in at top for object and possibly compat
+            RubyClass clas = obj.getMetaClass();
+            Odd odd;
 
-                if (ObjectMode == out.opts.mode && null != (odd = out.oj.getOdd(clas))) {
-                    dump_odd(context, obj, odd, clas, depth + 1, out);
-                    return;
-                }
+            if (ObjectMode == out.opts.mode && null != (odd = out.oj.getOdd(clas))) {
+                dump_odd(obj, odd, clas, depth + 1);
+                return;
+            }
 
-                if (obj instanceof RubyBignum) {
-                    dump_bignum(context, (RubyBignum) obj, out);
-                } else if (obj.getMetaClass() == context.runtime.getString()) {
-                    switch (out.opts.mode) {
-                        case StrictMode:
-                        case NullMode:
-                        case CompatMode:
-                            dump_str_comp(context, (RubyString) obj, out);
-                            break;
-                        case ObjectMode:
-                        default:
-                            dump_str_obj(context, (RubyString) obj, out);
-                            break;
-                    }
-                } else if (obj.getMetaClass() == context.runtime.getArray()) {
-                    dump_array(context, (RubyArray) obj, depth, out);
-                } else if (obj.getMetaClass() == context.runtime.getHash()) {
-                    dump_hash(context, obj, clas, depth, out.opts.mode, out);
-                } else if (obj instanceof RubyComplex || obj instanceof RubyRegexp) {
-                    switch (out.opts.mode) {
-                        case StrictMode:	raise_strict(obj);		break;
-                        case NullMode:		dump_nil(out);			break;
-                        case CompatMode:
-                        case ObjectMode:
-                        default:		dump_obj_comp(context, obj, depth, out, argv);	break;
-                    }
-                } else if (obj instanceof RubyTime || obj instanceof RubyBigDecimal) {  // FIXME: not sure it is only these two types.
-                    switch (out.opts.mode) {
-                        case StrictMode:	dump_data_strict(context, obj, out);	break;
-                        case NullMode:		dump_data_null(context, obj, out);	break;
-                        case CompatMode:	dump_data_comp(context, obj, depth, out);	break;
-                        case ObjectMode:
-                        default:		dump_data_obj(context, obj, depth, out);	break;
-                    }
-                } else {
-                    switch (out.opts.mode) {
-                        case StrictMode:	dump_data_strict(context, obj, out);	break;
-                        case NullMode:		dump_data_null(context, obj, out);	break;
-                        case CompatMode:	dump_obj_comp(context, obj, depth, out, argv);	break;
-                        case ObjectMode:
-                        default:		dump_obj_obj(context, obj, depth, out);	break;
-                    }
-
-
-                    // What type causes this? throw context.runtime.newNotImplementedError("\"Failed to dump '" + obj.getMetaClass().getName() + "'.");
-                }
+            if (obj instanceof RubyBignum) {
+                dump_bignum((RubyBignum) obj);
+            } else if (obj.getMetaClass() == context.runtime.getString()) {
+                dump_str((RubyString) obj);
+            } else if (obj.getMetaClass() == context.runtime.getArray()) {
+                dump_array((RubyArray) obj, depth);
+            } else if (obj.getMetaClass() == context.runtime.getHash()) {
+                dump_hash(obj, depth);
+            } else if (obj instanceof RubyComplex) {
+                dump_complex(obj, depth, argv);
+            } else if (obj instanceof RubyRegexp) {
+                dump_regexp(obj, depth, argv);
+            } else if (obj instanceof RubyTime) {
+                dump_time((RubyTime) obj, depth);
+            } else if (obj instanceof RubyBigDecimal) {  // FIXME: not sure it is only these two types.
+                dump_bigdecimal((RubyBigDecimal) obj, depth);
+            } else {
+                dump_other(obj, depth, argv);
             }
         }
     }
 
-    static void obj_to_json(ThreadContext context, IRubyObject obj, Options copts, Out out) {
-        obj_to_json_using_params(context, obj, copts, out, IRubyObject.NULL_ARRAY);
-    }
-
-    static void obj_to_json_using_params(ThreadContext context, IRubyObject obj, Options copts, Out out, IRubyObject[] argv) {
+    protected void obj_to_json_using_params(IRubyObject obj, Options copts, IRubyObject[] argv) {
         out.circ_cnt = 0;
         out.opts = copts;
         out.hash_cnt = 0;
         out.omit_nil = copts.dump_opts.omit_nil;
-        if (Yes == copts.circular) {
-            out.new_circ_cache();
-        }
+
+        if (Yes == copts.circular) out.new_circ_cache();
+
         out.indent = copts.indent;
-        dump_val(context, obj, 0, out, argv);
-        if (0 < out.indent) {
+        dump_val(obj, 0, argv);
+        if (out.indent > 0) {
             switch (out.peek(0)) {
-                case ']':
-                case '}':
-                    out.append('\n');
-                default:
-                    break;
+                case ']':case '}': out.append('\n');
             }
         }
-        if (Yes == copts.circular) {
-            out.delete_circ_cache();
-        }
-    }
 
-    void oj_write_obj_to_file(ThreadContext context, OjLibrary oj, IRubyObject obj, String path, Options copts) {
-        Out out = new Out(oj);
-        FileOutputStream f = null;
-
-        out.omit_nil = copts.dump_opts.omit_nil;
-
-        obj_to_json(context, obj, copts, out);
-
-        try {
-            f = new FileOutputStream(path);
-
-            out.write(f);
-        } catch (FileNotFoundException e) {
-            throw context.runtime.newIOErrorFromException(e);
-        } catch (IOException e) {
-            throw context.runtime.newIOErrorFromException(e);
-        } finally {
-            if (f != null) {
-                try { f.close(); } catch (IOException e) {}
-            }
-        }
-    }
-
-    static void oj_write_obj_to_stream(ThreadContext context, OjLibrary oj, IRubyObject obj, IRubyObject stream, Options copts) {
-        Out out = new Out(oj);
-
-        out.omit_nil = copts.dump_opts.omit_nil;
-
-        obj_to_json(context, obj, copts, out);
-
-        // Note: Removed Windows path as it called native write on fileno and JRuby does work the same way.
-        if (obj instanceof StringIO) {
-            ((StringIO) obj).write(context, context.runtime.newString(out.buf));
-        } else if (stream.respondsTo("write")) {
-            stream.callMethod(context, "write", context.runtime.newString(out.buf));
-        } else {
-            throw context.runtime.newArgumentError("to_stream() expected an IO Object.");
-        }
-    }
-
-// dump leaf functions
-
-    static void dump_leaf_str(ThreadContext context, Leaf leaf, Out out) {
-        switch (leaf.value_type) {
-            case STR_VAL:
-                dump_cstr(context, leaf.str, false, false, out);
-                break;
-            case RUBY_VAL: {
-                // FIXME: I think this will always be a string or raise here.
-                RubyString value = (RubyString) TypeConverter.checkStringType(context.runtime, leaf.value);
-
-                value = StringSupport.checkEmbeddedNulls(context.runtime, value);
-
-                dump_cstr(context, value.getByteList(), false, false, out);
-                break;
-            }
-            case COL_VAL:
-            default:
-                throw context.runtime.newTypeError("Unexpected value type " + leaf.value_type + ".");
-        }
-    }
-
-    static void dump_leaf_fixnum(ThreadContext context, Leaf leaf, Out out) {
-        switch (leaf.value_type) {
-            case STR_VAL:
-                out.append(leaf.str);
-                break;
-            case RUBY_VAL:
-                if (leaf.value instanceof RubyBignum) {
-                    dump_bignum(context, (RubyBignum) leaf.value, out);
-                } else {
-                    dump_fixnum((RubyFixnum) leaf.value, out);
-                }
-                break;
-            case COL_VAL:
-            default:
-                throw context.runtime.newTypeError("Unexpected value type " + leaf.value_type + ".");
-        }
-    }
-
-    static void dump_leaf_float(ThreadContext context, Leaf leaf, Out out) {
-        switch (leaf.value_type) {
-            case STR_VAL:
-                out.append(leaf.str);
-                break;
-            case RUBY_VAL:
-                dump_float(context, (RubyFloat) leaf.value, out);
-                break;
-            case COL_VAL:
-            default:
-                throw context.runtime.newTypeError("Unexpected value type " + leaf.value_type + ".");
-        }
-    }
-
-    static void dump_leaf_array(ThreadContext context, Leaf leaf, int depth, Out out) {
-        int	d2 = depth + 1;
-
-        out.append('[');
-        if (leaf.hasElements()) {
-            boolean first = true;
-            for (Leaf element: leaf.elements) {
-                if (!first) out.append(',');
-                fill_indent(out, d2);
-                dump_leaf(context, element, d2, out);
-                first = false;
-            }
-            fill_indent(out, depth);
-        }
-        out.append(']');
-    }
-
-    static void dump_leaf_hash(ThreadContext context, Leaf leaf, int depth, Out out) {
-        int	d2 = depth + 1;
-
-        out.append('{');
-        if (leaf.hasElements()) {
-            boolean first = true;
-            for (Leaf element: leaf.elements) {
-                if (!first) out.append(',');
-                fill_indent(out, d2);
-                dump_cstr(context, element.key, false, false, out);
-                out.append(':');
-                dump_leaf(context, element, d2, out);
-                first = false;
-            }
-            fill_indent(out, depth);
-        }
-        out.append('}');
-    }
-
-    static void dump_leaf(ThreadContext context, Leaf leaf, int depth, Out out) {
-        switch (leaf.rtype) {
-            case T_NIL:
-                dump_nil(out);
-                break;
-            case T_TRUE:
-                dump_true(out);
-                break;
-            case T_FALSE:
-                dump_false(out);
-                break;
-            case T_STRING:
-                dump_leaf_str(context, leaf, out);
-                break;
-            case T_FIXNUM:
-                dump_leaf_fixnum(context, leaf, out);
-                break;
-            case T_FLOAT:
-                dump_leaf_float(context, leaf, out);
-                break;
-            case T_ARRAY:
-                dump_leaf_array(context, leaf, depth, out);
-                break;
-            case T_HASH:
-                dump_leaf_hash(context, leaf, depth, out);
-                break;
-            default:
-                throw context.runtime.newTypeError("Unexpected type " + leaf.rtype);
-        }
-    }
-
-    public static Out leaf_to_json(ThreadContext context, OjLibrary oj, Leaf leaf, Options copts) {
-        Out out = new Out(oj);
-        out.circ_cnt = 0;
-        out.opts = copts;
-        out.hash_cnt = 0;
-        out.indent = copts.indent;
-        dump_leaf(context, leaf, 0, out);
-
-        return out;
-    }
-
-    public static void leaf_to_file(ThreadContext context, OjLibrary oj, Leaf leaf, String path, Options copts) {
-        Out out = leaf_to_json(context, oj, leaf, copts);
-        FileOutputStream f = null;
-
-        try {
-            f = new FileOutputStream(path);
-
-            out.write(f);
-        } catch (IOException e) {
-            throw context.runtime.newIOErrorFromException(e);
-        } finally {
-            if (f != null) {
-                try { f.close(); } catch (IOException e) {}
-            }
-        }
-    }
-
-// string writer functions
-
-    static void key_check(ThreadContext context, StrWriter sw, ByteList key) {
-        DumpType type = sw.peekTypes();
-
-        if (null == key && (ObjectNew == type || ObjectType == type)) {
-            throw context.runtime.newStandardError("Can not push onto an Object without a key.");
-        }
-    }
-
-    static void push_type(StrWriter sw, DumpType type) {
-        sw.types.push(type);
-    }
-
-    static void maybe_comma(StrWriter sw) {
-        DumpType type = sw.peekTypes();
-        if (type == ObjectNew) {
-            sw.types.set(sw.types.size() - 1, ObjectType);
-        } else if (type == ArrayNew) {
-            sw.types.set(sw.types.size() - 1, ArrayType);
-        } else if (type == ObjectType || type == ArrayType) {
-            // Always have a few characters available in the out.buf.
-            sw.out.append(',');
-        }
-    }
-
-    static void push_key(ThreadContext context, StrWriter sw, ByteList key) {
-        DumpType type = sw.peekTypes();
-
-        if (sw.keyWritten) {
-            throw context.runtime.newStandardError("Can not push more than one key before pushing a non-key.");
-        }
-        if (ObjectNew != type && ObjectType != type) {
-            throw context.runtime.newStandardError("Can only push a key onto an Object.");
-        }
-
-        maybe_comma(sw);
-        if (!sw.types.empty()) {
-            fill_indent(sw.out, sw.types.size());
-        }
-        dump_cstr(context, key, false, false, sw.out);
-        sw.out.append(':');
-        sw.keyWritten = true;
-    }
-
-    static void push_object(ThreadContext context, StrWriter sw, ByteList key) {
-        dump_key(context, sw, key);
-        sw.out.append('{');
-        push_type(sw, ObjectNew);
-    }
-
-    static void push_array(ThreadContext context, StrWriter sw, ByteList key) {
-        dump_key(context, sw, key);
-        sw.out.append('[');
-        push_type(sw, ArrayNew);
-    }
-
-    static void push_value(ThreadContext context, StrWriter sw, IRubyObject val, ByteList key) {
-        dump_key(context, sw, key);
-        dump_val(context, val, sw.types.size(), sw.out, null);
-    }
-
-    static void push_json(ThreadContext context, StrWriter sw, ByteList json, ByteList key) {
-        dump_key(context, sw, key);
-        dump_raw(json, sw.out);
-    }
-
-    private static void dump_key(ThreadContext context, StrWriter sw, ByteList key) {
-        if (sw.keyWritten) {
-            sw.keyWritten = false;
-        } else {
-            key_check(context, sw, key);
-            maybe_comma(sw);
-            if (!sw.types.empty()) {
-                fill_indent(sw.out, sw.types.size());
-            }
-            if (null != key) {
-                dump_cstr(context, key, false, false, sw.out);
-                sw.out.append(':');
-            }
-        }
-    }
-
-    static void pop(ThreadContext context, StrWriter sw) {
-        if (sw.keyWritten) {
-            sw.keyWritten = false;
-            throw context.runtime.newStandardError("Can not pop after writing a key but no value.");
-        }
-
-        if (sw.types.empty()) {
-            throw context.runtime.newStandardError("Can not pop with no open array or object.");
-        }
-
-        DumpType type = sw.types.pop();
-
-        fill_indent(sw.out, sw.types.size());
-        if (type == ObjectNew || type == ObjectType) {
-            sw.out.append('}');
-        } else if (type == ArrayNew || type == ArrayType) {
-            sw.out.append(']');
-        }
-        if (sw.types.empty() && 0 <= sw.out.indent) {
-            sw.out.append('\n');
-        }
-    }
-
-    static void pop_all(ThreadContext context, StrWriter sw) {
-        while (!sw.types.empty()) {
-            pop(context, sw);
-        }
+        if (Yes == copts.circular) out.delete_circ_cache();
     }
 
     // Unlike C version we assume check has been made that there is an ignore list
@@ -1818,5 +1131,4 @@ public class Dump {
 
         return false;
     }
-
 }

@@ -589,45 +589,43 @@ public class RubyOj extends RubyModule {
 
         if (copts.mode == CompatMode) copts.dump_opts.nan_dump = WordNan;
 
-        if (2 == args.length) {
-            parse_options(context, args[1], copts);
-        }
+        if (2 == args.length) parse_options(context, args[1], copts);
+
         out.buf = buf;
         out.omit_nil = copts.dump_opts.omit_nil;
         out.caller = DumpCaller.CALLER_DUMP;
 
-        Dump.obj_to_json(context, args[0], copts, out);
+        Dump.createDump(context, out, copts.mode).obj_to_json(args[0], copts);
 
         RubyString string = out.asString(context);
+        // FIXME: Don't think this is needed as bytelist should be utf0-8 already.
         string.setEncoding(UTF8Encoding.INSTANCE);
         return string;
     }
 
-    /*
     @JRubyMethod(module = true, required=2, rest = true)
     public static IRubyObject to_file(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         OjLibrary oj = resolveOj(self);
+        Out out = new Out(oj);
         Options copts = oj.default_options;
 
-        if (3 == args.length) {
-            parse_options(context, args[2], copts);
-        }
+        if (3 == args.length) parse_options(context, args[2], copts);
 
         TypeConverter.checkStringType(context.runtime, args[0]);
-        oj_write_obj_to_file(args[1], args[0].asJavaString(), copts);
+        Dump.createDump(context, out, copts.mode).write_obj_to_file(args[1], args[0].asJavaString(), copts);
 
         return context.nil;
-    }*/
+    }
 
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject to_stream(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         OjLibrary oj = resolveOj(self);
+        Out out = new Out(oj);
         Options options = oj.default_options.dup(context);
 
-        if (3 == args.length) {
-            parse_options(context, args[2], options);
-        }
-        Dump.oj_write_obj_to_stream(context, oj, args[1], args[0], options);
+        if (3 == args.length) parse_options(context, args[2], options);
+
+        Dump.createDump(context, out, options.mode).write_obj_to_stream(args[1], args[0], options);
 
         return context.nil;
     }
