@@ -1,5 +1,7 @@
-package oj;
+package oj.dump;
 
+import oj.Options;
+import oj.Out;
 import oj.options.NanDump;
 import org.jruby.RubyArray;
 import org.jruby.RubyHash;
@@ -256,7 +258,7 @@ public class ObjectDump extends Dump {
         return false;
     }
 
-    private static byte[] nan_str(IRubyObject value, NanDump nd, char mode, boolean positive) {
+    private byte[] nan_str(IRubyObject value, NanDump nd, char mode, boolean positive) {
         if (nd == NanDump.AutoNan) {
             switch (mode) {
                 case CompatMode: nd = NanDump.WordNan; break;

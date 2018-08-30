@@ -1,6 +1,9 @@
-package oj;
+package oj.dump;
 
 import jnr.posix.util.Platform;
+import oj.Odd;
+import oj.Options;
+import oj.Out;
 import oj.options.NanDump;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
@@ -54,7 +57,7 @@ public abstract class Dump {
     protected Ruby runtime;
     protected Out out;
 
-    static Dump createDump(ThreadContext context, Out out, int mode) {
+    public static Dump createDump(ThreadContext context, Out out, int mode) {
         switch (mode) {
             case NullMode: return new NullDump(context, out);
             case StrictMode: return new StrictDump(context, out);
@@ -115,7 +118,7 @@ public abstract class Dump {
         }
     }
 
-    static int MAX_DEPTH = 1000;
+    public static int MAX_DEPTH = 1000;
 
     protected static final byte[] BIG_O_KEY = {'"', '^', 'O', '"', ':'};
     protected static final byte[] C_KEY = {'"', '^', 'c', '"', ':'};
@@ -227,7 +230,7 @@ public abstract class Dump {
         return size - len * (int)'0';
     }
 
-    protected void fill_indent(int cnt) {
+    public void fill_indent(int cnt) {
         if (out.indent > 0) {
             cnt *= out.indent;
             out.append('\n');
@@ -262,11 +265,11 @@ public abstract class Dump {
         out.append(hex_chars.charAt(d));
     }
 
-    protected void dump_raw(byte[] str) {
+    public void dump_raw(byte[] str) {
         out.append(str);
     }
 
-    protected void dump_raw(ByteList str) {
+    public void dump_raw(ByteList str) {
         out.append(str);
     }
 
@@ -412,7 +415,7 @@ public abstract class Dump {
         }
     }
 
-    private static final void dumpNanNanForFloat(Out out, IRubyObject value) {
+    private void dumpNanNanForFloat(Out out, IRubyObject value) {
         if (out.opts.mode == ObjectMode) {
             out.append(NAN_NUMERIC_VALUE);
         } else {
@@ -435,7 +438,7 @@ public abstract class Dump {
             }
         }
     }
-    private static final void dumpInfNanForFloat(Out out, IRubyObject value, byte[] inf_value, byte[] infinity_value) {
+    private void dumpInfNanForFloat(Out out, IRubyObject value, byte[] inf_value, byte[] infinity_value) {
         if (out.opts.mode == ObjectMode) {
             out.append(inf_value);
         } else {
@@ -466,7 +469,7 @@ public abstract class Dump {
         dump_cstr(new ByteList(str.getBytes(), UTF8Encoding.INSTANCE), is_sym, escape1);
     }
 
-    protected void dump_cstr(ByteList str, boolean is_sym, boolean escape1) {
+    public void dump_cstr(ByteList str, boolean is_sym, boolean escape1) {
         int	size;
         int[] cmap;
         int str_i = 0;
@@ -1039,11 +1042,11 @@ public abstract class Dump {
         return value;
     }
 
-    static void raise_strict(IRubyObject obj) {
-        throw obj.getRuntime().newTypeError("Failed to dump " + obj.getMetaClass().getName() + " Object to JSON in strict mode.");
+    void raise_strict(IRubyObject obj) {
+        throw runtime.newTypeError("Failed to dump " + obj.getMetaClass().getName() + " Object to JSON in strict mode.");
     }
 
-    protected void dump_val(IRubyObject obj, int depth, IRubyObject[] argv) {
+    public void dump_val(IRubyObject obj, int depth, IRubyObject[] argv) {
         if (MAX_DEPTH < depth) {
             throw new RaiseException(context.runtime, context.runtime.getNoMemoryError(), "Too deeply nested.", true);
         }

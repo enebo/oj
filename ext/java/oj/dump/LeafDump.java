@@ -1,5 +1,9 @@
-package oj;
+package oj.dump;
 
+import oj.Leaf;
+import oj.Options;
+import oj.Out;
+import oj.dump.Dump;
 import org.jruby.RubyBignum;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyFloat;
@@ -19,7 +23,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 
 public class LeafDump extends Dump {
-    LeafDump(ThreadContext context, Out out) {
+    public LeafDump(ThreadContext context, Out out) {
         super(context, out);
     }
 
@@ -55,9 +59,7 @@ public class LeafDump extends Dump {
         }
     }
 
-
-    // Entry point
-    void leafToJSON(Leaf leaf, Options copts) {
+    public void leafToJSON(Leaf leaf, Options copts) {
         out.circ_cnt = 0;
         out.opts = copts;
         out.hash_cnt = 0;
@@ -66,8 +68,7 @@ public class LeafDump extends Dump {
         dump_leaf(leaf, 0);
     }
 
-    // Entry point
-    void leafToFile(Leaf leaf, String path, Options copts) {
+    public void leafToFile(Leaf leaf, String path, Options copts) {
         leafToJSON(leaf, copts);
         FileOutputStream f = null;
 

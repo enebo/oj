@@ -1,5 +1,6 @@
 package oj;
 
+import oj.dump.LeafDump;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyClass;

@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Stack;
 
+import oj.dump.Dump;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;

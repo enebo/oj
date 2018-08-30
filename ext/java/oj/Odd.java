@@ -13,10 +13,10 @@ public class Odd {
     RubyModule clas;
     IRubyObject createObj;
     String createOp;
-    String[] attrs;
-    AttrGetFunc[] attrFuncs;
+    public String[] attrs;
+    public AttrGetFunc[] attrFuncs;
     boolean isModule;
-    boolean raw;
+    public boolean raw;
 
     private static AttrGetFunc getDateTimeSecs = new GetDateTimeSecs();
 

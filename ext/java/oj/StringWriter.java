@@ -1,5 +1,6 @@
 package oj;
 
+import oj.dump.Dump;
 import oj.options.DumpType;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;

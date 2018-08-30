@@ -1,5 +1,6 @@
 package oj;
 
+import oj.dump.DumpOpts;
 import org.jruby.RubyModule;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
@@ -42,18 +43,18 @@ public class Options {
 
     public static final ByteList JSON_CLASS = new ByteList(new byte[] {'j', 's', 'o', 'n', '_', 'c', 'l', 'a', 's', 's'});
 
-    int		indent;		// indention for dump; default 2
-    char	circular;	// YesNo
+    public int indent;		// indention for dump; default 2
+    public char circular;	// YesNo
     char	auto_define;	// YesNo
     char	sym_key;	// YesNo
-    char	escape_mode;	// Escape_Mode
-    char	mode;		// Mode
+    public char escape_mode;	// Escape_Mode
+    public char mode;		// Mode
     char	class_cache;	// YesNo
-    char	time_format;	// TimeFormat
-    char	bigdec_as_num;	// YesNo
+    public char time_format;	// TimeFormat
+    public char	bigdec_as_num;	// YesNo
     char	bigdec_load;	// BigLoad
     char    to_hash;	// YesNo
-    char	to_json;	// YesNo
+    public char to_json;	// YesNo
     char	as_json;	// YesNo
     char	nilnil;		// YesNo
     char	empty_string;		// YesNo
@@ -64,15 +65,15 @@ public class Options {
     char    allow_nan;	// YEsyNo for parsing only
     char    trace;		// YesNo
     ByteList create_id;	// 0 or string
-    int		sec_prec;	// second precision when dumping time
-    int	float_prec;	// float precision, linked to float_fmt
-    String	float_fmt;	// float format for dumping, if empty use Ruby
+    public int sec_prec;	// second precision when dumping time
+    public int float_prec;	// float precision, linked to float_fmt
+    public String float_fmt;	// float format for dumping, if empty use Ruby
     IRubyObject hash_class;	// class to use in place of Hash on load
     IRubyObject array_class;	// class to use in place of Array on load
-    DumpOpts dump_opts;
+    public DumpOpts dump_opts;
     RxClass str_rx;
     // FIXME: Consider primitive array for this
-    List<RubyModule> ignore; // array of classes to ignore;
+    public List<RubyModule> ignore; // array of classes to ignore;
 
     
     public Options(ThreadContext context) {

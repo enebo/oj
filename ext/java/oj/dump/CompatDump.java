@@ -1,5 +1,6 @@
-package oj;
+package oj.dump;
 
+import oj.Out;
 import org.jruby.RubyModule;
 import org.jruby.RubyRange;
 import org.jruby.RubyString;
