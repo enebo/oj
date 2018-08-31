@@ -46,7 +46,7 @@ public class StreamWriter extends RubyObject {
     }
 
     void write(ThreadContext context) {
-        RubyString string = sw.sw.out.asString(context);
+        RubyString string = sw.out.asString(context);
 
         if (type == FILE_IO) {
             int size = string.getByteList().realSize();
@@ -62,7 +62,7 @@ public class StreamWriter extends RubyObject {
     }
 
     void reset_buf() {
-        sw.sw.out.buf.setRealSize(0);
+        sw.out.buf.setRealSize(0);
     }
 
     /* call-seq: new(io, options)
@@ -88,13 +88,12 @@ public class StreamWriter extends RubyObject {
         } else {
             throw context.runtime.newArgumentError("expected an IO Object.");
         }
-        //FIXME: GROSSSSSSS
+
         sw = new StringWriter(context.runtime, RubyOj.oj(context).stringWriter);
-        sw.sw = new StrWriter(context, RubyOj.oj(context));
-        sw.sw.out.indent = sw.sw.opts.indent;
+        sw.initialize(context, IRubyObject.NULL_ARRAY);
 
         if (2 == argv.length) {
-            RubyOj.parse_options(context, argv[1], sw.sw.opts);
+            RubyOj.parse_options(context, argv[1], sw.opts);
         }
 
 
