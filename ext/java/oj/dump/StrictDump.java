@@ -1,7 +1,7 @@
 package oj.dump;
 
-import oj.Out;
-import oj.dump.Dump;
+import oj.OjLibrary;
+import oj.Options;
 import org.jruby.RubyModule;
 import org.jruby.RubyRange;
 import org.jruby.RubyString;
@@ -13,8 +13,8 @@ import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 
 public class StrictDump extends Dump {
-    StrictDump(ThreadContext context, Out out) {
-        super(context, out);
+    StrictDump(ThreadContext context, OjLibrary oj, Options opts) {
+        super(context, oj, opts);
     }
 
     @Override

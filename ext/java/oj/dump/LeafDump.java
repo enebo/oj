@@ -3,8 +3,6 @@ package oj.dump;
 import oj.Leaf;
 import oj.OjLibrary;
 import oj.Options;
-import oj.Out;
-import oj.dump.Dump;
 import org.jruby.RubyBignum;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyFloat;
@@ -26,7 +24,7 @@ import java.io.IOException;
 
 public class LeafDump extends Dump {
     public LeafDump(ThreadContext context, OjLibrary oj, Options options) {
-        super(context, new Out(oj, options));
+        super(context, oj, options);
     }
 
     // ENTRY POINT
@@ -64,7 +62,7 @@ public class LeafDump extends Dump {
     public ByteList leafToJSON(Leaf leaf) {
         dump_leaf(leaf, 0);
 
-        return out.buf;
+        return buf;
     }
 
     public void leafToFile(Leaf leaf, String path) {
@@ -74,7 +72,7 @@ public class LeafDump extends Dump {
         try {
             f = new FileOutputStream(path);
 
-            out.write(f);
+            write(f);
         } catch (IOException e) {
             throw context.runtime.newIOErrorFromException(e);
         } finally {
@@ -87,24 +85,24 @@ public class LeafDump extends Dump {
     protected void dump_leaf_array(Leaf leaf, int depth) {
         int	d2 = depth + 1;
 
-        out.append('[');
+        append('[');
         if (leaf.hasElements()) {
             boolean first = true;
             for (Leaf element: leaf.elements) {
-                if (!first) out.append(',');
+                if (!first) append(',');
                 fill_indent(d2);
                 dump_leaf(element, d2);
                 first = false;
             }
             fill_indent(depth);
         }
-        out.append(']');
+        append(']');
     }
 
     protected void dump_leaf_fixnum(Leaf leaf) {
         switch (leaf.value_type) {
             case STR_VAL:
-                out.append(leaf.str);
+                append(leaf.str);
                 break;
             case RUBY_VAL:
                 if (leaf.value instanceof RubyBignum) {
@@ -122,7 +120,7 @@ public class LeafDump extends Dump {
     protected void dump_leaf_float(Leaf leaf) {
         switch (leaf.value_type) {
             case STR_VAL:
-                out.append(leaf.str);
+                append(leaf.str);
                 break;
             case RUBY_VAL:
                 dump_float((RubyFloat) leaf.value);
@@ -136,20 +134,20 @@ public class LeafDump extends Dump {
     protected void dump_leaf_hash(Leaf leaf, int depth) {
         int	d2 = depth + 1;
 
-        out.append('{');
+        append('{');
         if (leaf.hasElements()) {
             boolean first = true;
             for (Leaf element: leaf.elements) {
-                if (!first) out.append(',');
+                if (!first) append(',');
                 fill_indent(d2);
                 dump_cstr(element.key, false, false);
-                out.append(':');
+                append(':');
                 dump_leaf(element, d2);
                 first = false;
             }
             fill_indent(depth);
         }
-        out.append('}');
+        append('}');
     }
 
     protected void dump_leaf_str(Leaf leaf) {

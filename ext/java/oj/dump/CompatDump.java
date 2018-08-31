@@ -1,6 +1,7 @@
 package oj.dump;
 
-import oj.Out;
+import oj.OjLibrary;
+import oj.Options;
 import org.jruby.RubyModule;
 import org.jruby.RubyRange;
 import org.jruby.RubyString;
@@ -16,8 +17,8 @@ import org.jruby.util.TypeConverter;
 import static oj.Options.*;
 
 public class CompatDump extends Dump {
-    CompatDump(ThreadContext context, Out out) {
-        super(context, out);
+    CompatDump(ThreadContext context, OjLibrary oj, Options opts) {
+        super(context, oj, opts);
     }
 
     @Override
@@ -29,12 +30,12 @@ public class CompatDump extends Dump {
     protected void dump_bigdecimal(RubyBigDecimal obj, int depth) {
         if (obj.respondsTo("to_hash")) {
             dump_to_hash(obj, depth);
-        } else if (out.opts.bigdec_as_num == Yes) {
+        } else if (opts.bigdec_as_num == Yes) {
             dump_raw(stringToByteList(obj, "to_s"));
         } else if (obj.respondsTo("as_json")) {
             dump_as_json(obj, depth);
-        } else if (Yes == out.opts.to_json && obj.respondsTo("to_json")) {
-            out.append(stringToByteList(obj, "to_json"));
+        } else if (Yes == opts.to_json && obj.respondsTo("to_json")) {
+            append(stringToByteList(obj, "to_json"));
         } else {
             dump_cstr(stringToByteList(obj, "to_s"), false, false);
         }
@@ -51,10 +52,10 @@ public class CompatDump extends Dump {
             dump_to_hash(obj, depth);
         } else if (obj.respondsTo("as_json")) {
             dump_as_json(obj, depth);
-        } else if (Yes == out.opts.to_json && obj.respondsTo("to_json")) {
-            out.append(stringToByteList(obj, "to_json"));
+        } else if (Yes == opts.to_json && obj.respondsTo("to_json")) {
+            append(stringToByteList(obj, "to_json"));
         } else {
-            switch (out.opts.time_format) {
+            switch (opts.time_format) {
                 case RubyTime: dump_ruby_time(obj); break;
                 case XmlTime: dump_xml_time(obj); break;
                 case UnixZTime: _dump_time(obj, true); break;
@@ -101,9 +102,9 @@ public class CompatDump extends Dump {
 
     @Override
     protected void visit_hash(IRubyObject key, IRubyObject value) {
-        int depth = out.depth;
+        int saved_depth = depth;
 
-        indent(depth, out.opts.dump_opts.hash_nl);
+        indent(depth, opts.dump_opts.hash_nl);
 
         if (key instanceof RubyString) {
             dump_str((RubyString) key);
@@ -112,20 +113,20 @@ public class CompatDump extends Dump {
         } else {
             dump_cstr(stringToByteList(key, "to_s"), false, false);
         }
-        if (out.opts.dump_opts.use) {
-            if (out.opts.dump_opts.before_sep != ByteList.EMPTY_BYTELIST) {
-                out.append(out.opts.dump_opts.before_sep);
+        if (opts.dump_opts.use) {
+            if (opts.dump_opts.before_sep != ByteList.EMPTY_BYTELIST) {
+                append(opts.dump_opts.before_sep);
             }
-            out.append(':');
-            if (out.opts.dump_opts.after_sep != ByteList.EMPTY_BYTELIST) {
-                out.append(out.opts.dump_opts.after_sep);
+            append(':');
+            if (opts.dump_opts.after_sep != ByteList.EMPTY_BYTELIST) {
+                append(opts.dump_opts.after_sep);
             }
         } else {
-            out.append(':');
+            append(':');
         }
         dump_val(value, depth, null);
-        out.depth = depth;
-        out.append(',');
+        append(',');
+        depth = saved_depth;
     }
 
     private void dump_struct_comp(IRubyObject obj, int depth) {
@@ -142,8 +143,8 @@ public class CompatDump extends Dump {
             } else {
                 dump_val(aj, depth, null);
             }
-        } else if (Yes == out.opts.to_json && obj.respondsTo("to_json")) {
-            out.append(stringToByteList(obj, "to_json"));
+        } else if (Yes == opts.to_json && obj.respondsTo("to_json")) {
+            append(stringToByteList(obj, "to_json"));
         } else {
             dump_cstr(stringToByteList(obj, "to_s"), false, false);
         }

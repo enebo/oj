@@ -216,12 +216,12 @@ public class StringWriter extends RubyObject {
 
         dump.fill_indent(types.size());
         if (type == ObjectNew || type == ObjectType) {
-            dump.out.append('}');
+            dump.append('}');
         } else if (type == ArrayNew || type == ArrayType) {
-            dump.out.append(']');
+            dump.append(']');
         }
 
-        if (types.empty() && 0 <= dump.out.indent) dump.out.append('\n');
+        if (types.empty() && 0 <= dump.indent) dump.append('\n');
 
         return context.nil;
     }
@@ -248,7 +248,7 @@ public class StringWriter extends RubyObject {
         depth = 0;
         types.removeAllElements();
         keyWritten = false;
-        dump.out.reset();
+        dump.reset();
 
         return context.nil;
     }
@@ -259,13 +259,8 @@ public class StringWriter extends RubyObject {
      */
     @JRubyMethod
     public IRubyObject to_s(ThreadContext context) {
-        RubyString rstr = dump.out.asString(context);
-
-        rstr.setEncoding(UTF8Encoding.INSTANCE);
-
-        return rstr;
+        return dump.asString(context);
     }
-
 
     void key_check(ThreadContext context, ByteList key) {
         DumpType type = peekTypes();
@@ -287,7 +282,7 @@ public class StringWriter extends RubyObject {
             types.set(types.size() - 1, ArrayType);
         } else if (type == ObjectType || type == ArrayType) {
             // Always have a few characters available in the out.buf.
-            dump.out.append(',');
+            dump.append(',');
         }
     }
 
@@ -305,19 +300,19 @@ public class StringWriter extends RubyObject {
         if (!types.empty()) dump.fill_indent(types.size());
 
         dump.dump_cstr(key, false, false);
-        dump.out.append(':');
+        dump.append(':');
         keyWritten = true;
     }
 
     void push_object(ThreadContext context, ByteList key) {
         dump_key(context, key);
-        dump.out.append('{');
+        dump.append('{');
         push_type(context, ObjectNew);
     }
 
     void push_array(ThreadContext context, ByteList key) {
         dump_key(context, key);
-        dump.out.append('[');
+        dump.append('[');
         push_type(context, ArrayNew);
     }
 
@@ -342,7 +337,7 @@ public class StringWriter extends RubyObject {
             }
             if (null != key) {
                 dump.dump_cstr(key, false, false);
-                dump.out.append(':');
+                dump.append(':');
             }
         }
     }

@@ -46,7 +46,7 @@ public class StreamWriter extends RubyObject {
     }
 
     void write(ThreadContext context) {
-        RubyString string = sw.dump.out.asString(context);
+        RubyString string = sw.dump.asString(context);
 
         if (type == FILE_IO) {
             int size = string.getByteList().realSize();
@@ -62,7 +62,7 @@ public class StreamWriter extends RubyObject {
     }
 
     void reset_buf() {
-        sw.dump.out.buf.setRealSize(0);
+        sw.dump.buf.setRealSize(0);
     }
 
     /* call-seq: new(io, options)
