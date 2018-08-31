@@ -2,6 +2,7 @@ package oj.dump;
 
 import jnr.posix.util.Platform;
 import oj.Odd;
+import oj.OjLibrary;
 import oj.Options;
 import oj.Out;
 import oj.options.NanDump;
@@ -55,7 +56,20 @@ import static oj.Options.Yes;
 public abstract class Dump {
     protected ThreadContext context;
     protected Ruby runtime;
-    protected Out out;
+    public Out out;
+
+    public static Dump createDump(ThreadContext context, OjLibrary oj, Options opts) {
+        Out out = new Out(oj, opts);
+
+        switch (opts.mode) {
+            case NullMode: return new NullDump(context, out);
+            case StrictMode: return new StrictDump(context, out);
+            case CompatMode: return new CompatDump(context, out);
+            case ObjectMode:
+            default: //FIXME consider not defaulting or understand what default is.
+                return new ObjectDump(context, out);
+        }
+    }
 
     public static Dump createDump(ThreadContext context, Out out, int mode) {
         switch (mode) {
@@ -75,22 +89,19 @@ public abstract class Dump {
     }
 
     // Entry Point
-    public void obj_to_json(IRubyObject obj, Options copts) {
-        obj_to_json_using_params(obj, copts, IRubyObject.NULL_ARRAY);
+    public ByteList obj_to_json(IRubyObject obj) {
+        return obj_to_json_using_params(obj, IRubyObject.NULL_ARRAY);
     }
 
     // Entry Point
-    public void write_obj_to_file(IRubyObject obj, String path, Options copts) {
+    public void write_obj_to_file(IRubyObject obj, String path) {
         FileOutputStream f = null;
-
-        out.omit_nil = copts.dump_opts.omit_nil;
-
-        obj_to_json(obj, copts);
+        ByteList json = obj_to_json(obj);
 
         try {
             f = new FileOutputStream(path);
 
-            out.write(f);
+            f.write(json.unsafeBytes(), json.begin(), json.realSize());
         } catch (FileNotFoundException e) {
             throw context.runtime.newIOErrorFromException(e);
         } catch (IOException e) {
@@ -103,10 +114,8 @@ public abstract class Dump {
     }
 
     // Entry Point
-    public void write_obj_to_stream(IRubyObject obj, IRubyObject stream, Options copts) {
-        out.omit_nil = copts.dump_opts.omit_nil;
-
-        obj_to_json(obj, copts);
+    public void write_obj_to_stream(IRubyObject obj, IRubyObject stream) {
+        obj_to_json(obj);
 
         // Note: Removed Windows path as it called native write on fileno and JRuby does work the same way.
         if (obj instanceof StringIO) {
@@ -1104,15 +1113,9 @@ public abstract class Dump {
         }
     }
 
-    protected void obj_to_json_using_params(IRubyObject obj, Options copts, IRubyObject[] argv) {
-        out.circ_cnt = 0;
-        out.opts = copts;
-        out.hash_cnt = 0;
-        out.omit_nil = copts.dump_opts.omit_nil;
+    protected ByteList obj_to_json_using_params(IRubyObject obj, IRubyObject[] argv) {
+        if (Yes == out.opts.circular) out.new_circ_cache();
 
-        if (Yes == copts.circular) out.new_circ_cache();
-
-        out.indent = copts.indent;
         dump_val(obj, 0, argv);
         if (out.indent > 0) {
             switch (out.peek(0)) {
@@ -1120,7 +1123,9 @@ public abstract class Dump {
             }
         }
 
-        if (Yes == copts.circular) out.delete_circ_cache();
+        if (Yes == out.opts.circular) out.delete_circ_cache();
+
+        return out.buf;
     }
 
     // Unlike C version we assume check has been made that there is an ignore list

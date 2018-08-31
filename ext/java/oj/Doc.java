@@ -1,5 +1,6 @@
 package oj;
 
+import oj.dump.Dump;
 import oj.dump.LeafDump;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
@@ -300,14 +301,12 @@ public class Doc extends RubyObject {
 
         Leaf leaf = get_doc_leaf(context, path);
         if (leaf != null) {
-            OjLibrary oj = RubyOj.oj(context);
             Options options = OjLibrary.getDefaultOptions(context);
-            Out out = new Out(oj);
             if (filename == null) {
-                new LeafDump(context, out).leafToJSON(leaf, options);
-                return context.runtime.newString(out.buf);
+                LeafDump dump = new LeafDump(context, RubyOj.oj(context), options);
+                return context.runtime.newString(dump.leafToJSON(leaf));
             } else {
-                new LeafDump(context, out).leafToFile(leaf, filename, options);
+                new LeafDump(context, RubyOj.oj(context), options).leafToFile(leaf, filename);
             }
         }
         return context.nil;

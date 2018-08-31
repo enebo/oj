@@ -19,13 +19,13 @@ public class Out {
     public Map<Object,Integer> circ_cache = null;
     public int circ_cnt = 0;
     public int indent;
-    public int depth; // used by dump_hash
+    public int depth = 0; // used by dump_hash
     public Options opts;
     public int hash_cnt = 0;
     public boolean allocated;
     public boolean omit_nil;
     IRubyObject[] argv;
-    DumpCaller caller; // use for mimic json only
+    DumpCaller caller = DumpCaller.CALLER_DUMP; // use for mimic json only
     ROptTable ropts;
 
     public OjLibrary oj;
@@ -37,11 +37,9 @@ public class Out {
 
     public Out(OjLibrary oj, Options opts) {
         reset();
-        circ_cnt = 0;
-        hash_cnt = 0;
         this.opts = opts;
         indent = opts.indent;
-        depth = 0;
+        omit_nil = opts.dump_opts.omit_nil;
         this.oj = oj;
     }
 

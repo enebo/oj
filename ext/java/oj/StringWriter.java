@@ -30,7 +30,6 @@ import static oj.options.DumpType.*;
  * construction is complete will return the document in it's current state.
  */
 public class StringWriter extends RubyObject {
-    public Out out;
     public Options opts;
     public int depth = 0;
     public Stack<DumpType> types = new Stack<>();
@@ -58,13 +57,9 @@ public class StringWriter extends RubyObject {
     public IRubyObject initialize(ThreadContext context, IRubyObject[] argv) {
         OjLibrary oj = RubyOj.oj(context);
         opts = oj.default_options.dup(context);
-        out = new Out(oj, opts);
-        
-        if (argv.length == 1) RubyOj.parse_options(context, argv[0], opts);
-        
-        out.indent = opts.indent;
 
-        dump = Dump.createDump(context, out, opts.mode);
+        if (argv.length == 1) RubyOj.parse_options(context, argv[0], opts);
+        dump = Dump.createDump(context, oj, opts);
 
         return this;
     }
@@ -221,12 +216,12 @@ public class StringWriter extends RubyObject {
 
         dump.fill_indent(types.size());
         if (type == ObjectNew || type == ObjectType) {
-            out.append('}');
+            dump.out.append('}');
         } else if (type == ArrayNew || type == ArrayType) {
-            out.append(']');
+            dump.out.append(']');
         }
 
-        if (types.empty() && 0 <= out.indent) out.append('\n');
+        if (types.empty() && 0 <= dump.out.indent) dump.out.append('\n');
 
         return context.nil;
     }
@@ -253,7 +248,7 @@ public class StringWriter extends RubyObject {
         depth = 0;
         types.removeAllElements();
         keyWritten = false;
-        out.reset();
+        dump.out.reset();
 
         return context.nil;
     }
@@ -264,7 +259,7 @@ public class StringWriter extends RubyObject {
      */
     @JRubyMethod
     public IRubyObject to_s(ThreadContext context) {
-        RubyString rstr = out.asString(context);
+        RubyString rstr = dump.out.asString(context);
 
         rstr.setEncoding(UTF8Encoding.INSTANCE);
 
@@ -292,7 +287,7 @@ public class StringWriter extends RubyObject {
             types.set(types.size() - 1, ArrayType);
         } else if (type == ObjectType || type == ArrayType) {
             // Always have a few characters available in the out.buf.
-            out.append(',');
+            dump.out.append(',');
         }
     }
 
@@ -310,19 +305,19 @@ public class StringWriter extends RubyObject {
         if (!types.empty()) dump.fill_indent(types.size());
 
         dump.dump_cstr(key, false, false);
-        out.append(':');
+        dump.out.append(':');
         keyWritten = true;
     }
 
     void push_object(ThreadContext context, ByteList key) {
         dump_key(context, key);
-        out.append('{');
+        dump.out.append('{');
         push_type(context, ObjectNew);
     }
 
     void push_array(ThreadContext context, ByteList key) {
         dump_key(context, key);
-        out.append('[');
+        dump.out.append('[');
         push_type(context, ArrayNew);
     }
 
@@ -347,7 +342,7 @@ public class StringWriter extends RubyObject {
             }
             if (null != key) {
                 dump.dump_cstr(key, false, false);
-                out.append(':');
+                dump.out.append(':');
             }
         }
     }

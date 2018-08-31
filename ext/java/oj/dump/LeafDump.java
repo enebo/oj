@@ -1,6 +1,7 @@
 package oj.dump;
 
 import oj.Leaf;
+import oj.OjLibrary;
 import oj.Options;
 import oj.Out;
 import oj.dump.Dump;
@@ -16,6 +17,7 @@ import org.jruby.RubyTime;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
+import org.jruby.util.ByteList;
 import org.jruby.util.StringSupport;
 import org.jruby.util.TypeConverter;
 
@@ -23,8 +25,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 
 public class LeafDump extends Dump {
-    public LeafDump(ThreadContext context, Out out) {
-        super(context, out);
+    public LeafDump(ThreadContext context, OjLibrary oj, Options options) {
+        super(context, new Out(oj, options));
     }
 
     // ENTRY POINT
@@ -59,17 +61,14 @@ public class LeafDump extends Dump {
         }
     }
 
-    public void leafToJSON(Leaf leaf, Options copts) {
-        out.circ_cnt = 0;
-        out.opts = copts;
-        out.hash_cnt = 0;
-        out.indent = copts.indent;
-
+    public ByteList leafToJSON(Leaf leaf) {
         dump_leaf(leaf, 0);
+
+        return out.buf;
     }
 
-    public void leafToFile(Leaf leaf, String path, Options copts) {
-        leafToJSON(leaf, copts);
+    public void leafToFile(Leaf leaf, String path) {
+        leafToJSON(leaf);
         FileOutputStream f = null;
 
         try {
