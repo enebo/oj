@@ -1,7 +1,9 @@
 package oj;
 
-import oj.dump.Dump;
 import oj.dump.LeafDump;
+import oj.parse.FastParse;
+import oj.parse.FileParserSource;
+import oj.parse.Parse;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyClass;
@@ -28,11 +30,11 @@ import static oj.LeafValue.COL_VAL;
 public class Doc extends RubyObject {
     public final int MAX_STACK = 100;
     public long size = 0;
-    Leaf[] wheres = new Leaf[MAX_STACK];
-    int where = 0;
-    int where_path = 0;
-    Leaf data;
-    IRubyObject self;
+    public Leaf[] wheres = new Leaf[MAX_STACK];
+    public int where = 0;
+    public int where_path = 0;
+    public Leaf data;
+    public IRubyObject self;
     IRubyObject slash;
 
     private static ObjectAllocator ALLOCATOR = new ObjectAllocator() {

@@ -4,6 +4,7 @@ import oj.OjLibrary;
 import oj.Options;
 import org.jruby.RubyModule;
 import org.jruby.RubyRange;
+import org.jruby.RubyRational;
 import org.jruby.RubyString;
 import org.jruby.RubyStruct;
 import org.jruby.RubySymbol;
@@ -48,22 +49,27 @@ public class NullDump extends Dump {
     }
 
     @Override
-    protected void dump_other(IRubyObject obj, int depth, IRubyObject[] args) {
+    protected void dump_other(IRubyObject obj, int depth) {
         dump_nil();
     }
 
     @Override
-    protected void dump_complex(IRubyObject obj, int depth, IRubyObject[] args) {
+    protected void dump_complex(IRubyObject obj, int depth) {
         dump_nil();
     }
 
     @Override
-    protected void dump_regexp(IRubyObject obj, int depth, IRubyObject[] args) {
+    protected void dump_regexp(IRubyObject obj, int depth) {
         dump_nil();
     }
 
     @Override
     protected void dump_range(RubyRange obj, int depth) {
+        dump_nil();
+    }
+
+    @Override
+    protected void dump_rational(RubyRational rational, int depth) {
         dump_nil();
     }
 

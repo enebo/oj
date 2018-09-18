@@ -318,7 +318,7 @@ public class StringWriter extends RubyObject {
 
     void push_value(ThreadContext context, IRubyObject val, ByteList key) {
         dump_key(context, key);
-        dump.dump_val(val, types.size(), null);
+        dump.dump_val(val, types.size());
     }
 
     void push_json(ThreadContext context, ByteList json, ByteList key) {

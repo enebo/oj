@@ -7,6 +7,7 @@ import org.jruby.RubyArray;
 import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyRange;
+import org.jruby.RubyRational;
 import org.jruby.RubyString;
 import org.jruby.RubyStruct;
 import org.jruby.RubySymbol;
@@ -95,11 +96,11 @@ public class ObjectDump extends Dump {
         if (key instanceof RubyString) {
             dump_str((RubyString) key);
             append(':');
-            dump_val(value, saved_depth, null);
+            dump_val(value, saved_depth);
         } else if (key instanceof RubySymbol) {
             dump_sym((RubySymbol) key);
             append(':');
-            dump_val(value, saved_depth, null);
+            dump_val(value, saved_depth);
         } else {
             int	d2 = saved_depth + 1;
             int	i;
@@ -123,10 +124,10 @@ public class ObjectDump extends Dump {
             append(':');
             append('[');
             fill_indent(d2);
-            dump_val(key, d2, null);
+            dump_val(key, d2);
             append(',');
             fill_indent(d2);
-            dump_val(value, d2, null);
+            dump_val(value, d2);
             fill_indent(saved_depth);
             append(']');
         }
@@ -149,22 +150,22 @@ public class ObjectDump extends Dump {
     }
 
     @Override
-    protected void dump_other(IRubyObject obj, int depth, IRubyObject[] args) {
+    protected void dump_other(IRubyObject obj, int depth) {
         long id = check_circular(obj);
 
         if (0 <= id) dump_obj_attrs(obj, obj.getMetaClass(), id, depth);
     }
 
     @Override
-    protected void dump_complex(IRubyObject obj, int depth, IRubyObject[] args) {
+    protected void dump_complex(IRubyObject obj, int depth) {
         // FIXME: do we really need to do all this checking....
-        dump_obj_comp(obj, depth, args);
+        dump_obj_comp(obj, depth);
     }
 
     @Override
-    protected void dump_regexp(IRubyObject obj, int depth, IRubyObject[] args) {
+    protected void dump_regexp(IRubyObject obj, int depth) {
         // FIXME: do we really need to do all this checking....
-        dump_obj_comp(obj, depth, args);
+        dump_obj_comp(obj, depth);
     }
 
     @Override
@@ -180,9 +181,9 @@ public class ObjectDump extends Dump {
         append(range.getMetaClass().getName());
         append('"');
         append(',');
-        dump_val(range.begin(context), d3, null);
+        dump_val(range.begin(context), d3);
         append(',');
-        dump_val(range.end(context), d3, null);
+        dump_val(range.end(context), d3);
         append(',');
         if (range.exclude_end_p().isTrue()) {
             dump_true();
@@ -191,6 +192,11 @@ public class ObjectDump extends Dump {
         }
         append(']');
         append('}');
+    }
+
+    @Override
+    protected void dump_rational(RubyRational rational, int depth) {
+        dump_other(rational, depth);
     }
 
     @Override
@@ -238,23 +244,11 @@ public class ObjectDump extends Dump {
             }
 
             fill_indent(d3);
-            dump_val(obj.aref(name), d3, null);
+            dump_val(obj.aref(name), d3);
         }
 
         append(']');
         append('}');
-    }
-
-    private static boolean isEscapeString(ByteList str) {
-        if (str.realSize() >=2 ) {
-            int s = str.get(0);
-            if (s == ':') return true;
-            if (s == '^'){
-                s = str.get(1);
-                return s == 'r' || s == 'i';
-            }
-        }
-        return false;
     }
 
     private byte[] nan_str(IRubyObject value, NanDump nd, char mode, boolean positive) {

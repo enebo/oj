@@ -4,6 +4,7 @@ import oj.OjLibrary;
 import oj.Options;
 import org.jruby.RubyModule;
 import org.jruby.RubyRange;
+import org.jruby.RubyRational;
 import org.jruby.RubyString;
 import org.jruby.RubyStruct;
 import org.jruby.RubySymbol;
@@ -76,23 +77,28 @@ public class CompatDump extends Dump {
     }
 
     @Override
-    protected void dump_other(IRubyObject obj, int depth, IRubyObject[] args) {
-        dump_obj_comp(obj, depth, args); // FIXME: is this really common code with obj mode
+    protected void dump_other(IRubyObject obj, int depth) {
+        dump_obj_comp(obj, depth); // FIXME: is this really common code with obj mode
     }
 
     @Override
-    protected void dump_complex(IRubyObject obj, int depth, IRubyObject[] args) {
-        dump_obj_comp(obj, depth, args); // FIXME: is this really common code with obj mode
+    protected void dump_complex(IRubyObject obj, int depth) {
+        dump_obj_comp(obj, depth); // FIXME: is this really common code with obj mode
     }
 
     @Override
-    protected void dump_regexp(IRubyObject obj, int depth, IRubyObject[] args) {
-        dump_obj_comp(obj, depth, args); // FIXME: is this really common code with obj mode
+    protected void dump_regexp(IRubyObject obj, int depth) {
+        dump_obj_comp(obj, depth); // FIXME: is this really common code with obj mode
     }
 
     @Override
     protected void dump_range(RubyRange obj, int depth) {
         dump_struct_comp(obj, depth); // FIXME: do we really need to do all this checking....
+    }
+
+    @Override
+    protected void dump_rational(RubyRational rational, int depth) {
+        dump_other(rational, depth);
     }
 
     @Override
@@ -124,7 +130,7 @@ public class CompatDump extends Dump {
         } else {
             append(':');
         }
-        dump_val(value, depth, null);
+        dump_val(value, depth);
         append(',');
         depth = saved_depth;
     }
@@ -141,7 +147,7 @@ public class CompatDump extends Dump {
             if (aj == obj) {
                 dump_cstr(stringToByteList(obj, "to_s"), false, false);
             } else {
-                dump_val(aj, depth, null);
+                dump_val(aj, depth);
             }
         } else if (Yes == opts.to_json && obj.respondsTo("to_json")) {
             append(stringToByteList(obj, "to_json"));

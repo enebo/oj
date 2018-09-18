@@ -1,5 +1,6 @@
-package oj;
+package oj.parse;
 
+import oj.parse.Parse;
 import org.jruby.Ruby;
 import org.jruby.RubyBignum;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;

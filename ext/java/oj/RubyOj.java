@@ -1,8 +1,15 @@
 package oj;
 
 import oj.dump.Dump;
-import oj.options.DumpCaller;
-import org.jcodings.specific.UTF8Encoding;
+import oj.parse.CompatParse;
+import oj.parse.FileParserSource;
+import oj.parse.ObjectParse;
+import oj.parse.ParserSource;
+import oj.parse.ReadParserSource;
+import oj.parse.SCParse;
+import oj.parse.SajParse;
+import oj.parse.StrictParse;
+import oj.parse.StringParserSource;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyFile;
@@ -26,11 +33,6 @@ import java.util.ArrayList;
 import static oj.Options.*;
 import static oj.options.NanDump.*;
 
-// FIXME: I think all default_options need to clone for every parse.
-
-/**
- * Created by enebo on 8/25/15.
- */
 @JRubyModule(name = "Oj")
 public class RubyOj extends RubyModule {
     public static final int MAX_ODD_ARGS = 10;
@@ -240,6 +242,8 @@ public class RubyOj extends RubyModule {
         if (null != (v = ropts.fastARef(runtime.newSymbol("mode")))) {
             if (runtime.newSymbol("object") == v) {
                 copts.mode = ObjectMode;
+            } else if (runtime.newSymbol("custom") == v) {
+                copts.mode = CustomMode;
             } else if (runtime.newSymbol("strict") == v) {
                 copts.mode = StrictMode;
             } else if (runtime.newSymbol("compat") == v) {
@@ -247,7 +251,7 @@ public class RubyOj extends RubyModule {
             } else if (runtime.newSymbol("null") == v) {
                 copts.mode = NullMode;
             } else {
-                throw runtime.newArgumentError(":mode must be :object, :strict, :compat, or :null.");
+                throw runtime.newArgumentError(":mode must be :object, :strict, :compat, :null, :custom or :rails.");
             }
         }
         if (null != (v = ropts.fastARef(runtime.newSymbol("time_format")))) {
@@ -443,24 +447,20 @@ public class RubyOj extends RubyModule {
         return new ObjectParse(source, context, options).parse(oj, true, block);
     }
 
-    private static char getMode(Ruby runtime, char mode, RubyHash ropts) {
-        IRubyObject v;
-        if (null != (v = ropts.fastARef(runtime.newSymbol("mode")))) {
-            if (runtime.newSymbol("object") == v) {
-                mode = ObjectMode;
-            } else if (runtime.newSymbol("strict") == v) {
-                mode = StrictMode;
-            } else if (runtime.newSymbol("compat") == v) {
-                mode = CompatMode;
-            } else if (runtime.newSymbol("null") == v) {
-                mode = NullMode;
-            } else {
-                throw runtime.newArgumentError(":mode must be :object, :strict, :compat, or :null.");
-            }
-        }
-        return mode;
-    }
+    private static char getMode(Ruby runtime, char defaultMode, RubyHash ropts) {
+        IRubyObject v = ropts.fastARef(runtime.newSymbol("mode"));
+        if (v == null) return defaultMode;
 
+        String modeString = v.asJavaString();
+        switch (modeString) {
+            case "object": return ObjectMode;
+            case "custom": return CustomMode;
+            case "strict": return StrictMode;
+            case "compat": return CompatMode;
+            case "null": return NullMode;
+            default: throw runtime.newArgumentError(":mode must be :object, :strict, :compat, or :null.");
+        }
+    }
 
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject load_file(ThreadContext context, IRubyObject self, IRubyObject[] args, Block block) {

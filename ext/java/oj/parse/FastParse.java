@@ -1,5 +1,8 @@
-package oj;
+package oj.parse;
 
+import oj.Doc;
+import oj.Leaf;
+import oj.LeafType;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.runtime.Block;
 import org.jruby.runtime.ThreadContext;
@@ -389,7 +392,7 @@ public class FastParse {
         return context.nil;
     }
 
-    IRubyObject parse_json(Block block) {
+    public IRubyObject parse_json(Block block) {
         // skip UTF-8 BOM if present
         if (0xEF == source.peek(0) && 0xBB == source.peek(1) && 0xBF == source.peek(2)) {
             source.advance(3);

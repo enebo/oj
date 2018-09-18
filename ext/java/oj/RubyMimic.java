@@ -1,5 +1,7 @@
 package oj;
 
+import oj.parse.CompatParse;
+import oj.parse.ParserSource;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyClass;

@@ -1,4 +1,4 @@
-package oj;
+package oj.parse;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -7,6 +7,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Stack;
 
+import oj.OjLibrary;
+import oj.Options;
+import oj.RubyOj;
 import oj.dump.Dump;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
@@ -29,7 +32,7 @@ import org.jruby.util.TypeConverter;
 
 import static oj.NextItem.*;
 import static oj.Options.*;
-import static oj.ParserSource.EOF;
+import static oj.parse.ParserSource.EOF;
 
 /**
  * Base class for all the parser types.

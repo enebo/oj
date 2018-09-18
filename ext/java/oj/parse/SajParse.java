@@ -1,4 +1,4 @@
-package oj;
+package oj.parse;
 
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;
@@ -7,9 +7,9 @@ import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
 import static oj.Leaf.NUM_MAX;
-import static oj.NumInfo.OJ_INFINITY;
-import static oj.Parse.INFINITY;
-import static oj.ParserSource.EOF;
+import static oj.parse.NumInfo.OJ_INFINITY;
+import static oj.parse.Parse.INFINITY;
+import static oj.parse.ParserSource.EOF;
 
 /** This JSON parser is a single pass, destructive, callback parser. It is a
 * single pass parse since it only make one pass over the characters in the
@@ -479,7 +479,7 @@ public class SajParse { // extends Parse {
         return value;
     }
 
-    void parse(IRubyObject handler) {
+    public void parse(IRubyObject handler) {
         source.advance(0);
         // skip UTF-8 BOM if present
         if (0xEF == source.peek(0) && 0xBB == source.peek(1) && 0xBF == source.peek(2)) {

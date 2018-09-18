@@ -1,6 +1,7 @@
-package oj;
+package oj.parse;
 
 
+import oj.Options;
 import org.jruby.runtime.Helpers;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;

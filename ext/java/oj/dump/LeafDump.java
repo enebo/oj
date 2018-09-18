@@ -8,6 +8,7 @@ import org.jruby.RubyFixnum;
 import org.jruby.RubyFloat;
 import org.jruby.RubyModule;
 import org.jruby.RubyRange;
+import org.jruby.RubyRational;
 import org.jruby.RubyString;
 import org.jruby.RubyStruct;
 import org.jruby.RubySymbol;
@@ -201,23 +202,28 @@ public class LeafDump extends Dump {
     }
 
     @Override
-    protected void dump_other(IRubyObject obj, int depth, IRubyObject[] args) {
+    protected void dump_other(IRubyObject obj, int depth) {
         throw new RuntimeException("dump_other called in leafdump");
     }
 
     @Override
-    protected void dump_complex(IRubyObject obj, int depth, IRubyObject[] args) {
+    protected void dump_complex(IRubyObject obj, int depth) {
         throw new RuntimeException("dump_complex called in leafdump");
     }
 
     @Override
-    protected void dump_regexp(IRubyObject obj, int depth, IRubyObject[] args) {
+    protected void dump_regexp(IRubyObject obj, int depth) {
         throw new RuntimeException("dump_regexp called in leafdump");
     }
 
     @Override
     protected void dump_range(RubyRange obj, int depth) {
         throw new RuntimeException("dump_range called in leafdump");
+    }
+
+    @Override
+    protected void dump_rational(RubyRational rational, int depth) {
+        throw new RuntimeException("dump_rational called in leafdump");
     }
 
     @Override

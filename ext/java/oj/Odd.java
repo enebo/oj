@@ -10,9 +10,9 @@ import java.util.List;
 
 public class Odd {
     String classname;
-    RubyModule clas;
-    IRubyObject createObj;
-    String createOp;
+    public RubyModule clas;
+    public IRubyObject createObj;
+    public String createOp;
     public String[] attrs;
     public AttrGetFunc[] attrFuncs;
     boolean isModule;

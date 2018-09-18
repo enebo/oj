@@ -1,4 +1,4 @@
-package oj;
+package oj.parse;
 
 import org.jruby.runtime.ThreadContext;
 import org.jruby.util.ByteList;

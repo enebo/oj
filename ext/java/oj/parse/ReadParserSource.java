@@ -1,15 +1,23 @@
-package oj;
+package oj.parse;
 
+import org.jruby.RubyString;
+import org.jruby.runtime.ThreadContext;
+import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
 /**
  * Created by enebo on 8/1/18.
  */
-public class StringParserSource extends ParserSource {
+public class ReadParserSource extends ParserSource {
     public ByteList json;
 
-    public StringParserSource(ByteList json) {
-        this.json = json;
+    public ReadParserSource(ThreadContext context, IRubyObject obj, String method) {
+        // FIXME: This is not a reasonable streamer but should be good enough for debugging tests.
+        int buffer_size = 20000;
+        IRubyObject value = obj.callMethod(context, method, context.runtime.newFixnum(buffer_size));
+        if (value instanceof RubyString) {
+            json = ((RubyString) value).getByteList();
+        }
     }
 
     public void appendTo(ByteList buf, int start) {

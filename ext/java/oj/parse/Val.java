@@ -1,5 +1,7 @@
-package oj;
+package oj.parse;
 
+import oj.NextItem;
+import oj.OddArgs;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 

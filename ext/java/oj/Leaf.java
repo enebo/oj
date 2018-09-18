@@ -1,5 +1,6 @@
 package oj;
 
+import oj.parse.Parse;
 import org.jruby.RubyArray;
 import org.jruby.RubyClass;
 import org.jruby.RubyFixnum;

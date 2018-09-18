@@ -4,7 +4,7 @@ import jnr.posix.util.Platform;
 import oj.Odd;
 import oj.OjLibrary;
 import oj.Options;
-import oj.Parse;
+import oj.parse.Parse;
 import oj.ROptTable;
 import oj.options.DumpCaller;
 import oj.options.NanDump;
@@ -50,12 +50,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 
-import static oj.NumInfo.OJ_INFINITY;
+import static oj.parse.NumInfo.OJ_INFINITY;
 import static oj.Options.*;
 import static oj.Options.Yes;
 
 /**
- * Created by enebo on 8/29/18.
+ * Base class for all Dumpers.
  */
 public abstract class Dump {
     protected ThreadContext context;
@@ -73,12 +73,14 @@ public abstract class Dump {
     DumpCaller caller = DumpCaller.CALLER_DUMP; // use for mimic json only
     ROptTable ropts;
     public OjLibrary oj;
+    byte[] num_buf = new byte[32];
 
     public static Dump createDump(ThreadContext context, OjLibrary oj, Options opts) {
         switch (opts.mode) {
             case NullMode: return new NullDump(context, oj, opts);
             case StrictMode: return new StrictDump(context, oj, opts);
             case CompatMode: return new CompatDump(context, oj, opts);
+            case CustomMode: return new CustomDump(context, oj, opts);
             case ObjectMode:
             default: //FIXME consider not defaulting or understand what default is.
                 return new ObjectDump(context, oj, opts);
@@ -256,21 +258,39 @@ public abstract class Dump {
         }
     }
 
-    void dump_ulong(long num) {
-        byte[] buf = new byte[32]; // FIXME: Can be instance variable
-        int	b = buf.length - 1;
+    void dump_long(long num) {
+        int	b = num_buf.length - 1;
+        boolean negative = false;
 
-        if (0 < num) {
-            for (; 0 < num; num /= 10, b--) {
-                buf[b] = (byte) ((num % 10) + '0');
-            }
-            b++;
-        } else {
-            buf[b] = '0';
+        if (num == 0) {
+            append('0');
+            return;
+        } else if (num < 0) {
+            negative = true;
+            num = -num;
         }
-        for (; b < buf.length; b++) {
-            append(buf[b]);
+
+        do {
+            num_buf[--b] = (byte) ((num % 10) + '0');
+        } while ((num /= 10) > 0);
+        if (negative) num_buf[--b] = '-';
+
+        append(num_buf, b, num_buf.length - b);
+    }
+
+    void dump_ulong(long num) {
+        int	b = num_buf.length - 1;
+
+        if (num == 0) {
+            append('0');
+            return;
         }
+
+        do {
+            num_buf[--b] = (byte) ((num % 10) + '0');
+        } while ((num /= 10) > 0);
+
+        append(num_buf, b, num_buf.length - b);
     }
 
     void dump_hex(int c) {
@@ -566,10 +586,16 @@ public abstract class Dump {
     }
 
     protected abstract void dump_bigdecimal(RubyBigDecimal bigdecimal, int depth);
-    protected abstract void dump_str(RubyString string);
-    protected abstract void dump_time(RubyTime time, int depth);
-    protected abstract void dump_sym(RubySymbol symbol);
     protected abstract void dump_class(RubyModule clas);
+    protected abstract void dump_complex(IRubyObject obj, int depth);
+    protected abstract void dump_other(IRubyObject obj, int depth);
+    protected abstract void dump_range(RubyRange obj, int depth);
+    protected abstract void dump_rational(RubyRational rational, int depth);
+    protected abstract void dump_regexp(IRubyObject obj, int depth);
+    protected abstract void dump_str(RubyString string);
+    protected abstract void dump_struct(RubyStruct obj, int depth);
+    protected abstract void dump_sym(RubySymbol symbol);
+    protected abstract void dump_time(RubyTime time, int depth);
     protected abstract String modeName();
 
     protected void dump_array(RubyArray array, int depth) {
@@ -595,7 +621,7 @@ public abstract class Dump {
 
             for (int i = 0; i <= cnt; i++) {
                 indent(d2, opts.dump_opts.array_nl);
-                dump_val(array.eltInternal(i), d2, null);
+                dump_val(array.eltInternal(i), d2);
                 if (i < cnt) append(',');
             }
             indent(depth, opts.dump_opts.array_nl);
@@ -635,22 +661,26 @@ public abstract class Dump {
                 }
             }
             dump_str((RubyString) key);
-            if (opts.dump_opts.before_sep != ByteList.EMPTY_BYTELIST) {
-                append(opts.dump_opts.before_sep);
-            }
-            append(':');
-            if (opts.dump_opts.after_sep != ByteList.EMPTY_BYTELIST) {
-                append(opts.dump_opts.after_sep);
-            }
+            dump_colon();
         } else {
             fill_indent(saved_depth);
             dump_str((RubyString) key);
             append(':');
         }
-        dump_val(value, saved_depth, null);
+        dump_val(value, saved_depth);
         append(',');
 
         depth = saved_depth;
+    }
+
+    protected void dump_colon() {
+        if (opts.dump_opts.before_sep != ByteList.EMPTY_BYTELIST) {
+            append(opts.dump_opts.before_sep);
+        }
+        append(':');
+        if (opts.dump_opts.after_sep != ByteList.EMPTY_BYTELIST) {
+            append(opts.dump_opts.after_sep);
+        }
     }
 
     protected void dump_hash(IRubyObject obj, int dep) {
@@ -797,7 +827,7 @@ public abstract class Dump {
         append(buf, b, size);
     }
 
-    protected void dump_obj_comp(IRubyObject obj, int depth, IRubyObject[] argv) {
+    protected void dump_obj_comp(IRubyObject obj, int depth) {
         if (obj.respondsTo("to_hash")) {
             dump_to_hash(obj, depth);
         } else if (obj.respondsTo("as_json")) {
@@ -905,9 +935,6 @@ public abstract class Dump {
         }
     }
 
-    protected abstract void dump_other(IRubyObject obj, int depth, IRubyObject[] args);
-
-
     // FIXME: both C and Java can crash potentially I added check here but
     // I should see if C oj crashes for these cases.
     protected ByteList stringToByteList(IRubyObject obj, String method) {
@@ -930,12 +957,9 @@ public abstract class Dump {
         if (aj == object) {   // Catch the obvious brain damaged recursive dumping.
             dump_cstr(stringToByteList(object, "to_s"), false, false);
         } else {
-            dump_val(aj, depth, null);
+            dump_val(aj, depth);
         }
     }
-
-    protected abstract void dump_complex(IRubyObject obj, int depth, IRubyObject[] args);
-    protected abstract void dump_regexp(IRubyObject obj, int depth, IRubyObject[] args);
 
     protected void dump_obj_attrs(IRubyObject obj, RubyClass clas, long id, int depth) {
         int		d2 = depth + 1;
@@ -1001,15 +1025,12 @@ public abstract class Dump {
                 dump_cstr("~" + name, false, false);
             }
             append(':');
-            dump_val(value, d2, null);
+            dump_val(value, d2);
         }
         this.depth = depth;
         fill_indent(depth);
         append('}');
     }
-
-    protected abstract void dump_range(RubyRange obj, int depth);
-    protected abstract void dump_struct(RubyStruct obj, int depth);
 
     protected void dump_odd(IRubyObject obj, Odd odd, RubyClass clas, int depth) {
         int	d2 = depth + 1;
@@ -1037,7 +1058,7 @@ public abstract class Dump {
                 fill_indent(d2);
                 dump_cstr(name, false, false);
                 append(':');
-                dump_val(value, d2, null);
+                dump_val(value, d2);
                 append(',');
             }
             pop(); // remove last ','
@@ -1061,7 +1082,7 @@ public abstract class Dump {
         throw runtime.newTypeError("Failed to dump " + obj.getMetaClass().getName() + " Object to JSON in strict mode.");
     }
 
-    public void dump_val(IRubyObject obj, int depth, IRubyObject[] argv) {
+    public void dump_val(IRubyObject obj, int depth) {
         if (MAX_DEPTH < depth) {
             throw new RaiseException(context.runtime, context.runtime.getNoMemoryError(), "Too deeply nested.", true);
         }
@@ -1106,15 +1127,17 @@ public abstract class Dump {
             } else if (obj.getMetaClass() == context.runtime.getHash()) {
                 dump_hash(obj, depth);
             } else if (obj instanceof RubyComplex) {
-                dump_complex(obj, depth, argv);
+                dump_complex(obj, depth);
             } else if (obj instanceof RubyRegexp) {
-                dump_regexp(obj, depth, argv);
-            } else if (obj instanceof RubyTime) {
+                dump_regexp(obj, depth);
+            } else if (obj instanceof RubyTime) { // T_DATA
                 dump_time((RubyTime) obj, depth);
-            } else if (obj instanceof RubyBigDecimal) {  // FIXME: not sure it is only these two types.
+            } else if (obj instanceof RubyBigDecimal) { // T_DATA
                 dump_bigdecimal((RubyBigDecimal) obj, depth);
+            } else if (obj instanceof RubyRational) {
+                dump_rational((RubyRational) obj, depth);
             } else {
-                dump_other(obj, depth, argv);
+                dump_other(obj, depth);
             }
         }
     }
@@ -1122,7 +1145,9 @@ public abstract class Dump {
     protected ByteList obj_to_json_using_params(IRubyObject obj, IRubyObject[] argv) {
         if (Yes == opts.circular) new_circ_cache();
 
-        dump_val(obj, 0, argv);
+        this.argv = argv;
+
+        dump_val(obj, 0);
         if (indent > 0) {
             switch (peek(0)) {
                 case ']':case '}': append('\n');
@@ -1203,5 +1228,17 @@ public abstract class Dump {
 
     public RubyString asString(ThreadContext context) {
         return context.runtime.newString(buf);
+    }
+
+    protected static boolean isEscapeString(ByteList str) {
+        if (str.realSize() >=2 ) {
+            int s = str.get(0);
+            if (s == ':') return true;
+            if (s == '^'){
+                s = str.get(1);
+                return s == 'r' || s == 'i';
+            }
+        }
+        return false;
     }
 }

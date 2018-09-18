@@ -1,5 +1,6 @@
-package oj;
+package oj.parse;
 
+import oj.Options;
 import org.jruby.RubyArray;
 import org.jruby.RubyHash;
 import org.jruby.runtime.ThreadContext;

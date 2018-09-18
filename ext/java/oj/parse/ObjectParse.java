@@ -1,5 +1,8 @@
-package oj;
+package oj.parse;
 
+import oj.Odd;
+import oj.OddArgs;
+import oj.Options;
 import org.jcodings.specific.UTF8Encoding;
 import org.jruby.RubyArray;
 import org.jruby.RubyClass;
@@ -261,7 +264,7 @@ public class ObjectParse extends Parse {
                 case 'O': // odd object
                 {
                     // FIXME: bytelist -> String mismatch.
-                    Odd	odd = oj.getOdd(value.toString());
+                    Odd odd = oj.getOdd(value.toString());
 
                     if (null == odd) return false;
 
