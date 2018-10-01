@@ -6,9 +6,12 @@ import oj.Options;
 import org.jruby.RubyNumeric;
 import org.jruby.RubyRange;
 import org.jruby.RubyRational;
+import org.jruby.RubyString;
 import org.jruby.RubyTime;
+import org.jruby.ext.bigdecimal.RubyBigDecimal;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
+import org.jruby.util.ByteList;
 
 import static oj.Options.*;
 
@@ -19,7 +22,7 @@ public class CustomDump extends CompatDump {
     private static String[] COMPLEX_METHODS = new String[] {"real", "imag"};
     private static String[] DATE_METHODS = new String[] {"s"};
     private static String[] OPENSTRUCT_METHODS = new String[] {"table"};
-    private static String[] RANGE_METHODS = new String[] {"begin", "end", "exclude"};
+    private static String[] RANGE_METHODS = new String[] {"begin", "end", "exclude_end?"};
     private static String[] REGEXP_METHODS = new String[] {"s"};
     private static String[] RATIONAL_METHODS = new String[] {"numerator", "denominator"};
     private static String[] TIME_METHODS = new String[] {"time"};
@@ -29,13 +32,27 @@ public class CustomDump extends CompatDump {
     }
 
     @Override
+    protected void dump_bigdecimal(RubyBigDecimal obj, int depth) {
+        ByteList str = stringToByteList(obj, "to_s");
+        if (opts.bigdec_as_num != No) {
+            dump_raw(str);
+        } else if (INFINITY.equals(str)) {
+            dump_raw(nan_str(obj, opts.dump_opts.nan_dump, opts.mode, true));
+        } else if (NINFINITY.equals(str)) {
+            dump_raw(nan_str(obj, opts.dump_opts.nan_dump, opts.mode, false));
+        } else {
+            dump_cstr(str, false, false);
+        }
+    }
+
+    @Override
     protected void dump_complex(IRubyObject obj, int depth) {
-        code_attrs(obj, COMPLEX_METHODS, callAll(obj, COMPLEX_METHODS), depth, opts.create_ok == Yes, Attr.AttrType.VALUE);
+        code_attrs(obj, COMPLEX_METHODS, callAll(obj, COMPLEX_METHODS), depth, opts.create_ok, Attr.AttrType.VALUE);
     }
 
     protected void dump_date(IRubyObject obj, int depth) {
         IRubyObject[] values = new IRubyObject[] { obj.callMethod(context, "iso8601") };
-        code_attrs(obj, DATE_METHODS, values, depth, opts.create_ok == Yes, Attr.AttrType.VALUE);
+        code_attrs(obj, DATE_METHODS, values, depth, opts.create_ok, Attr.AttrType.VALUE);
     }
 
     protected void dump_datetime(IRubyObject obj, int depth) {
@@ -43,29 +60,29 @@ public class CustomDump extends CompatDump {
     }
 
     protected void dump_openstruct(IRubyObject obj, int depth) {
-        code_attrs(obj, OPENSTRUCT_METHODS, callAll(obj, OPENSTRUCT_METHODS), depth, opts.create_ok == Yes, Attr.AttrType.VALUE);
+        code_attrs(obj, OPENSTRUCT_METHODS, callAll(obj, OPENSTRUCT_METHODS), depth, opts.create_ok, Attr.AttrType.VALUE);
     }
 
     @Override
     protected void dump_range(RubyRange obj, int depth) {
-        code_attrs(obj, RANGE_METHODS, callAll(obj, RANGE_METHODS), depth, opts.create_ok == Yes, Attr.AttrType.VALUE);
+        code_attrs(obj, RANGE_METHODS, callAll(obj, RANGE_METHODS), depth, opts.create_ok, Attr.AttrType.VALUE);
     }
 
     @Override
     protected void dump_rational(RubyRational obj, int depth) {
-        code_attrs(obj, RATIONAL_METHODS, callAll(obj, RATIONAL_METHODS), depth, opts.create_ok == Yes, Attr.AttrType.VALUE);
+        code_attrs(obj, RATIONAL_METHODS, callAll(obj, RATIONAL_METHODS), depth, opts.create_ok, Attr.AttrType.VALUE);
     }
 
     @Override
     protected void dump_regexp(IRubyObject obj, int depth) {
         IRubyObject[] values = new IRubyObject[] { obj.callMethod(context, "to_s") };
-        code_attrs(obj, REGEXP_METHODS, values, depth, opts.create_ok == Yes, Attr.AttrType.VALUE);
+        code_attrs(obj, REGEXP_METHODS, values, depth, opts.create_ok, Attr.AttrType.VALUE);
     }
 
     @Override
     protected void dump_time(RubyTime obj, int depth) {
-        if (opts.create_ok == Yes) {
-            code_attrs(obj, TIME_METHODS, callAll(obj, TIME_METHODS), depth, opts.create_ok == Yes, Attr.AttrType.VALUE);
+        if (opts.create_ok) {
+            code_attrs(obj, TIME_METHODS, callAll(obj, TIME_METHODS), depth, true, Attr.AttrType.VALUE);
         } else {
             switch (opts.time_format) {
                 case Options.RubyTime:	dump_ruby_time(obj);	break;

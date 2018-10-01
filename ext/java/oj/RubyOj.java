@@ -2,6 +2,7 @@ package oj;
 
 import oj.dump.Dump;
 import oj.parse.CompatParse;
+import oj.parse.CustomParse;
 import oj.parse.FileParserSource;
 import oj.parse.ObjectParse;
 import oj.parse.ParserSource;
@@ -66,22 +67,22 @@ public class RubyOj extends RubyModule {
             opts.fastASet(runtime.newSymbol("indent"), runtime.newString(oj.default_options.dump_opts.indent_str.dup()));
         }
         opts.fastASet(runtime.newSymbol("second_precision"), runtime.newFixnum(oj.default_options.sec_prec));
-        opts.fastASet(runtime.newSymbol("circular"), yesNo(context, oj.default_options.circular));
-        opts.fastASet(runtime.newSymbol("class_cache"), yesNo(context, oj.default_options.class_cache));
-        opts.fastASet(runtime.newSymbol("auto_define"), yesNo(context, oj.default_options.auto_define));
-        opts.fastASet(runtime.newSymbol("symbol_keys"), yesNo(context, oj.default_options.sym_key));
+        opts.fastASet(runtime.newSymbol("circular"), runtime.newBoolean(oj.default_options.circular));
+        opts.fastASet(runtime.newSymbol("class_cache"), runtime.newBoolean(oj.default_options.class_cache));
+        opts.fastASet(runtime.newSymbol("auto_define"), runtime.newBoolean(oj.default_options.auto_define));
+        opts.fastASet(runtime.newSymbol("symbol_keys"), runtime.newBoolean(oj.default_options.sym_key));
         opts.fastASet(runtime.newSymbol("bigdecimal_as_decimal"), yesNo(context, oj.default_options.bigdec_as_num));
-        opts.fastASet(runtime.newSymbol("create_additions"), yesNo(context, oj.default_options.create_ok));
-        opts.fastASet(runtime.newSymbol("use_to_json"), yesNo(context, oj.default_options.to_json));
-        opts.fastASet(runtime.newSymbol("use_to_hash"), yesNo(context, oj.default_options.to_hash));
-        opts.fastASet(runtime.newSymbol("use_as_json"), yesNo(context, oj.default_options.as_json));
-        opts.fastASet(runtime.newSymbol("nilnil"), yesNo(context, oj.default_options.nilnil));
-        opts.fastASet(runtime.newSymbol("empty_string"), yesNo(context, oj.default_options.empty_string));
-        opts.fastASet(runtime.newSymbol("allow_gc"), yesNo(context, oj.default_options.allow_gc));
-        opts.fastASet(runtime.newSymbol("quirks_mode"), yesNo(context, oj.default_options.quirks_mode));
-        opts.fastASet(runtime.newSymbol("allow_invalid_unicode"), yesNo(context, oj.default_options.allow_invalid));
-        opts.fastASet(runtime.newSymbol("allow_nan"), yesNo(context, oj.default_options.allow_nan));
-        opts.fastASet(runtime.newSymbol("trace"), yesNo(context, oj.default_options.trace));
+        opts.fastASet(runtime.newSymbol("create_additions"), runtime.newBoolean(oj.default_options.create_ok));
+        opts.fastASet(runtime.newSymbol("use_to_json"), runtime.newBoolean(oj.default_options.to_json));
+        opts.fastASet(runtime.newSymbol("use_to_hash"), runtime.newBoolean(oj.default_options.to_hash));
+        opts.fastASet(runtime.newSymbol("use_as_json"), runtime.newBoolean(oj.default_options.as_json));
+        opts.fastASet(runtime.newSymbol("nilnil"), runtime.newBoolean(oj.default_options.nilnil));
+        opts.fastASet(runtime.newSymbol("empty_string"), runtime.newBoolean(oj.default_options.empty_string));
+        opts.fastASet(runtime.newSymbol("allow_gc"), runtime.newBoolean(oj.default_options.allow_gc));
+        opts.fastASet(runtime.newSymbol("quirks_mode"), runtime.newBoolean(oj.default_options.quirks_mode));
+        opts.fastASet(runtime.newSymbol("allow_invalid_unicode"), runtime.newBoolean(oj.default_options.allow_invalid));
+        opts.fastASet(runtime.newSymbol("allow_nan"), runtime.newBoolean(oj.default_options.allow_nan));
+        opts.fastASet(runtime.newSymbol("trace"), runtime.newBoolean(oj.default_options.trace));
         opts.fastASet(runtime.newSymbol("float_precision"), runtime.newFixnum(oj.default_options.float_prec));
 
         RubySymbol mode = runtime.newSymbol("mode");
@@ -358,23 +359,23 @@ public class RubyOj extends RubyModule {
 
         copts.dump_opts.omit_nil = setTrueFalse(context, ropts, "omit_nil");
 
-        copts.circular = setYesNo(context, ropts, "circular");
-        copts.auto_define = setYesNo(context, ropts, "auto_define");
-        copts.sym_key = setYesNo(context, ropts, "symbol_keys");
-        copts.class_cache = setYesNo(context, ropts, "class_cache");
+        copts.circular = setBoolean(context, ropts, "circular");
+        copts.auto_define = setBoolean(context, ropts, "auto_define");
+        copts.sym_key = setBoolean(context, ropts, "symbol_keys");
+        copts.class_cache = setBoolean(context, ropts, "class_cache");
         copts.bigdec_as_num = setYesNo(context, ropts, "bigdecimal_as_decimal");
-        copts.to_hash = setYesNo(context, ropts, "use_to_hash");
-        copts.to_json = setYesNo(context, ropts, "use_to_json");
-        copts.as_json = setYesNo(context, ropts, "use_as_json");
-        copts.nilnil = setYesNo(context, ropts, "nilnil");
-        copts.nilnil = setYesNo(context, ropts, "allow_blank");
-        copts.empty_string = setYesNo(context, ropts, "empty_string");
-        copts.allow_gc = setYesNo(context, ropts, "allow_gc");
-        copts.quirks_mode = setYesNo(context, ropts, "quirks_mode");
-        copts.allow_invalid = setYesNo(context, ropts, "allow_invalid_unicode");
-        copts.allow_nan = setYesNo(context, ropts, "allow_nan");
-        copts.trace = setYesNo(context, ropts, "trace");
-        copts.create_ok = setYesNo(context, ropts, "create_additions");
+        copts.to_hash = setBoolean(context, ropts, "use_to_hash");
+        copts.to_json = setBoolean(context, ropts, "use_to_json");
+        copts.as_json = setBoolean(context, ropts, "use_as_json");
+        copts.nilnil = setBoolean(context, ropts, "nilnil");
+        copts.nilnil = setBoolean(context, ropts, "allow_blank"); // alias of nilnil
+        copts.empty_string = setBoolean(context, ropts, "empty_string");
+        copts.allow_gc = setBoolean(context, ropts, "allow_gc");
+        copts.quirks_mode = setBoolean(context, ropts, "quirks_mode");
+        copts.allow_invalid = setBoolean(context, ropts, "allow_invalid_unicode");
+        copts.allow_nan = setBoolean(context, ropts, "allow_nan");
+        copts.trace = setBoolean(context, ropts, "trace");
+        copts.create_ok = setBoolean(context, ropts, "create_additions");
 
         v = ropts.fastARef(runtime.newSymbol("ignore"));
         if (v != null && !v.isNil()) {
@@ -386,6 +387,15 @@ public class RubyOj extends RubyModule {
                 copts.ignore.add((RubyModule) array.eltInternal(i));
             }
         }
+    }
+
+    private static boolean setBoolean(ThreadContext context, RubyHash options, String symbolName) {
+        IRubyObject v = options.fastARef(context.runtime.newSymbol(symbolName));
+        if (v == context.nil || v == null) return false;
+        if (v == context.tru) return true;
+        if (v == context.fals) return false;
+
+        throw context.runtime.newArgumentError(symbolName + "must be true, false, or nil");
     }
 
     private static char setYesNo(ThreadContext context, RubyHash options, String symbolName) {
@@ -434,10 +444,15 @@ public class RubyOj extends RubyModule {
 
         switch (mode) {
             case StrictMode:
-                return new StrictParse(source, context, options).parse(oj, true, block);
             case NullMode:
+                return new StrictParse(source, context, options).parse(oj, true, block);
             case CompatMode:
+            case RailsMode:
                 return new CompatParse(source, context, options).parse(oj, true, block);
+            case CustomMode:
+                return new CustomParse(source, context, options).parse(oj, true, block);
+            case WabMode:
+                // FIXME: IMPL
             case ObjectMode:
                 // is the catch all parser below...
             default:
@@ -503,8 +518,8 @@ public class RubyOj extends RubyModule {
         OjLibrary oj = resolveOj(self);
         Options options = oj.default_options.dup(context);
 
-        options.auto_define = No;
-        options.sym_key = No;
+        options.auto_define = false;
+        options.sym_key = false;
         options.mode = StrictMode;
         IRubyObject[] args = new IRubyObject[] { doc };
         ParserSource source = processArgs(context, args, options);
@@ -555,7 +570,7 @@ public class RubyOj extends RubyModule {
 
         if (input instanceof RubyString) {
             byteSource = ((RubyString) input).getByteList();
-        } else if (context.nil == input && Yes == options.nilnil) {
+        } else if (input == context.nil && options.nilnil) {
             return null;
         } else {
             RubyModule clas = input.getMetaClass();

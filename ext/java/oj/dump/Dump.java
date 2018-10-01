@@ -365,7 +365,7 @@ public abstract class Dump {
     protected long check_circular(IRubyObject obj) {
         Integer	id = 0;
 
-        if (ObjectMode == opts.mode && Yes == opts.circular) {
+        if (opts.circular && opts.mode == ObjectMode) {
             id = circ_cache.get(obj);
             if (id == null) {
                 circ_cnt++;
@@ -832,7 +832,7 @@ public abstract class Dump {
             dump_to_hash(obj, depth);
         } else if (obj.respondsTo("as_json")) {
             dump_as_json(obj, depth);
-        } else if (Yes == opts.to_json && obj.respondsTo("to_json")) {
+        } else if (opts.to_json && obj.respondsTo("to_json")) {
             append(stringToByteList(obj, "to_json"));
         } else {
             if (obj instanceof RubyBigDecimal) {
@@ -1143,7 +1143,7 @@ public abstract class Dump {
     }
 
     protected ByteList obj_to_json_using_params(IRubyObject obj, IRubyObject[] argv) {
-        if (Yes == opts.circular) new_circ_cache();
+        if (opts.circular) new_circ_cache();
 
         this.argv = argv;
 
@@ -1154,7 +1154,7 @@ public abstract class Dump {
             }
         }
 
-        if (Yes == opts.circular) delete_circ_cache();
+        if (opts.circular) delete_circ_cache();
 
         return buf;
     }
@@ -1240,5 +1240,23 @@ public abstract class Dump {
             }
         }
         return false;
+    }
+
+    protected byte[] nan_str(IRubyObject value, NanDump nd, char mode, boolean positive) {
+        if (nd == NanDump.AutoNan) {
+            switch (mode) {
+                case CompatMode: nd = NanDump.WordNan; break;
+                case StrictMode: nd = NanDump.RaiseNan; break;
+            }
+        }
+        switch(nd) {
+            case RaiseNan: raise_strict(value); break;
+            case WordNan: return positive ? INFINITY_VALUE : NINFINITY_VALUE;
+            case NullNan: return NULL_VALUE;
+            case HugeNan:
+                return INF_VALUE;
+        }
+
+        return null; // C source does this but this I believe will crash in both impls...let's see....
     }
 }

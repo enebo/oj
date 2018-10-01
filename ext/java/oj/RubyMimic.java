@@ -15,9 +15,6 @@ import org.jruby.runtime.ObjectAllocator;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 
-/**
- * Created by enebo on 9/2/15.
- */
 public class RubyMimic {
     static ObjectAllocator OBJECT_ALLOCATOR = new ObjectAllocator() {
         @Override
@@ -78,7 +75,7 @@ public class RubyMimic {
         }
 
         ojLibrary.default_options = Options.mimicOptions(context);
-        ojLibrary.default_options.to_json = Options.Yes;
+        ojLibrary.default_options.to_json = true;
 
         return mimic;
     }

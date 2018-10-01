@@ -2,6 +2,7 @@ package oj.parse;
 
 import oj.NextItem;
 import oj.OddArgs;
+import org.jruby.RubyClass;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
@@ -13,6 +14,7 @@ public class Val {
     ByteList key;
     IRubyObject key_val;
     ByteList classname;
+    RubyClass clas;
     OddArgs oddArgs;
     NextItem next; // ValNext
     byte k1;   // first original character in the key

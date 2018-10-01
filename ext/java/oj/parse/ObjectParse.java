@@ -22,8 +22,6 @@ import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.runtime.builtin.Variable;
 import org.jruby.util.ByteList;
 
-import static oj.Options.Yes;
-
 public class ObjectParse extends Parse {
     private RubyClass structClass;
     private RubyClass timeClass;
@@ -42,7 +40,7 @@ public class ObjectParse extends Parse {
         long	n = 0;
         int len = value.realSize() - start;
 
-        for (int i = start; 0 < len; len--) {
+        for (int i = start; 0 < len; len--, i++) {
             int c = value.get(i);
             if ('0' <= c && c <= '9') {
                 n = n * 10 + (c - '0');
@@ -61,7 +59,7 @@ public class ObjectParse extends Parse {
         } else {
             rkey = context.runtime.newString(kval.key);
             rkey = oj_encode(rkey);
-            if (Yes == options.sym_key) {
+            if (options.sym_key) {
                 // FIXME: This may be a common snippet and we need nicer method for making symbol maybe on Parse.
                 if (rkey instanceof RubyString) {
                     return getRuntime().newSymbol(((RubyString) rkey).getByteList());
@@ -254,11 +252,9 @@ public class ObjectParse extends Parse {
             switch (key.get(1)) {
                 case 'o': // object
                 {	// name2class sets and error if the class is not found or created
-                    RubyClass clas = (RubyClass) nameToClass(value, Yes == options.auto_define);
+                    RubyClass clas = (RubyClass) nameToClass(value, options.auto_define, context.runtime.getArgumentError());
 
-                    if (null != clas) {
-                        parent.val = clas.allocate();
-                    }
+                    if (null != clas) parent.val = clas.allocate();
                 }
                 break;
                 case 'O': // odd object
@@ -280,13 +276,11 @@ public class ObjectParse extends Parse {
                     break;
                 case 'c': // class
                 {
-                    IRubyObject	clas = nameToClass(value, Yes == options.auto_define);
+                    IRubyObject	clas = nameToClass(value, options.auto_define, context.runtime.getArgumentError());
 
-                    if (null == clas) {
-                        return false;
-                    } else {
-                        parent.val = clas;
-                    }
+                    if (null == clas) return false;
+
+                    parent.val = clas;
                 }
                 break;
                 case 't': // time
@@ -387,7 +381,7 @@ public class ObjectParse extends Parse {
                     }
                     sc = RubyStruct.newInstance(structClass, nameArgs, Block.NULL_BLOCK);
                 } else { // already existing names struct.
-                    sc = nameToStruct(args.eltInternal(0));
+                    sc = nameToStruct(args.eltInternal(0), context.runtime.getArgumentError());
                 }
 
                 IRubyObject[] newArgs = new IRubyObject[argsLength - 1];
@@ -469,6 +463,7 @@ public class ObjectParse extends Parse {
         ByteList key = kval.key;
         int klen = kval.key.realSize();
         Val	parent = stack_peek();
+        IRubyObject strValue = str_to_value(value, orig);
 
         while (parent.val != null) {
             if (parent.val instanceof RubyNil) {
@@ -479,25 +474,25 @@ public class ObjectParse extends Parse {
                 }
                 break;
             } else if (parent.val instanceof RubyHash) {
-                ((RubyHash) parent.val).op_aset(context, calc_hash_key(kval, parent.k1), str_to_value(value, orig));
+                ((RubyHash) parent.val).op_aset(context, calc_hash_key(kval, parent.k1), strValue);
                 break;
             } else if (parent.val instanceof RubyString) {
                 if (4 == klen && 's' == key.get(0) && 'e' == key.get(1) && 'l' == key.get(2) && 'f' == key.get(3)) {
-                    parent.val.callMethod(context, "replace", str_to_value(value, orig));
+                    parent.val.callMethod(context, "replace", strValue);
                 } else {
-                    set_obj_ivar(parent, kval, str_to_value(value, orig));
+                    set_obj_ivar(parent, kval, strValue);
                 }
                 break;
             } else if (parent.val instanceof RubyModule) {
                 if (null == parent.oddArgs) {
                     parseError(parent.val.getMetaClass().getName() + " is not an odd class");
                     return;
-                } else if (!parent.oddArgs.setArg(kval.key, str_to_value(value, orig))) {
+                } else if (!parent.oddArgs.setArg(kval.key, strValue)) {
                     parseError(key + " is not an attribute of " + parent.val.getMetaClass().getName());
                 }
                 break;
             } else if (parent.val instanceof RubyObject) {
-                set_obj_ivar(parent, kval, str_to_value(value, orig));
+                set_obj_ivar(parent, kval, strValue);
                 break;
             } else {
                 parseError("can not add attributes to a " + parent.val.getMetaClass().getName());
@@ -505,14 +500,15 @@ public class ObjectParse extends Parse {
             }
         }
 
-        if (options.trace == Yes) trace_parse_call("set_string");
+        if (options.trace) trace_parse_call("set_string", strValue);
     }
 
     @Override
-    public void setNum(Val kval, NumInfo ni) {
+    public void hashSetNum(Val kval, NumInfo ni) {
     ByteList key = kval.key;
         int		klen = kval.key.realSize();
         Val		parent = stack_peek();
+        IRubyObject num = ni.toNumber(context);
 
         while (parent.val != null) {
             if (parent.val instanceof RubyNil) {
@@ -522,13 +518,13 @@ public class ObjectParse extends Parse {
                     continue;
                 }
             } else if (parent.val instanceof RubyHash) {
-                ((RubyHash) parent.val).op_aset(context, calc_hash_key(kval, parent.k1), ni.toNumber(context));
+                ((RubyHash) parent.val).op_aset(context, calc_hash_key(kval, parent.k1), num);
                 break;
             } else if (parent.val instanceof RubyModule) {
                 if (null == parent.oddArgs) {
                     parseError(parent.val.getMetaClass().getName() + " is not an odd class");
                     return;
-                } else if (!parent.oddArgs.setArg(key, ni.toNumber(context))) {
+                } else if (!parent.oddArgs.setArg(key, num)) {
                     parseError(key + " is not an attribute of " + parent.val.getMetaClass().getName());
                 }
                 break;
@@ -537,7 +533,7 @@ public class ObjectParse extends Parse {
                         !ni.infinity && !ni.neg && 1 == ni.div && 0 == ni.exp && circ_array != null) { // fixnum
                     circArraySet((int) ni.i, parent.val);
                 } else {
-                    set_obj_ivar(parent, kval, ni.toNumber(context));
+                    set_obj_ivar(parent, kval, num);
                 }
                 break;
             } else {
@@ -546,7 +542,7 @@ public class ObjectParse extends Parse {
             }
         }
 
-        if (options.trace == Yes) trace_parse_call("add_number");
+        if (options.trace) trace_parse_call("add_number", num);
     }
 
     @Override
@@ -609,7 +605,7 @@ public class ObjectParse extends Parse {
             }
         }
 
-        if (options.trace == Yes) trace_parse_call("add_value");
+        if (options.trace) trace_parse_call("add_value", value);
     }
 
     @Override
@@ -650,9 +646,11 @@ public class ObjectParse extends Parse {
 
             }
         }
-        ((RubyArray) stack_peek().val).append(str_to_value(value, orig));
 
-        if (options.trace == Yes) trace_parse_call("append_string");
+        IRubyObject strValue = str_to_value(value, orig);
+        ((RubyArray) stack_peek().val).append(strValue);
+
+        if (options.trace) trace_parse_call("append_string", strValue);
     }
 
     private void circArraySet(int i, IRubyObject value) {
@@ -666,24 +664,26 @@ public class ObjectParse extends Parse {
     }
 
     @Override
-    public void appendNum(NumInfo ni) {
-        ((RubyArray) stack_peek().val).append(ni.toNumber(context));
+    public void arrayAppendNum(NumInfo ni) {
+        IRubyObject rval = ni.toNumber(context);
 
-        if (options.trace == Yes) trace_parse_call("append_number");
+        ((RubyArray) stack_peek().val).append(rval);
+
+        if (options.trace) trace_parse_call("append_number", rval);
     }
 
     @Override
     public void addCStr(ByteList value, int orig) {
         this.value = str_to_value(value, orig);
 
-        if (options.trace == Yes) trace_parse_call("add_string");
+        if (options.trace) trace_parse_call("add_string", this.value);
     }
 
     @Override
     public void addNum(NumInfo ni) {
         value = ni.toNumber(context);
 
-        if (options.trace == Yes) trace_parse_call("add_num");
+        if (options.trace) trace_parse_call("add_num", value);
     }
 
     @Override

@@ -1,21 +1,26 @@
 package oj.parse;
 
+import oj.OjLibrary;
 import oj.Options;
 import org.jruby.RubyArray;
 import org.jruby.RubyHash;
 import org.jruby.RubyString;
+import org.jruby.runtime.Block;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
-import static oj.Options.Yes;
-
-/**
- * Created by enebo on 8/28/15.
- */
 public class CompatParse extends StrictParse {
     public CompatParse(ParserSource source, ThreadContext context, Options options) {
         super(source, context, options);
+    }
+
+    @Override
+    public IRubyObject parse(OjLibrary oj, boolean yieldOk, Block block) {
+        options.nilnil = true;
+        options.empty_string = false;
+
+        return super.parse(oj, yieldOk, block);
     }
 
     @Override
@@ -31,10 +36,8 @@ public class CompatParse extends StrictParse {
 
             if (rkey == null) {
                 rkey = oj_encode(getRuntime().newString(key));
-                rkey = oj_encode(rkey);
-                if (Yes == options.sym_key) {
-                    rkey = ((RubyString)rkey).intern19();
-                }
+
+                if (options.sym_key) rkey = context.runtime.newSymbol(((RubyString)rkey).getByteList());
             }
             ((RubyHash) parent.val).fastASet(rkey, rstr);
         }
@@ -44,15 +47,14 @@ public class CompatParse extends StrictParse {
     public IRubyObject endHash() {
         Val	parent = stack_peek();
 
-        if (null != parent.classname) {
-            IRubyObject clas = nameToClass(parent.classname, false);
-            if (null != clas) { // else an error
-                parent.val = clas.callMethod(context, "json_create", parent.val);
-            }
-            if (null != parent.classname) {
-                parent.classname = null;
-            }
+        if (parent.classname != null) {
+            IRubyObject clas = nameToClass(parent.classname, false, context.runtime.getArgumentError());
+
+            if (clas != null) parent.val = clas.callMethod(context, "json_create", parent.val);
+
+            parent.classname = null;
         }
+
         return context.nil;
     }
 
@@ -62,12 +64,12 @@ public class CompatParse extends StrictParse {
     }
 
     @Override
-    public void setNum(Val kval, NumInfo ni) {
+    public void hashSetNum(Val kval, NumInfo ni) {
         ((RubyHash) stack_peek().val).fastASet(calc_hash_key(kval), ni.toNumber(context));
     }
 
     @Override
-    public void appendNum(NumInfo ni) {
+    public void arrayAppendNum(NumInfo ni) {
         ((RubyArray) stack_peek().val).append(ni.toNumber(context));
     }
 }

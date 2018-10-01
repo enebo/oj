@@ -45,7 +45,7 @@ public class SCParse extends Parse {
     }
 
     @Override
-    public void appendNum(NumInfo ni) {
+    public void arrayAppendNum(NumInfo ni) {
         if (dispatchArrayAppend) {
             IRubyObject value = ni.toNumber(context);
             Helpers.invoke(context, handler, "array_append", stack_head_val(), value);
@@ -53,7 +53,7 @@ public class SCParse extends Parse {
     }
 
     @Override
-    public void appendValue(IRubyObject value) {
+    public void arrayAppendValue(IRubyObject value) {
         if (dispatchArrayAppend) {
             Helpers.invoke(context, handler, "array_append", stack_head_val(), value);
         }
@@ -95,7 +95,7 @@ public class SCParse extends Parse {
     }
 
     @Override
-    public void setNum(Val kval, NumInfo ni) {
+    public void hashSetNum(Val kval, NumInfo ni) {
         if (dispatchHashSet) {
             Helpers.invoke(context, handler, "hash_set",
                     stack_head_val(), calc_hash_key(kval), ni.toNumber(context));

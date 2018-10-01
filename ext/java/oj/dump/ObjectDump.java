@@ -250,22 +250,4 @@ public class ObjectDump extends Dump {
         append(']');
         append('}');
     }
-
-    private byte[] nan_str(IRubyObject value, NanDump nd, char mode, boolean positive) {
-        if (nd == NanDump.AutoNan) {
-            switch (mode) {
-                case CompatMode: nd = NanDump.WordNan; break;
-                case StrictMode: nd = NanDump.RaiseNan; break;
-            }
-        }
-        switch(nd) {
-            case RaiseNan: raise_strict(value); break;
-            case WordNan: return positive ? INFINITY_VALUE : NINFINITY_VALUE;
-            case NullNan: return NULL_VALUE;
-            case HugeNan:
-                return INF_VALUE;
-        }
-
-        return null; // C source does this but this I believe will crash in both impls...let's see....
-    }
 }

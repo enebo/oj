@@ -35,7 +35,7 @@ public class CompatDump extends Dump {
             dump_raw(stringToByteList(obj, "to_s"));
         } else if (obj.respondsTo("as_json")) {
             dump_as_json(obj, depth);
-        } else if (Yes == opts.to_json && obj.respondsTo("to_json")) {
+        } else if (opts.to_json && obj.respondsTo("to_json")) {
             append(stringToByteList(obj, "to_json"));
         } else {
             dump_cstr(stringToByteList(obj, "to_s"), false, false);
@@ -53,7 +53,7 @@ public class CompatDump extends Dump {
             dump_to_hash(obj, depth);
         } else if (obj.respondsTo("as_json")) {
             dump_as_json(obj, depth);
-        } else if (Yes == opts.to_json && obj.respondsTo("to_json")) {
+        } else if (opts.to_json && obj.respondsTo("to_json")) {
             append(stringToByteList(obj, "to_json"));
         } else {
             switch (opts.time_format) {
@@ -149,7 +149,7 @@ public class CompatDump extends Dump {
             } else {
                 dump_val(aj, depth);
             }
-        } else if (Yes == opts.to_json && obj.respondsTo("to_json")) {
+        } else if (opts.to_json && obj.respondsTo("to_json")) {
             append(stringToByteList(obj, "to_json"));
         } else {
             dump_cstr(stringToByteList(obj, "to_s"), false, false);

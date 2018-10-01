@@ -1,6 +1,5 @@
 package oj.parse;
 
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -180,7 +179,7 @@ public abstract class Parse {
             switch (parent.next) {
             case ARRAY_NEW:
             case ARRAY_ELEMENT:
-                appendValue(rval);
+                arrayAppendValue(rval);
                 parent.next = ARRAY_COMMA;
                 break;
                 case HASH_VALUE:
@@ -557,11 +556,11 @@ public abstract class Parse {
             switch (parent.next) {
                 case ARRAY_NEW:
                 case ARRAY_ELEMENT:
-                    appendNum(ni);
+                    arrayAppendNum(ni);
                     parent.next = ARRAY_COMMA;
                     break;
                 case HASH_VALUE:
-                    setNum(parent, ni);
+                    hashSetNum(parent, ni);
                     parent.next = HASH_COMMA;
                     break;
                 default:
@@ -742,12 +741,10 @@ public abstract class Parse {
     IRubyObject calc_hash_key(Val kval) {
         IRubyObject rkey;
 
-        if (null == kval.key_val) {
+        if (kval.key_val == null) {
             rkey = oj_encode(getRuntime().newString(kval.key));
 
-            if (Yes == options.sym_key) {
-                return getRuntime().newSymbol(((RubyString) rkey).getByteList());
-            }
+            if (options.sym_key) return getRuntime().newSymbol(((RubyString) rkey).getByteList());
         } else {
             rkey = kval.key_val;
         }
@@ -758,13 +755,6 @@ public abstract class Parse {
     public static IRubyObject oj_encode(IRubyObject str) {
         // FIXME: Add 1.9 + 1.8 ability to convert to UTF-8
         return str;
-    }
-
-    // FIXME:
-    public IRubyObject sparse(OjLibrary oj, IRubyObject[] args, InputStream fd, Block block) {
-        this.oj = oj;
-
-        return null;
     }
 
     public IRubyObject parse(OjLibrary oj, boolean yieldOk, Block block) {
@@ -778,11 +768,7 @@ public abstract class Parse {
             proc = null;
         }
 
-        if (Yes == options.circular) {
-            circ_array = new ArrayList<>();
-        } else {
-            circ_array = null;
-        }
+        circ_array = options.circular ? new ArrayList<IRubyObject>() : null;
 
         protect_parse();
 
@@ -820,7 +806,7 @@ public abstract class Parse {
             parseError(error);
         }
 
-        if (options.quirks_mode == No) {
+        if (!options.quirks_mode) {
             if (result instanceof RubyNil || result instanceof RubyBoolean || result instanceof RubyFixnum ||
                     result instanceof RubyFloat || result instanceof RubyModule || result instanceof RubySymbol) {
                 parseError("unexpected non-document Object");
@@ -850,7 +836,7 @@ public abstract class Parse {
         this.value = value;
     }
 
-    public void appendValue(IRubyObject value) {
+    public void arrayAppendValue(IRubyObject value) {
         ((RubyArray) stack_peek().val).append(value);
     }
 
@@ -860,10 +846,10 @@ public abstract class Parse {
     public void addNum(NumInfo value) {
     }
 
-    public void appendNum(NumInfo value) {
+    public void arrayAppendNum(NumInfo value) {
     }
 
-    public void setNum(Val parent, NumInfo value) {
+    public void hashSetNum(Val parent, NumInfo value) {
     }
 
     public IRubyObject endArray() {
@@ -875,12 +861,12 @@ public abstract class Parse {
     }
 
     public IRubyObject endHash() {
-        if (options.trace == Yes) trace_parse_hash_end();
+        if (options.trace) trace_parse_hash_end();
         return context.nil;
     }
 
     public IRubyObject startHash() {
-        if (options.trace == Yes) trace_parse_call("start_hash");
+        if (options.trace) trace_parse_call("start_hash");
 
         return RubyHash.newHash(context.runtime);
     }
@@ -898,26 +884,23 @@ public abstract class Parse {
         throw context.runtime.newRaiseException(oj.getParseError(), message);
     }
 
-    protected RubyClass nameToStruct(IRubyObject name) {
+    protected RubyClass nameToStruct(IRubyObject name, RubyClass errorClass) {
         RubyString structName = (RubyString) TypeConverter.checkStringType(context.runtime, name);
 
-        return (RubyClass) resolveClassPath(structName.getByteList(), false);
+        return (RubyClass) resolveClassPath(structName.getByteList(), false, errorClass);
     }
 
-    protected RubyModule nameToClass(ByteList name, boolean autoDefine) {
-        if (options.class_cache == No) {
-            return resolveClassPath(name, autoDefine);
-        }
+    protected RubyModule nameToClass(ByteList name, boolean autoDefine, RubyClass errorClass) {
+        if (!options.class_cache) return resolveClassPath(name, autoDefine, errorClass);
 
         RubyModule clas = classMap.get(name);
-        if (clas == null) {
-            clas = resolveClassPath(name, autoDefine);
-        }
+
+        if (clas == null) clas = resolveClassPath(name, autoDefine, errorClass);
 
         return clas;
     }
 
-    protected RubyModule resolveClassPath(ByteList className, boolean autoDefine) {
+    protected RubyModule resolveClassPath(ByteList className, boolean autoDefine, RubyClass errorClass) {
         RubyModule clas = context.runtime.getObject();
 
         ByteList name = className;
@@ -939,7 +922,7 @@ public abstract class Parse {
         }
 
         clas = resolveClassName(clas, name, autoDefine);
-        if (clas == null) throw context.runtime.newArgumentError("class " + className + " is not defined");
+        if (clas == null) throw context.runtime.newRaiseException(errorClass, "class " + className + " is not defined");
 
         return clas;
     }
@@ -959,11 +942,12 @@ public abstract class Parse {
         return bytelist;
     }
 
-    protected void trace_parse_call(String start_hash) {
+    protected void trace_parse_call(String name, IRubyObject value) {
+    }
+
+    protected void trace_parse_call(String name) {
     }
 
     protected void trace_parse_hash_end() {
     }
-
-
 }
