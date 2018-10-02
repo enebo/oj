@@ -73,7 +73,6 @@ public class CustomParse extends ObjectParse {
                 }
             } else if (parent.val instanceof RubyObject) {
                 // FIXME: mbc prob
-                System.out.println("VAL: " + parent.val.getMetaClass());
                 ((RubyObject) parent.val).setInstanceVariable(kval.toString(), rstr);
             }
 
@@ -226,8 +225,10 @@ public class CustomParse extends ObjectParse {
     // FIXME: Should cache Date/Datetime if they exist
     private boolean code_has(RubyClass clas) {
         return clas == context.runtime.getComplex() ||
-                clas == context.runtime.getObject().getConstant("Date") ||
-                clas == context.runtime.getObject().getConstant("DateTime") ||
+                clas == context.runtime.getObject().getConstantAt("Date") ||
+                clas == context.runtime.getObject().getConstantAt("DateTime") ||
+                clas == context.runtime.getObject().getConstantAt("DateTime") ||
+                clas == context.runtime.getObject().getConstantAt("OpenStruct") ||
                 clas == context.runtime.getRange() ||
                 clas == context.runtime.getRational() ||
                 clas == context.runtime.getRegexp() ||
@@ -238,6 +239,7 @@ public class CustomParse extends ObjectParse {
         if (clas.equals(context.runtime.getComplex())) return load_complex(hash);
         if (clas == context.runtime.getObject().getConstant("Date")) return load_date(hash);
         if (clas == context.runtime.getObject().getConstant("DateTime")) return load_datetime(hash);
+        if (clas == context.runtime.getObject().getConstantAt("OpenStruct")) return load_openstruct(hash);
         if (clas == context.runtime.getRange()) return load_range(hash);
         if (clas == context.runtime.getRational()) return load_rational(hash);
         if (clas == context.runtime.getRegexp()) return load_regexp(hash);
@@ -261,6 +263,10 @@ public class CustomParse extends ObjectParse {
         IRubyObject s = aref(attrs, "s");
 
         return s.isNil() ? context.nil : context.runtime.getObject().getClass("DateTime").callMethod(context, "parse", s);
+    }
+
+    private IRubyObject load_openstruct(RubyHash attrs) {
+        return context.runtime.getObject().getConstantAt("OpenStruct").callMethod(context, "new", aref(attrs, "table"));
     }
 
     private IRubyObject load_range(RubyHash attrs) {

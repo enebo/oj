@@ -34,6 +34,20 @@ public class CustomDump extends CompatDump {
     }
 
     @Override
+    public void dump_val(IRubyObject obj, int depth) {
+        // FIXME: cache openstruct.
+        // FIXME: Should this be kindof?
+        // FIXME: Don't like this check before all others but it may be only way of doing this vs openstruct added to base dump_val
+        if (context.runtime.getObject().getConstantAt("OpenStruct") == obj.getMetaClass()) {
+            dump_openstruct(obj, depth);
+        } else if (context.runtime.getObject().getConstantAt("DateTime") == obj.getMetaClass()) {
+            dump_datetime(obj, depth);
+        } else {
+            super.dump_val(obj, depth);
+        }
+    }
+
+    @Override
     protected void dump_bigdecimal(RubyBigDecimal obj, int depth) {
         ByteList str = stringToByteList(obj, "to_s");
         if (opts.bigdec_as_num != No) {
