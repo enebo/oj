@@ -362,18 +362,18 @@ public class RubyOj extends RubyModule {
         copts.circular = setBoolean(context, ropts, "circular");
         copts.auto_define = setBoolean(context, ropts, "auto_define");
         copts.sym_key = setBoolean(context, ropts, "symbol_keys");
-        copts.class_cache = setBoolean(context, ropts, "class_cache");
+        copts.class_cache = setBoolean(context, ropts, "class_cache", true);
         copts.bigdec_as_num = setYesNo(context, ropts, "bigdecimal_as_decimal");
         copts.to_hash = setBoolean(context, ropts, "use_to_hash");
-        copts.to_json = setBoolean(context, ropts, "use_to_json");
+        copts.to_json = setBoolean(context, ropts, "use_to_json", true);
         copts.as_json = setBoolean(context, ropts, "use_as_json");
         copts.nilnil = setBoolean(context, ropts, "nilnil");
         copts.nilnil = setBoolean(context, ropts, "allow_blank"); // alias of nilnil
-        copts.empty_string = setBoolean(context, ropts, "empty_string");
-        copts.allow_gc = setBoolean(context, ropts, "allow_gc");
-        copts.quirks_mode = setBoolean(context, ropts, "quirks_mode");
+        copts.empty_string = setBoolean(context, ropts, "empty_string", true);
+        copts.allow_gc = setBoolean(context, ropts, "allow_gc", true);
+        copts.quirks_mode = setBoolean(context, ropts, "quirks_mode", true);
         copts.allow_invalid = setBoolean(context, ropts, "allow_invalid_unicode");
-        copts.allow_nan = setBoolean(context, ropts, "allow_nan");
+        copts.allow_nan = setBoolean(context, ropts, "allow_nan", true);
         copts.trace = setBoolean(context, ropts, "trace");
         copts.create_ok = setBoolean(context, ropts, "create_additions");
 
@@ -389,13 +389,17 @@ public class RubyOj extends RubyModule {
         }
     }
 
-    private static boolean setBoolean(ThreadContext context, RubyHash options, String symbolName) {
+    private static boolean setBoolean(ThreadContext context, RubyHash options, String symbolName, boolean defaultValue) {
         IRubyObject v = options.fastARef(context.runtime.newSymbol(symbolName));
-        if (v == context.nil || v == null) return false;
+        if (v == context.nil || v == null) return defaultValue;
         if (v == context.tru) return true;
         if (v == context.fals) return false;
 
         throw context.runtime.newArgumentError(symbolName + "must be true, false, or nil");
+    }
+
+    private static boolean setBoolean(ThreadContext context, RubyHash options, String symbolName) {
+        return setBoolean(context, options, symbolName, false);
     }
 
     private static char setYesNo(ThreadContext context, RubyHash options, String symbolName) {

@@ -2,7 +2,6 @@ package oj.dump;
 
 import oj.OjLibrary;
 import oj.Options;
-import oj.options.NanDump;
 import org.jruby.RubyArray;
 import org.jruby.RubyHash;
 import org.jruby.RubyModule;

@@ -3,10 +3,12 @@ package oj.dump;
 import oj.Attr;
 import oj.OjLibrary;
 import oj.Options;
+import org.jruby.RubyHash;
 import org.jruby.RubyNumeric;
 import org.jruby.RubyRange;
 import org.jruby.RubyRational;
 import org.jruby.RubyString;
+import org.jruby.RubySymbol;
 import org.jruby.RubyTime;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;
 import org.jruby.runtime.ThreadContext;
@@ -59,6 +61,38 @@ public class CustomDump extends CompatDump {
         dump_date(obj, depth);
     }
 
+    @Override
+    protected void dump_hash(IRubyObject obj, int depth) {
+        RubyHash hash = (RubyHash) obj;
+        long id = check_circular(obj);
+
+        if (id < 0) {
+            dump_nil();
+            return;
+        }
+
+        if (hash.isEmpty()) {
+            append(EMPTY_HASH);
+        } else {
+            append('{');
+            this.depth = depth + 1;
+            hash.visitAll(context,
+                    new RubyHash.VisitorWithState<Dump>() {
+                        @Override
+                        public void visit(ThreadContext threadContext, RubyHash rubyHash, IRubyObject key, IRubyObject value, int index, Dump dump) {
+                            visit_hash(key, value);
+                        }
+                    }, this);
+            if (',' == get(-1)) pop(); // backup to overwrite last comma
+            if (!opts.dump_opts.use) {
+                fill_indent(depth);
+            } else {
+                dump_hash_nl_indent(depth);
+            }
+            append('}');
+        }
+    }
+
     protected void dump_openstruct(IRubyObject obj, int depth) {
         code_attrs(obj, OPENSTRUCT_METHODS, callAll(obj, OPENSTRUCT_METHODS), depth, opts.create_ok, Attr.AttrType.VALUE);
     }
@@ -82,7 +116,7 @@ public class CustomDump extends CompatDump {
     @Override
     protected void dump_time(RubyTime obj, int depth) {
         if (opts.create_ok) {
-            code_attrs(obj, TIME_METHODS, callAll(obj, TIME_METHODS), depth, true, Attr.AttrType.VALUE);
+            code_attrs(obj, TIME_METHODS, callAll(obj, TIME_METHODS), depth, true, Attr.AttrType.TIME);
         } else {
             switch (opts.time_format) {
                 case Options.RubyTime:	dump_ruby_time(obj);	break;
@@ -150,6 +184,38 @@ public class CustomDump extends CompatDump {
         }
         fill_indent(depth);
         append('}');
+    }
+
+    @Override
+    protected void visit_hash(IRubyObject key, IRubyObject value) {
+        int	saved_depth = this.depth; // FIXME: can we just pass this around vs saving as temporary field?  I think this is artifact of MRI callback api for hashes.
+
+        if (dump_ignore(value)) return;
+        if (omit_nil && value == context.nil) return;
+
+        if (!opts.dump_opts.use) {
+            fill_indent(saved_depth);
+        } else {
+            dump_hash_nl_indent(saved_depth);
+        }
+
+        if (key instanceof RubyString) {
+            dump_str((RubyString) key);
+        } else if (key instanceof RubySymbol) {
+            dump_sym((RubySymbol) key);
+        } else {
+            // FIXME: Can we guarantee whatever is key here has to_s which returns a string? I think oj will TypeError unknown encoding but not crash
+            dump_str((RubyString) key.callMethod(context, "to_s"));
+        }
+
+        if (!opts.dump_opts.use) {
+            append(':');
+        } else {
+            dump_colon();
+        }
+        dump_val(value, depth);
+        depth = saved_depth;
+        append(',');
     }
 
     private boolean code_attrs_with_class(IRubyObject obj, int depth) {

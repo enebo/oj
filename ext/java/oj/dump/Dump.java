@@ -159,6 +159,7 @@ public abstract class Dump {
     protected static final byte[] ZERO_POINT_ZERO = {'0', '.', '0'};
     protected static final ByteList INFINITY = new ByteList(INFINITY_VALUE);
     protected static final ByteList NINFINITY = new ByteList(NINFINITY_VALUE);
+    protected static final byte[] EMPTY_HASH = {'{', '}'};
 
     static String	hex_chars = "0123456789abcdef";
 
@@ -365,17 +366,18 @@ public abstract class Dump {
     protected long check_circular(IRubyObject obj) {
         Integer	id = 0;
 
-        if (opts.circular && opts.mode == ObjectMode) {
+        if (opts.circular) {
             id = circ_cache.get(obj);
             if (id == null) {
                 circ_cnt++;
                 id = circ_cnt;
                 circ_cache.put(obj, id);
             } else {
-                append(PARTIAL_R_KEY);
-                dump_ulong(id.longValue());
-                append('"');
-
+                if (opts.mode == ObjectMode) {
+                    append(PARTIAL_R_KEY);
+                    dump_ulong(id.longValue());
+                    append('"');
+                }
                 return -1;
             }
         }
@@ -643,6 +645,11 @@ public abstract class Dump {
         }
     }
 
+    /**
+     * C: hash_cb or similar *_cb
+     *
+     * Visits each member of the hash which is being dumped.
+     */
     protected void visit_hash(IRubyObject key, IRubyObject value) {
         int saved_depth = depth;
         if (omit_nil && value.isNil()) return;
@@ -651,15 +658,7 @@ public abstract class Dump {
             throw context.runtime.newTypeError("In :" + modeName() + " mode all Hash keys must be Strings, not " + key.getMetaClass().getName());
         }
         if (opts.dump_opts.use) {
-            if (opts.dump_opts.hash_nl != ByteList.EMPTY_BYTELIST) {
-                append(opts.dump_opts.hash_nl);
-            }
-            if (opts.dump_opts.indent_str != ByteList.EMPTY_BYTELIST) {
-                int	i;
-                for (i = saved_depth; 0 < i; i--) {
-                    append(opts.dump_opts.indent_str);
-                }
-            }
+            dump_hash_nl_indent(saved_depth);
             dump_str((RubyString) key);
             dump_colon();
         } else {
@@ -671,6 +670,17 @@ public abstract class Dump {
         append(',');
 
         depth = saved_depth;
+    }
+
+    protected void dump_hash_nl_indent(int depth) {
+        if (opts.dump_opts.hash_nl != ByteList.EMPTY_BYTELIST) {
+            append(opts.dump_opts.hash_nl);
+        }
+        if (opts.dump_opts.indent_str != ByteList.EMPTY_BYTELIST) {
+            for (int i = depth; 0 < i; i--) {
+                append(opts.dump_opts.indent_str);
+            }
+        }
     }
 
     protected void dump_colon() {
@@ -685,10 +695,9 @@ public abstract class Dump {
 
     protected void dump_hash(IRubyObject obj, int dep) {
         RubyHash hash = (RubyHash) obj;
-        int cnt = hash.size();
-        if (0 == cnt) {
-            append('{');
-            append('}');
+
+        if (hash.isEmpty()) {
+            append(EMPTY_HASH);
         } else {
             long id = check_circular(hash);
             if (id < 0) return;
@@ -1162,6 +1171,8 @@ public abstract class Dump {
     // Unlike C version we assume check has been made that there is an ignore list
     // and we are in the correct mode.
     boolean dump_ignore(IRubyObject value) {
+        if (opts.ignore == null) return false;
+
         RubyModule clas = value.getMetaClass();
 
         for (RubyModule module: opts.ignore) {
