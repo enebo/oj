@@ -7,6 +7,7 @@ import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class Options {
@@ -113,6 +114,8 @@ public class Options {
         newOptions.float_fmt = float_fmt;
         newOptions.dump_opts = dump_opts;
         newOptions.str_rx = str_rx;
+        newOptions.dump_opts = new DumpOpts(dump_opts);
+        Collections.copy(str_rx, newOptions.str_rx);
 
         return newOptions;
     }
