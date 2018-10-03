@@ -61,7 +61,7 @@ public class RubyOj extends RubyModule {
         RubyHash opts = RubyHash.newHash(runtime);
         IRubyObject Qnil = context.nil;
 
-        if (oj.default_options.dump_opts.indent_str == ByteList.EMPTY_BYTELIST) {
+        if (oj.default_options.dump_opts.indent_str.equals(ByteList.EMPTY_BYTELIST)) {
             opts.fastASet(runtime.newSymbol("indent"), runtime.newFixnum(oj.default_options.indent));
         } else {
             opts.fastASet(runtime.newSymbol("indent"), runtime.newString(oj.default_options.dump_opts.indent_str.dup()));
@@ -72,7 +72,6 @@ public class RubyOj extends RubyModule {
         opts.fastASet(runtime.newSymbol("auto_define"), runtime.newBoolean(oj.default_options.auto_define));
         opts.fastASet(runtime.newSymbol("symbol_keys"), runtime.newBoolean(oj.default_options.sym_key));
         opts.fastASet(runtime.newSymbol("bigdecimal_as_decimal"), yesNo(context, oj.default_options.bigdec_as_num));
-        opts.fastASet(runtime.newSymbol("create_additions"), runtime.newBoolean(oj.default_options.create_ok));
         opts.fastASet(runtime.newSymbol("use_to_json"), runtime.newBoolean(oj.default_options.to_json));
         opts.fastASet(runtime.newSymbol("use_to_hash"), runtime.newBoolean(oj.default_options.to_hash));
         opts.fastASet(runtime.newSymbol("use_as_json"), runtime.newBoolean(oj.default_options.as_json));
@@ -81,8 +80,6 @@ public class RubyOj extends RubyModule {
         opts.fastASet(runtime.newSymbol("allow_gc"), runtime.newBoolean(oj.default_options.allow_gc));
         opts.fastASet(runtime.newSymbol("quirks_mode"), runtime.newBoolean(oj.default_options.quirks_mode));
         opts.fastASet(runtime.newSymbol("allow_invalid_unicode"), runtime.newBoolean(oj.default_options.allow_invalid));
-        opts.fastASet(runtime.newSymbol("allow_nan"), runtime.newBoolean(oj.default_options.allow_nan));
-        opts.fastASet(runtime.newSymbol("trace"), runtime.newBoolean(oj.default_options.trace));
         opts.fastASet(runtime.newSymbol("float_precision"), runtime.newFixnum(oj.default_options.float_prec));
 
         RubySymbol mode = runtime.newSymbol("mode");
@@ -147,10 +144,11 @@ public class RubyOj extends RubyModule {
                 break;
         }
         opts.fastASet(runtime.newSymbol("create_id"), (null == oj.default_options.create_id) ? Qnil : runtime.newString(oj.default_options.create_id));
+        opts.fastASet(runtime.newSymbol("create_additions"), runtime.newBoolean(oj.default_options.create_ok));
         opts.fastASet(runtime.newSymbol("space"), (ByteList.EMPTY_BYTELIST == oj.default_options.dump_opts.after_sep) ? Qnil : runtime.newString(oj.default_options.dump_opts.after_sep));
-        opts.fastASet(runtime.newSymbol("space_before"), (ByteList.EMPTY_BYTELIST == oj.default_options.dump_opts.before_sep) ? Qnil : runtime.newString(oj.default_options.dump_opts.before_sep));
-        opts.fastASet(runtime.newSymbol("object_nl"), (ByteList.EMPTY_BYTELIST == oj.default_options.dump_opts.hash_nl) ? Qnil : runtime.newString(oj.default_options.dump_opts.hash_nl));
         opts.fastASet(runtime.newSymbol("array_nl"), (ByteList.EMPTY_BYTELIST == oj.default_options.dump_opts.array_nl) ? Qnil : runtime.newString(oj.default_options.dump_opts.array_nl));
+        opts.fastASet(runtime.newSymbol("object_nl"), (ByteList.EMPTY_BYTELIST == oj.default_options.dump_opts.hash_nl) ? Qnil : runtime.newString(oj.default_options.dump_opts.hash_nl));
+        opts.fastASet(runtime.newSymbol("space_before"), (ByteList.EMPTY_BYTELIST == oj.default_options.dump_opts.before_sep) ? Qnil : runtime.newString(oj.default_options.dump_opts.before_sep));
 
         RubySymbol nan = runtime.newSymbol("nan");
         switch (oj.default_options.dump_opts.nan_dump) {
@@ -161,8 +159,10 @@ public class RubyOj extends RubyModule {
             case AutoNan:
             default:		opts.fastASet(nan, runtime.newSymbol("auto"));	break;
         }
-        opts.fastASet(runtime.newSymbol("omit_nil"), oj.default_options.dump_opts.omit_nil ? context.tru : context.fals);
+
         opts.fastASet(runtime.newSymbol("hash_class"), oj.default_options.hash_class);
+        opts.fastASet(runtime.newSymbol("omit_nil"), oj.default_options.dump_opts.omit_nil ? context.tru : context.fals);
+        opts.fastASet(runtime.newSymbol("allow_nan"), runtime.newBoolean(oj.default_options.allow_nan));
         opts.fastASet(runtime.newSymbol("array_class"), oj.default_options.array_class);
 
         if (oj.default_options.ignore == null) {
@@ -177,14 +177,20 @@ public class RubyOj extends RubyModule {
             opts.fastASet(runtime.newSymbol("ignore"), a);
         }
 
+        opts.fastASet(runtime.newSymbol("trace"), runtime.newBoolean(oj.default_options.trace));
+
         return opts;
     }
 
     @JRubyMethod(name = "default_options=", module = true)
     public static IRubyObject set_def_opts(ThreadContext context, IRubyObject self, IRubyObject roptsArg) {
-        OjLibrary oj = resolveOj(self);
+        if (roptsArg instanceof RubyHash) {
+            Options newOptions = new Options(context);
 
-        if (roptsArg instanceof RubyHash) parse_options(context, roptsArg, oj.default_options);
+            resolveOj(self).default_options = newOptions;
+
+            parse_options(context, roptsArg, newOptions);
+        }
 
         return context.nil;
     }
@@ -200,8 +206,10 @@ public class RubyOj extends RubyModule {
         if (null != (v = ropts.fastARef(runtime.newSymbol("indent")))) {
             if (v.isNil()) {
                 copts.indent = 0;
+                copts.dump_opts.indent_str = ByteList.EMPTY_BYTELIST;
             } else if (v instanceof RubyFixnum) {
                 copts.indent = RubyNumeric.num2int(v);
+                copts.dump_opts.indent_str = ByteList.EMPTY_BYTELIST;
             } else if (v instanceof RubyString) {
                 copts.dump_opts.indent_str = ((RubyString) v).getByteList();
                 copts.indent = 0;
@@ -249,10 +257,14 @@ public class RubyOj extends RubyModule {
                 copts.mode = StrictMode;
             } else if (runtime.newSymbol("compat") == v) {
                 copts.mode = CompatMode;
+            } else if (runtime.newSymbol("rails") == v) {
+                copts.mode = RailsMode;
+            } else if (runtime.newSymbol("wab") == v) {
+                copts.mode = WabMode;
             } else if (runtime.newSymbol("null") == v) {
                 copts.mode = NullMode;
             } else {
-                throw runtime.newArgumentError(":mode must be :object, :strict, :compat, :null, :custom or :rails.");
+                throw runtime.newArgumentError( ":mode must be :object, :strict, :compat, :null, :custom, :rails, or :wab.");
             }
         }
         if (null != (v = ropts.fastARef(runtime.newSymbol("time_format")))) {
@@ -367,8 +379,8 @@ public class RubyOj extends RubyModule {
         copts.to_hash = setBoolean(context, ropts, "use_to_hash");
         copts.to_json = setBoolean(context, ropts, "use_to_json", true);
         copts.as_json = setBoolean(context, ropts, "use_as_json");
-        copts.nilnil = setBoolean(context, ropts, "nilnil");
-        copts.nilnil = setBoolean(context, ropts, "allow_blank"); // alias of nilnil
+        copts.nilnil = setBoolean(context, ropts, "nilnil", false);
+        copts.nilnil = setBoolean(context, ropts, "allow_blank", copts.nilnil); // alias of nilnil
         copts.empty_string = setBoolean(context, ropts, "empty_string", true);
         copts.allow_gc = setBoolean(context, ropts, "allow_gc", true);
         copts.quirks_mode = setBoolean(context, ropts, "quirks_mode", true);
@@ -376,6 +388,14 @@ public class RubyOj extends RubyModule {
         copts.allow_nan = setBoolean(context, ropts, "allow_nan", true);
         copts.trace = setBoolean(context, ropts, "trace");
         copts.create_ok = setBoolean(context, ropts, "create_additions");
+
+
+        v = ropts.fastARef(runtime.newSymbol("hash_class"));
+        if (v != null && !v.isNil()) copts.hash_class = v;
+        v = ropts.fastARef(runtime.newSymbol("object_class")); // alias of hash_class
+        if (v != null && !v.isNil()) copts.hash_class = v;
+        v = ropts.fastARef(runtime.newSymbol("array_class"));
+        if (v != null && !v.isNil()) copts.array_class = v;
 
         v = ropts.fastARef(runtime.newSymbol("ignore"));
         if (v != null && !v.isNil()) {
@@ -476,8 +496,10 @@ public class RubyOj extends RubyModule {
             case "custom": return CustomMode;
             case "strict": return StrictMode;
             case "compat": return CompatMode;
+            case "rails": return RailsMode;
+            case "wab": return WabMode;
             case "null": return NullMode;
-            default: throw runtime.newArgumentError(":mode must be :object, :strict, :compat, or :null.");
+            default: throw runtime.newArgumentError(":mode must be :object, :strict, :compat, :null, :custom, :rails, or :wab.");
         }
     }
 
