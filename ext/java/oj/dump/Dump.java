@@ -291,7 +291,7 @@ public abstract class Dump {
             num_buf[--b] = (byte) ((num % 10) + '0');
         } while ((num /= 10) > 0);
 
-        append(num_buf, b, num_buf.length - b);
+        append(num_buf, b, num_buf.length - b - 1);
     }
 
     void dump_hex(int c) {
