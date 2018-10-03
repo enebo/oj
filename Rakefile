@@ -5,6 +5,9 @@ require 'rake/extensiontask'
 require 'rake/testtask'
 
 if defined? JRUBY_VERSION
+  # Note: This is a little hokey but jruby developers usually have jruby
+  # and MRI ruby in same shell to do quick compares.
+  RUBY_EXE = 'jruby'
   require 'rake/javaextensiontask'
   Rake::JavaExtensionTask.new('oj') do |ext|
     ext.ext_dir = 'ext/java'
@@ -12,6 +15,7 @@ if defined? JRUBY_VERSION
     ext.target_version = '1.7'
   end
 else
+  RUBY_EXE = 'ruby'
   Rake::ExtensionTask.new('oj') do |ext|
     ext.lib_dir = 'lib/oj'
   end
@@ -29,7 +33,7 @@ task :test_all => [:clean, :compile] do
   exitcode = 0
   status = 0
 
-  cmds = "ruby test/tests.rb && ruby test/tests_mimic.rb && ruby test/tests_mimic_addition.rb"
+  cmds = "bundle exec #{RUBY_EXE} test/tests.rb && ruby test/tests_mimic.rb && ruby test/tests_mimic_addition.rb"
   puts "\n" + "#"*90
   puts cmds
   Bundler.with_clean_env do
