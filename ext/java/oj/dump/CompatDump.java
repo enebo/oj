@@ -67,11 +67,6 @@ public class CompatDump extends Dump {
     }
 
     @Override
-    protected void dump_sym(RubySymbol symbol) {
-        dump_cstr(((RubyString) symbol.to_s()).getByteList(), false, false);
-    }
-
-    @Override
     protected void dump_class(RubyModule clas) {
         dump_cstr(new ByteList(clas.getName().getBytes()), false, false);
     }

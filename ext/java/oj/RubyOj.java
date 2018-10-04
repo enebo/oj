@@ -486,6 +486,32 @@ public class RubyOj extends RubyModule {
         return new ObjectParse(source, context, options).parse(oj, true, block);
     }
 
+    @JRubyMethod(module = true, rest = true)
+    public static IRubyObject to_json(ThreadContext context, IRubyObject self, IRubyObject[] args) {
+        if (args.length < 1) throw context.runtime.newArgumentError(0 , 1);
+
+        OjLibrary oj = resolveOj(self);
+        Options	copts = OjLibrary.getDefaultOptions(context);
+
+        if (copts.mode == CompatMode) copts.dump_opts.nan_dump = WordNan;
+
+        copts.escape_mode = JXEsc;
+        copts.dump_opts.nan_dump = RaiseNan;
+
+        if (2 == args.length) parse_options(context, args[1], copts); // FIXME: This is oj_parse_mimic_dump_options in C
+
+        copts.mode = CompatMode;
+        copts.to_json = true;
+
+        Dump dump = Dump.createDump(context, oj, copts);
+
+        IRubyObject[] params = new IRubyObject[args.length - 1];
+        System.arraycopy(args, 1, params, 0, args.length - 1);
+        ByteList result = dump.obj_to_json_using_params(args[0], params);
+
+        return context.runtime.newString(result); // FIXME: should use oj_encode.
+    }
+
     private static char getMode(Ruby runtime, char defaultMode, RubyHash ropts) {
         IRubyObject v = ropts.fastARef(runtime.newSymbol("mode"));
         if (v == null) return defaultMode;

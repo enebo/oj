@@ -437,9 +437,9 @@ public abstract class Dump {
         if (d == 0.0) {
             append(ZERO_POINT_ZERO);
         } else if (d == OJ_INFINITY) {
-            dumpInfNanForFloat(obj, INF_VALUE, INFINITY_VALUE);
+            dumpInfNanForFloat(obj, INF_VALUE, true);
         } else if (d == -OJ_INFINITY) {
-            dumpInfNanForFloat(obj, NINF_VALUE, NINFINITY_VALUE);
+            dumpInfNanForFloat(obj, NINF_VALUE, false);
         } else if (Double.isNaN(d)) {
             dumpNanNanForFloat(obj);
         } else if (0 == opts.float_prec) {
@@ -453,7 +453,7 @@ public abstract class Dump {
         }
     }
 
-    private void dumpNanNanForFloat(IRubyObject value) {
+    protected void dumpNanNanForFloat(IRubyObject value) {
         if (opts.mode == ObjectMode) {
             append(NAN_NUMERIC_VALUE);
         } else {
@@ -476,7 +476,7 @@ public abstract class Dump {
             }
         }
     }
-    private void dumpInfNanForFloat(IRubyObject value, byte[] inf_value, byte[] infinity_value) {
+    protected void dumpInfNanForFloat(IRubyObject value, byte[] inf_value, boolean positive) {
         if (opts.mode == ObjectMode) {
             append(inf_value);
         } else {
@@ -493,7 +493,7 @@ public abstract class Dump {
 
             switch(nd) {
                 case RaiseNan: raise_strict(value); break;
-                case WordNan: append(infinity_value); break;
+                case WordNan: append(positive ? INFINITY_VALUE : NINFINITY_VALUE); break;
                 case NullNan: append(NULL_VALUE); break;
                 case HugeNan:
                 default: append(inf_value); break;
@@ -596,7 +596,6 @@ public abstract class Dump {
     protected abstract void dump_regexp(IRubyObject obj, int depth);
     protected abstract void dump_str(RubyString string);
     protected abstract void dump_struct(RubyStruct obj, int depth);
-    protected abstract void dump_sym(RubySymbol symbol);
     protected abstract void dump_time(RubyTime time, int depth);
     protected abstract String modeName();
 
@@ -721,6 +720,10 @@ public abstract class Dump {
             indent(dep, opts.dump_opts.hash_nl);
             append('}');
         }
+    }
+
+    protected void dump_sym(RubySymbol symbol) {
+        dump_cstr(((RubyString) symbol.to_s()).getByteList(), false, false);
     }
 
     // In JRuby rb_time_timespec equivalent is not public.
@@ -1151,7 +1154,7 @@ public abstract class Dump {
         }
     }
 
-    protected ByteList obj_to_json_using_params(IRubyObject obj, IRubyObject[] argv) {
+    public ByteList obj_to_json_using_params(IRubyObject obj, IRubyObject[] argv) {
         if (opts.circular) new_circ_cache();
 
         this.argv = argv;

@@ -87,22 +87,23 @@ public class NumInfo {
                 }
         } else { // decimal
             if (big) {
-                    rnum = newBigDecimal(runtime, runtime.newString(parse.source.subStr(str_start, str_length)));
-                    if (no_big) {
-                        rnum = rnum.callMethod(context, "to_f");
-                    }
-                } else {
-                    double	d = (double)i + (double)num * (1.0 / div);
-
-                    if (neg) {
-                        d = -d;
-                    }
-                    if (0 != exp) {
-                        d *= Math.pow(10.0, exp);
-                    }
-                    rnum = runtime.newFloat(d);
+                rnum = newBigDecimal(runtime, runtime.newString(parse.source.subStr(str_start, str_length)));
+                if (no_big) {
+                    rnum = rnum.callMethod(context, "to_f");
                 }
+            } else {
+                double	d = (double)i + (double)num * (1.0 / div);
+
+                if (neg) {
+                    d = -d;
+                }
+                if (0 != exp) {
+                    d *= Math.pow(10.0, exp);
+                }
+                rnum = runtime.newFloat(d);
             }
-            return rnum;
+        }
+
+        return rnum;
     }
 }

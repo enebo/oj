@@ -2,6 +2,7 @@ package oj.dump;
 
 import oj.OjLibrary;
 import oj.Options;
+import oj.options.NanDump;
 import org.jruby.RubyModule;
 import org.jruby.RubyRange;
 import org.jruby.RubyRational;
@@ -76,5 +77,41 @@ public class NullDump extends Dump {
     @Override
     protected void dump_struct(RubyStruct obj, int depth) {
         dump_nil();
+    }
+
+    @Override
+    protected void dumpNanNanForFloat(IRubyObject value) {
+        NanDump nd = opts.dump_opts.nan_dump;
+
+        if (nd == NanDump.AutoNan) nd = NanDump.NullNan;
+
+        switch(nd) {
+            case RaiseNan:
+            case WordNan:
+                raise_strict(value); break;
+            case NullNan:
+                append(NULL_VALUE); break;
+            case HugeNan:
+            default:
+                append(NAN_NUMERIC_VALUE); break;
+        }
+    }
+
+    @Override
+    protected void dumpInfNanForFloat(IRubyObject value, byte[] inf_value, boolean positive) {
+        NanDump nd = opts.dump_opts.nan_dump;
+
+        if (nd == NanDump.AutoNan) nd = NanDump.NullNan;
+
+        switch(nd) {
+            case RaiseNan:
+            case WordNan:
+                raise_strict(value); break;
+            case NullNan:
+                append(NULL_VALUE); break;
+            case HugeNan:
+            default:
+                append(positive ? INF_VALUE : NINF_VALUE); break;
+        }
     }
 }
