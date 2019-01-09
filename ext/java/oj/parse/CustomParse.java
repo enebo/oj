@@ -2,8 +2,6 @@ package oj.parse;
 
 import oj.OjLibrary;
 import oj.Options;
-import oj.RxClass;
-import org.joni.Matcher;
 import org.jruby.RubyArray;
 import org.jruby.RubyClass;
 import org.jruby.RubyComplex;
@@ -15,8 +13,6 @@ import org.jruby.runtime.Block;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
-
-import static org.jruby.parser.ReOptions.RE_OPTION_NONE;
 
 // Note: This shopuld really extend CompatParse but parse_xml_time seems to be only shared thing and that is in ObjectParse?
 public class CustomParse extends ObjectParse {
@@ -58,7 +54,7 @@ public class CustomParse extends ObjectParse {
                 if (options.sym_key) rkey = context.runtime.newSymbol(((RubyString) rkey).getByteList());
             }
             if (options.create_ok && !options.str_rx.isEmpty()) {
-                IRubyObject	clas = rxclass_match(str);
+                IRubyObject	clas = options.rxclass_match(str);
 
                 if (clas != null) rstr = clas.callMethod(context, "json_create", rstr);
             }
@@ -196,7 +192,7 @@ public class CustomParse extends ObjectParse {
 
         rstr = oj_encode(rstr);
         if (options.create_ok && !options.str_rx.isEmpty()) {
-            IRubyObject	clas = rxclass_match(str);
+            IRubyObject	clas = options.rxclass_match(str);
 
             if (clas != null) {
                 ((RubyArray) stack_peek().val).append(clas.callMethod(context, "json_create", rstr));
@@ -205,21 +201,6 @@ public class CustomParse extends ObjectParse {
         }
         ((RubyArray) stack_peek().val).append(rstr);
         if (options.trace) trace_parse_call("append_string", rstr);
-    }
-
-    private IRubyObject rxclass_match(ByteList str) {
-        for (RxClass rxclass: options.str_rx) {
-            if (rxclass.regex == null) continue;
-
-            int beg = str.begin();
-            int size = str.realSize();
-            Matcher matcher = rxclass.regex.matcher(str.unsafeBytes(), beg, beg + size);
-            int result = matcher.search(beg, beg + size, RE_OPTION_NONE);
-
-            if (result >= 0) return rxclass.clas;
-        }
-
-        return null;
     }
 
     // FIXME: Should cache Date/Datetime if they exist

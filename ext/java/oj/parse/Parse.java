@@ -947,7 +947,7 @@ public abstract class Parse {
     protected void trace_parse_call(String name, IRubyObject value) {
     }
 
-    protected void trace_parse_call(String name) {
+    public void trace_parse_call(String name) {
     }
 
     protected void trace_parse_hash_end() {

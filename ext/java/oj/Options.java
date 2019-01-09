@@ -1,14 +1,21 @@
 package oj;
 
 import oj.dump.DumpOpts;
+import oj.parse.Parse;
+import org.joni.Matcher;
+import org.jruby.RubyClass;
+import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
+import org.jruby.util.TypeConverter;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import static org.jruby.parser.ReOptions.RE_OPTION_NONE;
 
 public class Options {
     public static final char Yes = 'y';
@@ -60,7 +67,7 @@ public class Options {
     public char escape_mode = JSONEsc;	// Escape_Mode
     public int float_prec = 15;	// float precision, linked to float_fmt
     public String float_fmt = "%0.15g";	// float format for dumping, if empty use Ruby
-    IRubyObject hash_class;	// class to use in place of Hash on load
+    public IRubyObject hash_class;	// class to use in place of Hash on load
     public int indent = 0; // indention for dump
     public char mode = ObjectMode;
     public boolean nilnil = false;
@@ -71,14 +78,14 @@ public class Options {
     boolean to_hash = false;
     public boolean to_json = true;
     public boolean trace = false;
-    IRubyObject array_class;	// class to use in place of Array on load
+    public IRubyObject array_class;	// class to use in place of Array on load
     public DumpOpts dump_opts;
     public List<RxClass> str_rx;
     // FIXME: Consider primitive array for this
     public List<RubyModule> ignore; // array of classes to ignore;
 
     public Options(ThreadContext context) {
-        hash_class = context.nil;
+        hash_class = null;
         array_class = context.nil;
         dump_opts = new DumpOpts();
         str_rx = new ArrayList<>();
@@ -134,5 +141,29 @@ public class Options {
         options.float_fmt = "%0.16g";		// float_fmt
 
         return options;
+    }
+
+    public IRubyObject rxclass_match(ByteList str) {
+        for (RxClass rxclass: str_rx) {
+            if (rxclass.regex == null) continue;
+
+            int beg = str.begin();
+            int size = str.realSize();
+            Matcher matcher = rxclass.regex.matcher(str.unsafeBytes(), beg, beg + size);
+            int result = matcher.search(beg, beg + size, RE_OPTION_NONE);
+
+            if (result >= 0) return rxclass.clas;
+        }
+
+        return null;
+    }
+
+    public IRubyObject createHash(ThreadContext context) {
+        if (hash_class != null) {
+            TypeConverter.checkType(context, hash_class, context.runtime.getClassClass());
+            return hash_class.callMethod(context, "new");
+        } else {
+            return RubyHash.newHash(context.runtime);
+        }
     }
 }

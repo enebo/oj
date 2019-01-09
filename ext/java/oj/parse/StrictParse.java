@@ -62,4 +62,13 @@ public class StrictParse extends Parse {
     public void hashSetValue(Val kval, IRubyObject value) {
         ((RubyHash) stack_peek().val).fastASet(calc_hash_key(kval), value);
     }
+
+    @Override
+    public IRubyObject startHash() {
+        IRubyObject hash = options.createHash(context);
+
+        if (options.trace) trace_parse_call("start_hash");
+
+        return hash;
+    }
 }

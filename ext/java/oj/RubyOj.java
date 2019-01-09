@@ -161,7 +161,7 @@ public class RubyOj extends RubyModule {
             default:		opts.fastASet(nan, runtime.newSymbol("auto"));	break;
         }
 
-        opts.fastASet(runtime.newSymbol("hash_class"), oj.default_options.hash_class);
+        opts.fastASet(runtime.newSymbol("hash_class"), oj.default_options.hash_class == null ? context.nil : oj.default_options.hash_class);
         opts.fastASet(runtime.newSymbol("omit_nil"), oj.default_options.dump_opts.omit_nil ? context.tru : context.fals);
         opts.fastASet(runtime.newSymbol("allow_nan"), runtime.newBoolean(oj.default_options.allow_nan));
         opts.fastASet(runtime.newSymbol("array_class"), oj.default_options.array_class);

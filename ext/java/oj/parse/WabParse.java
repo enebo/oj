@@ -217,16 +217,6 @@ public class WabParse extends Parse {
     }
 
     @Override
-    public IRubyObject startHash() {
-        if (options.trace) trace_parse_call("start_hash");
-
-        // FIXME: ...
-        //if (options.hash_class)
-
-        return RubyHash.newHash(context.runtime);
-    }
-
-    @Override
     public void hashSetCStr(Val parent, ByteList value, int orig) {
         IRubyObject rval = cstr_to_rstr(value);
 
@@ -268,5 +258,14 @@ public class WabParse extends Parse {
         }
 
         return rkey;
+    }
+
+    @Override
+    public IRubyObject startHash() {
+        IRubyObject hash = options.createHash(context);
+
+        if (options.trace) trace_parse_call("start_hash");
+
+        return hash;
     }
 }

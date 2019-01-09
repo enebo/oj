@@ -29,7 +29,7 @@ public class CompatParse extends StrictParse {
         Val	parent = stack_peek();
         IRubyObject rkey = kval.key_val;
 
-        if (null == rkey && options.create_id != null && options.create_id.equals(key)) {
+        if (rkey == null && options.create_id != null && options.create_id.equals(key)) {
             parent.classname = str.dup();
         } else {
             IRubyObject rstr = getRuntime().newString(str);
@@ -39,7 +39,17 @@ public class CompatParse extends StrictParse {
 
                 if (options.sym_key) rkey = context.runtime.newSymbol(((RubyString)rkey).getByteList());
             }
-            ((RubyHash) parent.val).fastASet(rkey, rstr);
+
+            if (options.create_ok && !options.str_rx.isEmpty()) {
+                IRubyObject	clas = options.rxclass_match(str);
+
+                if (clas != null) rstr = clas.callMethod(context, "json_create", rstr);
+            }
+            if (parent.val instanceof RubyHash) {
+                ((RubyHash) parent.val).fastASet(rkey, rstr);
+            } else {
+                parent.val.callMethod(context, "[]=", new IRubyObject[] {rkey, rstr});
+            }
         }
     }
 
