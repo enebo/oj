@@ -59,7 +59,7 @@ public class StrictParse extends Parse {
     }
 
     @Override
-    public void setValue(Val kval, IRubyObject value) {
+    public void hashSetValue(Val kval, IRubyObject value) {
         ((RubyHash) stack_peek().val).fastASet(calc_hash_key(kval), value);
     }
 }

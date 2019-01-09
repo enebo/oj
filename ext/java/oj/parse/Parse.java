@@ -183,7 +183,7 @@ public abstract class Parse {
                 parent.next = ARRAY_COMMA;
                 break;
                 case HASH_VALUE:
-                    setValue(parent, rval);
+                    hashSetValue(parent, rval);
                     parent.next = HASH_COMMA;
                     break;
                 case HASH_NEW:
@@ -833,6 +833,7 @@ public abstract class Parse {
     }
 
     public void addValue(IRubyObject value) {
+        if (options.trace) trace_parse_call("add_value", value);
         this.value = value;
     }
 
@@ -840,8 +841,6 @@ public abstract class Parse {
         ((RubyArray) stack_peek().val).append(value);
     }
 
-    public void setValue(Val parent, IRubyObject value) {
-    }
 
     public void addNum(NumInfo value) {
     }
@@ -850,6 +849,9 @@ public abstract class Parse {
     }
 
     public void hashSetNum(Val parent, NumInfo value) {
+    }
+
+    public void hashSetValue(Val parent, IRubyObject value) {
     }
 
     public IRubyObject endArray() {

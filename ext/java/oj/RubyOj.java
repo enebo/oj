@@ -11,6 +11,7 @@ import oj.parse.SCParse;
 import oj.parse.SajParse;
 import oj.parse.StrictParse;
 import oj.parse.StringParserSource;
+import oj.parse.WabParse;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyFile;
@@ -476,7 +477,7 @@ public class RubyOj extends RubyModule {
             case CustomMode:
                 return new CustomParse(source, context, options).parse(oj, true, block);
             case WabMode:
-                // FIXME: IMPL
+                return new WabParse(source, context, options, null).parse(oj, true, block);
             case ObjectMode:
                 // is the catch all parser below...
             default:
@@ -724,6 +725,15 @@ public class RubyOj extends RubyModule {
         new SajParse(new StringParserSource(json), context).parse(handler);
 
         return context.nil;
+    }
+
+    @JRubyMethod(module = true, required = 1, rest = true)
+    public static IRubyObject wab_load(ThreadContext context, IRubyObject self, IRubyObject[] args) {
+        OjLibrary oj = resolveOj(self);
+        Options copts = oj.default_options.dup(context);
+        ParserSource source = processArgs(context, args, copts);
+
+        return new WabParse(source, context, copts, null).parse(oj, true, Block.NULL_BLOCK);
     }
 
     @JRubyMethod(module = true, required = 2, rest = true)

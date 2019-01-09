@@ -546,7 +546,7 @@ public class ObjectParse extends Parse {
     }
 
     @Override
-    public void setValue(Val kval, IRubyObject value) {
+    public void hashSetValue(Val kval, IRubyObject value) {
         ByteList key = kval.key;
         int		klen = key.length();
         Val		parent = stack_peek();

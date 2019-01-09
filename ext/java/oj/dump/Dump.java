@@ -81,6 +81,7 @@ public abstract class Dump {
             case StrictMode: return new StrictDump(context, oj, opts);
             case CompatMode: return new CompatDump(context, oj, opts);
             case CustomMode: return new CustomDump(context, oj, opts);
+            case WabMode: return new WabDump(context, oj, opts);
             case ObjectMode:
             default: //FIXME consider not defaulting or understand what default is.
                 return new ObjectDump(context, oj, opts);

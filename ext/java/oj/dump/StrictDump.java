@@ -4,20 +4,16 @@ import oj.OjLibrary;
 import oj.Options;
 import oj.options.NanDump;
 import org.jruby.RubyArray;
-import org.jruby.RubyFloat;
 import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyRange;
 import org.jruby.RubyRational;
 import org.jruby.RubyString;
 import org.jruby.RubyStruct;
-import org.jruby.RubySymbol;
 import org.jruby.RubyTime;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
-
-import static oj.parse.NumInfo.OJ_INFINITY;
 
 public class StrictDump extends Dump {
     StrictDump(ThreadContext context, OjLibrary oj, Options opts) {

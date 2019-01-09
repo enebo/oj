@@ -103,7 +103,7 @@ public class SCParse extends Parse {
     }
 
     @Override
-    public void setValue(Val kval, IRubyObject value) {
+    public void hashSetValue(Val kval, IRubyObject value) {
         if (dispatchHashSet) {
             Helpers.invoke(context, handler, "hash_set",
                      stack_head_val(), calc_hash_key(kval), value);

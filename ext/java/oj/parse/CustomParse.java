@@ -168,7 +168,7 @@ public class CustomParse extends ObjectParse {
     }
 
     @Override
-    public void setValue(Val kval, IRubyObject value) {
+    public void hashSetValue(Val kval, IRubyObject value) {
         Val	parent = stack_peek();
 
         if (parent.val instanceof RubyHash) {
