@@ -3,6 +3,7 @@ package oj.dump;
 import oj.Attr;
 import oj.OjLibrary;
 import oj.Options;
+import org.jruby.RubyClass;
 import org.jruby.RubyHash;
 import org.jruby.RubyNumeric;
 import org.jruby.RubyRange;
@@ -14,6 +15,8 @@ import org.jruby.ext.bigdecimal.RubyBigDecimal;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
+
+import java.util.function.Supplier;
 
 import static oj.Options.*;
 
@@ -77,38 +80,49 @@ public class CustomDump extends CompatDump {
 
     @Override
     protected void dump_hash(IRubyObject obj, int depth) {
-        RubyHash hash = (RubyHash) obj;
-        long id = check_circular(obj);
-
-        if (id < 0) {
-            dump_nil();
+        if (!(obj instanceof RubyHash)) {
+            dump_obj_attrs(obj, obj.getMetaClass(), 0, depth);
             return;
         }
 
-        if (hash.isEmpty()) {
-            append(EMPTY_HASH);
-        } else {
-            append('{');
-            this.depth = depth + 1;
-            hash.visitAll(context,
-                    new RubyHash.VisitorWithState<Dump>() {
-                        @Override
-                        public void visit(ThreadContext threadContext, RubyHash rubyHash, IRubyObject key, IRubyObject value, int index, Dump dump) {
-                            visit_hash(key, value);
-                        }
-                    }, this);
-            if (',' == get(-1)) pop(); // backup to overwrite last comma
-            if (!opts.dump_opts.use) {
-                fill_indent(depth);
-            } else {
-                dump_hash_nl_indent(depth);
-            }
-            append('}');
-        }
+        super.dump_hash(obj, depth);
     }
 
     protected void dump_openstruct(IRubyObject obj, int depth) {
         code_attrs(obj, OPENSTRUCT_METHODS, callAll(obj, OPENSTRUCT_METHODS), depth, opts.create_ok, Attr.AttrType.VALUE);
+    }
+
+    // cext: dump_common
+    @Override
+    protected void dump_other(IRubyObject obj, int depth) {
+        if (opts.to_json && obj.respondsTo("to_json")) {
+            trace("to_json", () ->  append(stringToByteList(obj, "to_json")));
+        } else if (opts.as_json && obj.respondsTo("as_json")) {
+            IRubyObject aj = trace("as_json", () -> obj.callMethod(context, "as_json"));
+
+            if (aj == obj) {
+                dump_cstr(stringToByteList(obj, "to_s"), false, false);
+            } else {
+                dump_val(aj, depth);
+            }
+        } else if (opts.to_hash && obj.respondsTo("to_hash")) {
+            IRubyObject h = obj.callMethod(context, "to_hash");
+
+            if (h instanceof RubyHash) {
+                dump_hash(h, depth);
+            } else {
+                dump_val(h, depth);
+            }
+        } else {
+            dump_obj_attrs(obj, obj.getMetaClass(), check_circular(obj), depth);
+        }
+    }
+
+    private IRubyObject trace(String to_json, Supplier<IRubyObject> to_json1) {
+        return to_json1.get();
+    }
+    private void trace(String to_json, Runnable to_json1) {
+        to_json1.run();
     }
 
     @Override

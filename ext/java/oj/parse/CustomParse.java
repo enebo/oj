@@ -17,6 +17,7 @@ import org.jruby.util.ByteList;
 // Note: This shopuld really extend CompatParse but parse_xml_time seems to be only shared thing and that is in ObjectParse?
 public class CustomParse extends ObjectParse {
     private static final ByteList TIME = new ByteList(new byte[] {'t', 'i', 'm', 'e'});
+    private static final ByteList O_KEY = new ByteList(new byte[] {'^', 'o'});
 
     public CustomParse(ParserSource source, ThreadContext context, Options options) {
         super(source, context, options);
@@ -32,18 +33,13 @@ public class CustomParse extends ObjectParse {
     @Override
     public void hashSetCStr(Val kval, ByteList str, int orig) {
         ByteList key = kval.key;
-        int klen = kval.key.realSize();
         Val	parent = stack_peek();
         IRubyObject	rkey = kval.key_val;
 
         if (rkey == null && options.create_ok && options.create_id != null &&  options.create_id.equals(key)) {
             parent.clas = (RubyClass) nameToClass(str, false, context.runtime.getArgumentError());
-            if (2 == klen && '^' == key.get(0) && 'o' == key.get(1)) {
-                if (parent.clas != null) {
-                    if (!code_has(parent.clas)) {
-                        parent.val = parent.clas.allocate();
-                    }
-                }
+            if (O_KEY.equals(key) && parent.clas != null && !code_has(parent.clas)) {
+                parent.val = parent.clas.allocate();
             }
         } else {
             IRubyObject	rstr = getRuntime().newString(str);
@@ -59,6 +55,8 @@ public class CustomParse extends ObjectParse {
                 if (clas != null) rstr = clas.callMethod(context, "json_create", rstr);
             }
 
+            System.out.println("KEY: " + rkey + ", pvalue: " + parent.val + ", RSTR: " + rstr);
+
             if (parent.val instanceof RubyHash) {
                 if (4 == parent.key.realSize() && context.runtime.getTime() == parent.clas && TIME.equals(parent.key)) {
                     if (context.nil == (parent.val = parse_xml_time(str))) {
@@ -68,8 +66,7 @@ public class CustomParse extends ObjectParse {
                     ((RubyHash) parent.val).fastASet(rkey, rstr);
                 }
             } else if (parent.val instanceof RubyObject) {
-                // FIXME: mbc prob
-                ((RubyObject) parent.val).setInstanceVariable(kval.toString(), rstr);
+                ((RubyObject) parent.val).setInstanceVariable(kval.keyAsInstanceVariableId(), value);
             }
 
             if (options.trace) trace_parse_call("set_string", rstr);
@@ -156,11 +153,10 @@ public class CustomParse extends ObjectParse {
             }
 
         } else if (parent.val instanceof RubyObject) {
-            // FIXME: will break on mbc
-            ((RubyObject) parent.val).setInstanceVariable(kval.toString(), rval);
+            ((RubyObject) parent.val).setInstanceVariable(kval.keyAsInstanceVariableId(), rval);
         }
 
-        if (options.trace) trace_parse_call("set_string", rval);
+        if (options.trace) trace_parse_call("set_num", rval);
     }
 
     @Override
@@ -170,8 +166,7 @@ public class CustomParse extends ObjectParse {
         if (parent.val instanceof RubyHash) {
             ((RubyHash) parent.val).fastASet(calc_hash_key(kval), value);
         } else if (parent.val instanceof RubyObject) {
-            // FIXME: will break on mbc
-            ((RubyObject) parent.val).setInstanceVariable(kval.toString(), value);
+            ((RubyObject) parent.val).setInstanceVariable(kval.keyAsInstanceVariableId(), value);
         }
 
         if (options.trace) trace_parse_call("set_value", value);
@@ -207,7 +202,6 @@ public class CustomParse extends ObjectParse {
     private boolean code_has(RubyClass clas) {
         return clas == context.runtime.getComplex() ||
                 clas == context.runtime.getObject().getConstantAt("Date") ||
-                clas == context.runtime.getObject().getConstantAt("DateTime") ||
                 clas == context.runtime.getObject().getConstantAt("DateTime") ||
                 clas == context.runtime.getObject().getConstantAt("OpenStruct") ||
                 clas == context.runtime.getRange() ||

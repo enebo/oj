@@ -1,5 +1,6 @@
 package oj;
 
+import oj.dump.CustomDump;
 import oj.dump.DumpOpts;
 import oj.parse.Parse;
 import org.joni.Matcher;
@@ -55,7 +56,7 @@ public class Options {
     boolean allow_gc = true; // allow GC during parse
     boolean allow_invalid = false; // Allow invalid unicode
     public boolean allow_nan = true; // For parsing only
-    boolean as_json = false;
+    public boolean as_json = false;
     public boolean auto_define = false;
     public char	bigdec_as_num = NotSet;	// YesNo
     public char bigdec_load = AutoDec;	// BigLoad
@@ -75,7 +76,7 @@ public class Options {
     public int sec_prec = 9; // second precision when dumping time
     public boolean sym_key = false;
     public char time_format = UnixTime;
-    boolean to_hash = false;
+    public boolean to_hash = false;
     public boolean to_json = true;
     public boolean trace = false;
     public IRubyObject array_class;	// class to use in place of Array on load
@@ -164,6 +165,13 @@ public class Options {
             return hash_class.callMethod(context, "new");
         } else {
             return RubyHash.newHash(context.runtime);
+        }
+    }
+
+    public boolean to_json_default() {
+        switch (mode) {
+            case CustomMode: return false;
+            default: return to_json;
         }
     }
 }

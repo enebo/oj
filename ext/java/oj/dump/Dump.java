@@ -693,8 +693,12 @@ public abstract class Dump {
         }
     }
 
-    protected void dump_hash(IRubyObject obj, int dep) {
-        RubyHash hash = (RubyHash) obj;
+    protected void dump_hash(IRubyObject object, int dep) {
+        dump_hash(object, object, dep);
+    }
+
+    protected void dump_hash(IRubyObject object, IRubyObject originalObject, int dep) {
+        RubyHash hash = (RubyHash) object;
 
         if (hash.isEmpty()) {
             append(EMPTY_HASH);
@@ -953,6 +957,7 @@ public abstract class Dump {
     protected ByteList stringToByteList(IRubyObject obj, String method) {
         IRubyObject stringResult = obj.callMethod(context, method);
 
+        // FIXME: Pick proper typeconverter
         if (!(stringResult instanceof RubyString)) {
             throw context.runtime.newTypeError("Expected a String");
         }
@@ -1126,7 +1131,7 @@ public abstract class Dump {
             RubyClass clas = obj.getMetaClass();
             Odd odd;
 
-            if (ObjectMode == opts.mode && null != (odd = oj.getOdd(clas))) {
+            if ((opts.mode == ObjectMode || opts.mode == CustomMode) && null != (odd = oj.getOdd(clas))) {
                 dump_odd(obj, odd, clas, depth + 1);
                 return;
             }

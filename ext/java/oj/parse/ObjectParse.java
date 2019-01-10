@@ -454,7 +454,7 @@ public class ObjectParse extends Parse {
             }
         }
 
-        // FIXME: toString does not really work here
+        // FIXME: if mbc then it may not work
         ((RubyObject) parent.val).setInstanceVariable(var_id.toString(), value);
     }
 

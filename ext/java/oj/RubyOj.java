@@ -204,6 +204,8 @@ public class RubyOj extends RubyModule {
         IRubyObject Qnil = runtime.getNil();
         IRubyObject v;
 
+        if (copts.mode == CompatMode) copts.dump_opts.nan_dump = WordNan;
+
         if (null != (v = ropts.fastARef(runtime.newSymbol("indent")))) {
             if (v.isNil()) {
                 copts.indent = 0;
@@ -378,7 +380,7 @@ public class RubyOj extends RubyModule {
         copts.class_cache = setBoolean(context, ropts, "class_cache", true);
         copts.bigdec_as_num = setYesNo(context, ropts, "bigdecimal_as_decimal");
         copts.to_hash = setBoolean(context, ropts, "use_to_hash");
-        copts.to_json = setBoolean(context, ropts, "use_to_json", true);
+        copts.to_json = setBoolean(context, ropts, "use_to_json", copts.to_json_default());
         copts.as_json = setBoolean(context, ropts, "use_as_json");
         copts.nilnil = setBoolean(context, ropts, "nilnil", false);
         copts.nilnil = setBoolean(context, ropts, "allow_blank", copts.nilnil); // alias of nilnil
@@ -493,8 +495,6 @@ public class RubyOj extends RubyModule {
 
         OjLibrary oj = resolveOj(self);
         Options	copts = OjLibrary.getDefaultOptions(context);
-
-        if (copts.mode == CompatMode) copts.dump_opts.nan_dump = WordNan;
 
         copts.escape_mode = JXEsc;
         copts.dump_opts.nan_dump = RaiseNan;
@@ -653,8 +653,6 @@ public class RubyOj extends RubyModule {
     public static IRubyObject dump(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         OjLibrary oj = resolveOj(self);
         Options	copts = OjLibrary.getDefaultOptions(context);
-
-        if (copts.mode == CompatMode) copts.dump_opts.nan_dump = WordNan;
 
         if (2 == args.length) parse_options(context, args[1], copts);
 

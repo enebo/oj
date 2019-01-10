@@ -23,4 +23,9 @@ public class Val {
         this.val = val;
         this.next = next;
     }
+
+    // FIXME: mbc keys will not work on 9.2.x (and partially on 9.1.x)
+    public String keyAsInstanceVariableId() {
+        return "@" + key;
+    }
 }
