@@ -79,13 +79,36 @@ public class CustomDump extends CompatDump {
     }
 
     @Override
-    protected void dump_hash(IRubyObject obj, int depth) {
-        if (!(obj instanceof RubyHash)) {
-            dump_obj_attrs(obj, obj.getMetaClass(), 0, depth);
+    protected void dump_hash(IRubyObject object, int dep) {
+        if (!(object instanceof RubyHash)) {
+            dump_obj_attrs(object, object.getMetaClass(), 0, dep);
             return;
         }
 
-        super.dump_hash(obj, depth);
+        RubyHash hash = (RubyHash) object;
+
+        if (hash.isEmpty()) {
+            append(EMPTY_HASH);
+        } else {
+            long id = check_circular(hash);
+            if (id < 0) {
+                append("null");
+                return;
+            }
+
+            append('{');
+            depth = dep + 1;
+            hash.visitAll(context,
+                    new RubyHash.VisitorWithState<Dump>() {
+                        @Override
+                        public void visit(ThreadContext threadContext, RubyHash rubyHash, IRubyObject key, IRubyObject value, int index, Dump dump) {
+                            visit_hash(key, value);
+                        }
+                    }, this);
+            if (',' == get(-1)) pop(); // backup to overwrite last comma
+            indent(dep, opts.dump_opts.hash_nl);
+            append('}');
+        }
     }
 
     protected void dump_openstruct(IRubyObject obj, int depth) {

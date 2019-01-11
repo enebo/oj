@@ -55,8 +55,6 @@ public class CustomParse extends ObjectParse {
                 if (clas != null) rstr = clas.callMethod(context, "json_create", rstr);
             }
 
-            System.out.println("KEY: " + rkey + ", pvalue: " + parent.val + ", RSTR: " + rstr);
-
             if (parent.val instanceof RubyHash) {
                 if (4 == parent.key.realSize() && context.runtime.getTime() == parent.clas && TIME.equals(parent.key)) {
                     if (context.nil == (parent.val = parse_xml_time(str))) {
