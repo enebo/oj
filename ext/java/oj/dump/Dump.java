@@ -859,7 +859,6 @@ public abstract class Dump {
                 } else {
                     dump_cstr(rstr, false, false);
                 }
-                //FIXME: what if datetime does not exist?
             } else  {
                 RubyClass dateTime = context.runtime.getClass("DateTime");
                 RubyClass date = context.runtime.getClass("Date");
@@ -1126,37 +1125,31 @@ public abstract class Dump {
         } else if (obj instanceof RubyRange) { // In MRI T_STRUCT is also Range
             dump_range((RubyRange) obj, depth);
         } else {
-            // FIXME: this else section can be another overridable method so this can
-            // be supered in at top for object and possibly compat
-            RubyClass clas = obj.getMetaClass();
-            Odd odd;
+            dump_val_misc(obj, depth);
+        }
+    }
 
-            if ((opts.mode == ObjectMode || opts.mode == CustomMode) && null != (odd = oj.getOdd(clas))) {
-                dump_odd(obj, odd, clas, depth + 1);
-                return;
-            }
-
-            if (obj instanceof RubyBignum) {
-                dump_bignum((RubyBignum) obj);
-            } else if (obj.getMetaClass() == context.runtime.getString()) {
-                dump_str((RubyString) obj);
-            } else if (obj.getMetaClass() == context.runtime.getArray()) {
-                dump_array((RubyArray) obj, depth);
-            } else if (obj.getMetaClass() == context.runtime.getHash()) {
-                dump_hash(obj, depth);
-            } else if (obj instanceof RubyComplex) {
-                dump_complex(obj, depth);
-            } else if (obj instanceof RubyRegexp) {
-                dump_regexp(obj, depth);
-            } else if (obj instanceof RubyTime) { // T_DATA
-                dump_time((RubyTime) obj, depth);
-            } else if (obj instanceof RubyBigDecimal) { // T_DATA
-                dump_bigdecimal((RubyBigDecimal) obj, depth);
-            } else if (obj instanceof RubyRational) {
-                dump_rational((RubyRational) obj, depth);
-            } else {
-                dump_other(obj, depth);
-            }
+    public void dump_val_misc(IRubyObject obj, int depth) {
+        if (obj instanceof RubyBignum) {
+            dump_bignum((RubyBignum) obj);
+        } else if (obj.getMetaClass() == context.runtime.getString()) {
+            dump_str((RubyString) obj);
+        } else if (obj.getMetaClass() == context.runtime.getArray()) {
+            dump_array((RubyArray) obj, depth);
+        } else if (obj.getMetaClass() == context.runtime.getHash()) {
+            dump_hash(obj, depth);
+        } else if (obj instanceof RubyComplex) {
+            dump_complex(obj, depth);
+        } else if (obj instanceof RubyRegexp) {
+            dump_regexp(obj, depth);
+        } else if (obj instanceof RubyTime) { // T_DATA
+            dump_time((RubyTime) obj, depth);
+        } else if (obj instanceof RubyBigDecimal) { // T_DATA
+            dump_bigdecimal((RubyBigDecimal) obj, depth);
+        } else if (obj instanceof RubyRational) {
+            dump_rational((RubyRational) obj, depth);
+        } else {
+            dump_other(obj, depth);
         }
     }
 

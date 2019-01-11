@@ -1,8 +1,10 @@
 package oj.dump;
 
+import oj.Odd;
 import oj.OjLibrary;
 import oj.Options;
 import org.jruby.RubyArray;
+import org.jruby.RubyClass;
 import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyRange;
@@ -83,6 +85,19 @@ public class ObjectDump extends Dump {
         }
 
         super.dump_hash(obj, depth);
+    }
+
+    @Override
+    public void dump_val_misc(IRubyObject obj, int depth) {
+        RubyClass clas = obj.getMetaClass();
+        Odd odd = oj.getOdd(clas);
+
+        if (odd != null) {
+            dump_odd(obj, odd, clas, depth + 1);
+            return;
+        }
+
+        super.dump_val_misc(obj, depth);
     }
 
     @Override

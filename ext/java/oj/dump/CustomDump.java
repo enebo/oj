@@ -1,13 +1,18 @@
 package oj.dump;
 
 import oj.Attr;
+import oj.Odd;
 import oj.OjLibrary;
 import oj.Options;
+import org.jruby.RubyArray;
+import org.jruby.RubyBignum;
 import org.jruby.RubyClass;
+import org.jruby.RubyComplex;
 import org.jruby.RubyHash;
 import org.jruby.RubyNumeric;
 import org.jruby.RubyRange;
 import org.jruby.RubyRational;
+import org.jruby.RubyRegexp;
 import org.jruby.RubyString;
 import org.jruby.RubySymbol;
 import org.jruby.RubyTime;
@@ -43,10 +48,46 @@ public class CustomDump extends CompatDump {
         // FIXME: Don't like this check before all others but it may be only way of doing this vs openstruct added to base dump_val
         if (context.runtime.getObject().getConstantAt("OpenStruct") == obj.getMetaClass()) {
             dump_openstruct(obj, depth);
+        } else if (context.runtime.getObject().getConstantAt("Date") == obj.getMetaClass()) {
+            dump_date(obj, depth);
         } else if (context.runtime.getObject().getConstantAt("DateTime") == obj.getMetaClass()) {
             dump_datetime(obj, depth);
         } else {
             super.dump_val(obj, depth);
+        }
+    }
+
+    public void dump_val_misc(IRubyObject obj, int depth) {
+        if (obj instanceof RubyBignum) {
+            dump_bignum((RubyBignum) obj);
+        } else if (obj.getMetaClass() == context.runtime.getString()) {
+            dump_str((RubyString) obj);
+        } else if (obj.getMetaClass() == context.runtime.getArray()) {
+            dump_array((RubyArray) obj, depth);
+        } else if (obj.getMetaClass() == context.runtime.getHash()) {
+            dump_hash(obj, depth);
+        } else if (obj instanceof RubyComplex) {
+            dump_complex(obj, depth);
+        } else if (obj instanceof RubyRegexp) {
+            dump_regexp(obj, depth);
+        } else if (obj instanceof RubyTime) { // T_DATA
+            dump_time((RubyTime) obj, depth);
+        } else if (obj instanceof RubyBigDecimal) { // T_DATA
+            dump_bigdecimal((RubyBigDecimal) obj, depth);
+        } else if (obj instanceof RubyRational) {
+            dump_rational((RubyRational) obj, depth);
+        } else {
+            // FIXME: this else section can be another overridable method so this can
+            // be supered in at top for object and possibly compat
+            RubyClass clas = obj.getMetaClass();
+            Odd odd = oj.getOdd(clas);
+
+            if (odd != null) {
+                dump_odd(obj, odd, clas, depth + 1);
+                return;
+            }
+
+            dump_other(obj, depth);
         }
     }
 
@@ -167,7 +208,7 @@ public class CustomDump extends CompatDump {
     @Override
     protected void dump_time(RubyTime obj, int depth) {
         if (opts.create_ok) {
-            code_attrs(obj, TIME_METHODS, callAll(obj, TIME_METHODS), depth, true, Attr.AttrType.TIME);
+            code_attrs(obj, TIME_METHODS, new IRubyObject[] { obj }, depth, true, Attr.AttrType.TIME);
         } else {
             switch (opts.time_format) {
                 case Options.RubyTime:	dump_ruby_time(obj);	break;
