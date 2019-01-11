@@ -34,14 +34,17 @@ public class ObjectDump extends Dump {
     protected void dump_str(RubyString string) {
         ByteList str = string.getByteList();
 
+        // FIXME: Fast path requires
+        /*
         boolean escape = isEscapeString(str);
-        if (string.isAsciiOnly() && !escape) { // Fast path.  JRuby already knows if it is a clean ASCII string.
+        if (string.isAsciiOnly() && !escape && opts.mode == JSONEsc) { // Fast path.  JRuby already knows if it is a clean ASCII string.
             append('"');
             append(str.unsafeBytes(), str.begin(), str.realSize());
             append('"');
         } else {
-            dump_cstr(str, false, escape);
-        }
+        */
+            dump_cstr(str, false, isEscapeString(str));
+        //}
     }
 
     @Override
