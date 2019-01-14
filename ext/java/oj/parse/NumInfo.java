@@ -1,6 +1,5 @@
 package oj.parse;
 
-import oj.parse.Parse;
 import org.jruby.Ruby;
 import org.jruby.RubyBignum;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;
@@ -23,11 +22,11 @@ public class NumInfo {
     public boolean big = false;
     public boolean no_big;
     public int exp = 0;
+    public int di = 0;
     public double div = 1;
     public long i = 0;
-    public int num = 0;
+    public long num = 0;
     public int len = 0;
-    public int dec_cnt = 0;
     public boolean hasExp = false;
 
     public NumInfo(Parse parse) {
@@ -44,10 +43,10 @@ public class NumInfo {
         no_big = false;
         exp = 0;
         div = 1;
+        di = 0;
         i = 0;
         num = 0;
         len = 0;
-        dec_cnt = 0;
         hasExp = false;
 
     }

@@ -445,7 +445,6 @@ public abstract class Parse {
         if (debug) System.out.println(">read_num");
         ni.reset();
         Val	parent = stack_peek();
-        int zero_cnt = 0;
         int start = source.currentOffset;
 
         ni.no_big = (FloatDec == options.bigdec_load);
@@ -457,7 +456,7 @@ public abstract class Parse {
             source.advance();
         }
         if ('I' == source.current) {
-            if (!source.startsWith(INFINITY)) {
+            if (!options.allow_nan || !source.startsWith(INFINITY)) {
                 setError("not a number or other Object");
                 return;
             }
@@ -471,40 +470,51 @@ public abstract class Parse {
             source.advance(3);
             ni.nan = true;
         } else {
+            int dec_cnt = 0;
+            boolean zero1 = false;
+
             for (; '0' <= source.current && source.current <= '9'; source.advance()) {
-                ni.dec_cnt++;
-                if (ni.big) {
-                    //ni.big++; // What is this for?
-                } else {
+                if (ni.i == 0 && source.current == '0') {
+                    zero1 = true;
+                }
+                if (ni.i > 0) {
+                    dec_cnt++;
+                }
+
+                if (!ni.big) {
                     int	d = (source.current - '0');
 
-                    if (0 == d) {
-                        zero_cnt++;
-                    } else {
-                        zero_cnt = 0;
+                    if (d > 0) {
+                        if (zero1 && options.mode == CompatMode) {
+                            setError("not a number");
+                            return;
+                        }
+                        zero1 = false;
                     }
-                    // TBD move size check here
+
                     ni.i = ni.i * 10 + d;
-                    if (Long.MAX_VALUE <= ni.i || DEC_MAX < ni.dec_cnt - zero_cnt) {
+                    if (Long.MAX_VALUE <= ni.i || DEC_MAX < dec_cnt) {
                         ni.big = true;
                     }
                 }
             }
             if ('.' == source.current) {
                 source.advance();
+                if (source.current < '0' || source.current > '9') {
+                    setError("not a number");
+                    return;
+                }
+
                 for (; '0' <= source.current && source.current <= '9'; source.advance()) {
                     int	d = (source.current - '0');
 
-                    if (0 == d) {
-                        zero_cnt++;
-                    } else {
-                        zero_cnt = 0;
+                    if (ni.num > 0 || ni.i > 0) {
+                        dec_cnt++;
                     }
-                    ni.dec_cnt++;
-                    // TBD move size check here
                     ni.num = ni.num * 10 + d;
-                    ni.div *= 10;
-                    if (Long.MAX_VALUE <= ni.div || DEC_MAX < ni.dec_cnt - zero_cnt) {
+                    ni.div *= 10.0;
+                    ni.di++;
+                    if (ni.div >= Double.MAX_VALUE || DEC_MAX < dec_cnt) {
                         ni.big = true;
                     }
                 }
@@ -530,7 +540,6 @@ public abstract class Parse {
                     ni.exp = -ni.exp;
                 }
             }
-            ni.dec_cnt -= zero_cnt;
             ni.str_start = start;
             ni.str_length = source.currentOffset - start;
         }
@@ -538,12 +547,12 @@ public abstract class Parse {
         if (ni.big) {
             ByteList value = source.subStr(ni.str_start, ni.str_length);
 
-            if (new ByteList(INF_VALUE).equals(value)) {
+            if (INF_VALUE.equals(value)) {
                 ni.infinity = true;
-            } else if  (new ByteList(NINF_VALUE).equals(value)) {
+            } else if  (NINF_VALUE.equals(value)) {
                 ni.infinity = true;
                 ni.neg = true;
-            } else if  (new ByteList(NAN_VALUE).equals(value)) {
+            } else if  (NAN_VALUE.equals(value)) {
                 ni.nan = true;
             }
         }
