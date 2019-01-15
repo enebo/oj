@@ -88,7 +88,24 @@ public class CompatDump extends Dump {
 
     @Override
     protected void dump_range(RubyRange obj, int depth) {
-        dump_struct_comp(obj, depth); // FIXME: do we really need to do all this checking....
+        // FIXME: Missing code_dump here or are we???? (range may not care about code_dump since this is coming frmo dump_struct in C).
+
+        if (obj instanceof RubyRange) {
+            RubyRange range = (RubyRange) obj;
+            append('"');
+            dump_val(range.begin(context), depth);
+            if (range.isExcludeEnd()) {
+                append("...");
+            } else {
+                append("..");
+            }
+            dump_val(range.end(context), depth);
+            append('"');
+        } else if (obj.respondsTo("to_json")) {
+            append(stringToByteList(obj, "to_json"));
+        } else {
+            dump_cstr(stringToByteList(obj, "to_s"), false, false);
+        }
     }
 
     @Override
