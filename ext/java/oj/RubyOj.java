@@ -636,6 +636,8 @@ public class RubyOj extends RubyModule {
                 return new ReadParserSource(context, input, "readpartial");
             } else if (input.respondsTo("read")) {
                 return new ReadParserSource(context, input, "read");
+            } else if (options.mode == CompatMode && input.respondsTo("to_s")) {
+                input = input.callMethod(context, "to_s");
             } else {
                 throw runtime.newArgumentError("strict_parse() expected a String or IO Object.");
             }
