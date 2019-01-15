@@ -2,7 +2,11 @@ package oj.dump;
 
 import oj.options.DumpCaller;
 import oj.options.NanDump;
+import org.jruby.RubyString;
+import org.jruby.runtime.ThreadContext;
+import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
+import org.jruby.util.TypeConverter;
 
 import static oj.dump.Dump.MAX_DEPTH;
 
@@ -33,5 +37,41 @@ public class DumpOpts implements Cloneable {
         nan_dump = old.nan_dump;
         omit_nil = old.omit_nil;
         max_depth = old.max_depth;
+    }
+
+    public void maybeSetAfterSep(ThreadContext context, IRubyObject v, boolean acceptNil) {
+        if (v == null) return;
+        if (acceptNil && v.isNil()) {
+            after_sep = ByteList.EMPTY_BYTELIST;
+        } else if (!v.isNil()) {
+            after_sep = ((RubyString) TypeConverter.checkStringType(context.runtime, v)).getByteList();
+        }
+    }
+
+    public void maybeSetBeforeSep(ThreadContext context, IRubyObject v, boolean acceptNil) {
+        if (v == null) return;
+        if (acceptNil && v.isNil()) {
+            before_sep = ByteList.EMPTY_BYTELIST;
+        } else if (!v.isNil()) {
+            before_sep = ((RubyString) TypeConverter.checkStringType(context.runtime, v)).getByteList();
+        }
+    }
+
+    public void maybeSetArrayNewline(ThreadContext context, IRubyObject v, boolean acceptNil) {
+        if (v == null) return;
+        if (acceptNil && v.isNil()) {
+            array_nl = ByteList.EMPTY_BYTELIST;
+        } else if (!v.isNil()) {
+            array_nl = ((RubyString) TypeConverter.checkStringType(context.runtime, v)).getByteList();
+        }
+    }
+
+    public void maybeSetHashNewline(ThreadContext context, IRubyObject v, boolean acceptNil) {
+        if (v == null) return;
+        if (acceptNil && v.isNil()) {
+            hash_nl = ByteList.EMPTY_BYTELIST;
+        } else if (!v.isNil()) {
+            hash_nl = ((RubyString) TypeConverter.checkStringType(context.runtime, v)).getByteList();
+        }
     }
 }

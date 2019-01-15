@@ -186,17 +186,23 @@ public class RubyOj extends RubyModule {
     @JRubyMethod(name = "default_options=", module = true)
     public static IRubyObject set_def_opts(ThreadContext context, IRubyObject self, IRubyObject roptsArg) {
         if (roptsArg instanceof RubyHash) {
-            Options newOptions = new Options(context);
+            OjLibrary oj = resolveOj(self);
 
-            resolveOj(self).default_options = newOptions;
+            Options newOptions = oj.default_options.dup(context);
 
-            parse_options(context, roptsArg, newOptions);
+            oj.default_options = newOptions;
+
+            parse_options(context, roptsArg, newOptions, true);
         }
 
         return context.nil;
     }
 
     public static void parse_options(ThreadContext context, IRubyObject roptsArg, Options copts) {
+        parse_options(context, roptsArg, copts, false);
+    }
+
+    public static void parse_options(ThreadContext context, IRubyObject roptsArg, Options copts, boolean acceptNil) {
         RubyHash ropts = (RubyHash) TypeConverter.checkHashType(context.runtime, roptsArg);
         Ruby runtime = context.runtime;
         IRubyObject Qtrue = runtime.getTrue();
@@ -329,25 +335,10 @@ public class RubyOj extends RubyModule {
             copts.escape_mode = JSONEsc;
         }
 
-        v = ropts.fastARef(runtime.newSymbol("space"));
-        if (v != null && !v.isNil()) {
-            copts.dump_opts.after_sep = ((RubyString) TypeConverter.checkStringType(runtime, v)).getByteList();
-        }
-
-        v = ropts.fastARef(runtime.newSymbol("space_before"));
-        if (v != null && !v.isNil()) {
-            copts.dump_opts.before_sep = ((RubyString) TypeConverter.checkStringType(runtime, v)).getByteList();
-        }
-
-        v = ropts.fastARef(runtime.newSymbol("object_nl"));
-        if (v != null && !v.isNil()) {
-            copts.dump_opts.hash_nl = ((RubyString) TypeConverter.checkStringType(runtime, v)).getByteList();
-        }
-
-        v = ropts.fastARef(runtime.newSymbol("array_nl"));
-        if (v != null && !v.isNil()) {
-            copts.dump_opts.array_nl = ((RubyString) TypeConverter.checkStringType(runtime, v)).getByteList();
-        }
+        copts.dump_opts.maybeSetAfterSep(context, ropts.fastARef(runtime.newSymbol("space")), acceptNil);
+        copts.dump_opts.maybeSetBeforeSep(context, ropts.fastARef(runtime.newSymbol("space_before")), acceptNil);
+        copts.dump_opts.maybeSetHashNewline(context, ropts.fastARef(runtime.newSymbol("object_nl")), acceptNil);
+        copts.dump_opts.maybeSetArrayNewline(context, ropts.fastARef(runtime.newSymbol("array_nl")), acceptNil);
 
         v = ropts.fastARef(runtime.newSymbol("nan"));
         if (v != null) {

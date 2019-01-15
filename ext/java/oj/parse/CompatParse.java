@@ -29,7 +29,7 @@ public class CompatParse extends StrictParse {
         Val	parent = stack_peek();
         IRubyObject rkey = kval.key_val;
 
-        if (rkey == null && options.create_id != null && options.create_id.equals(key)) {
+        if (rkey == null && options.create_ok && options.create_id != null && options.create_id.equals(key)) {
             parent.classname = str.dup();
         } else {
             IRubyObject rstr = getRuntime().newString(str);
