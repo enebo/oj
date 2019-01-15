@@ -733,7 +733,7 @@ public abstract class Parse {
                         throw getRuntime().newNotImplementedError("Calling a Proc with a block not supported in this version. Use func() {|x| } syntax instead.");
                     }
                 }*/
-                } else {
+                } else if (handler == null) {
                     first = false;
                 }
             }
@@ -805,15 +805,12 @@ public abstract class Parse {
                 }
             }
         }
-        // proceed with cleanup
-        if (0 != line) {
-            // FIXME:
-            //rb_jump_tag(line);
-        }
 
         if (err_has()) {
             parseError(error);
         }
+
+        if (handler != null) return context.nil;
 
         if (!options.quirks_mode) {
             if (result instanceof RubyNil || result instanceof RubyBoolean || result instanceof RubyFixnum ||
@@ -821,6 +818,7 @@ public abstract class Parse {
                 parseError("unexpected non-document Object: " + result.getMetaClass());
             }
         }
+
         return result;
     }
 
