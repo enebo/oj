@@ -513,6 +513,7 @@ public abstract class Dump {
         int[] cmap;
         int str_i = 0;
 
+        // FIXME: bench with and without size calc first.  Seems like this 2 pass may not be worth it in Java.
         switch (opts.escape_mode) {
             case NLEsc:
                 cmap = newline_friendly_chars;
@@ -1184,6 +1185,7 @@ public abstract class Dump {
         return false;
     }
 
+    // FIXME: consider making byte[] and passing into byetlist to avoid all the invalidate() ++ sorts of things
     public void append(int aByte) {
         buf.append((byte)aByte);
     }

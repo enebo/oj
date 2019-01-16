@@ -3,11 +3,15 @@ package oj.dump;
 import oj.OjLibrary;
 import oj.Options;
 import org.jruby.RubyArray;
+import org.jruby.RubyBignum;
+import org.jruby.RubyClass;
+import org.jruby.RubyComplex;
 import org.jruby.RubyFloat;
 import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyRange;
 import org.jruby.RubyRational;
+import org.jruby.RubyRegexp;
 import org.jruby.RubyString;
 import org.jruby.RubyStruct;
 import org.jruby.RubySymbol;
@@ -17,12 +21,62 @@ import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 import org.jruby.util.Sprintf;
+import org.jruby.util.TypeConverter;
 
 import static oj.parse.NumInfo.OJ_INFINITY;
 
 public class WabDump extends Dump {
+    private RubyClass HTTP_URIClass;
+    private RubyClass WAB_UUIDClass;
+
     public WabDump(ThreadContext context, OjLibrary oj, Options opts) {
         super(context, oj, opts);
+
+        // FIXME: add wab classes resolution here
+    }
+
+    public RubyClass resolveWabUUIDClass() {
+        if (WAB_UUIDClass == null) {
+            IRubyObject wab = context.runtime.getObject().getConstantAt("WAB");
+
+            if (wab != null) {
+                if (!(wab instanceof RubyModule)) {
+                    throw context.runtime.newTypeError("WAB is not a module");
+                }
+
+                IRubyObject uuid = ((RubyModule) wab).getConstantAt("UUID");
+
+                if (!(uuid instanceof RubyClass)) {
+                    throw context.runtime.newTypeError("WAB is not a class");
+                }
+
+                WAB_UUIDClass = (RubyClass) uuid;
+            }
+        }
+
+        return WAB_UUIDClass;
+    }
+
+    public RubyClass resolveURIHTTPClass() {
+        if (HTTP_URIClass == null) {
+            IRubyObject uri = context.runtime.getObject().getConstantAt("URI");
+
+            if (uri != null) {
+                if (!(uri instanceof RubyModule)) {
+                    throw context.runtime.newTypeError("URI is not a module");
+                }
+
+                IRubyObject http = ((RubyModule) uri).getConstantAt("HTTP");
+
+                if (!(http instanceof RubyClass)) {
+                    throw context.runtime.newTypeError("HTTP is not a class");
+                }
+
+                HTTP_URIClass = (RubyClass) http;
+            }
+        }
+
+        return HTTP_URIClass;
     }
 
     @Override
@@ -134,6 +188,37 @@ public class WabDump extends Dump {
     protected void dump_time(RubyTime time, int depth) {
         //FIXME: impl still needed
         super._dump_time(time, true);
+    }
+
+    // FIXME: all these supported in WBA?
+    @Override
+    public void dump_val_misc(IRubyObject obj, int depth) {
+        if (obj instanceof RubyBignum) {
+            dump_bignum((RubyBignum) obj);
+        } else if (obj.getMetaClass() == context.runtime.getString()) {
+            dump_str((RubyString) obj);
+        } else if (obj.getMetaClass() == context.runtime.getArray()) {
+            dump_array((RubyArray) obj, depth);
+        } else if (obj.getMetaClass() == context.runtime.getHash()) {
+            dump_hash(obj, depth);
+        } else if (obj instanceof RubyComplex) {
+            dump_complex(obj, depth);
+        } else if (obj instanceof RubyRegexp) {
+            dump_regexp(obj, depth);
+        } else if (obj instanceof RubyTime) { // T_DATA
+            dump_time((RubyTime) obj, depth);
+        } else if (obj instanceof RubyBigDecimal) { // T_DATA
+            dump_bigdecimal((RubyBigDecimal) obj, depth);
+        } else if (obj instanceof RubyRational) {
+            dump_rational((RubyRational) obj, depth);
+        } else if (obj.getMetaClass() == resolveWabUUIDClass()) {
+            dump_str((RubyString) TypeConverter.checkStringType(runtime, obj.callMethod(context, "to_s")));
+        } else if (obj.getMetaClass() == resolveURIHTTPClass()) {
+            dump_str((RubyString) TypeConverter.checkStringType(runtime, obj.callMethod(context, "to_s")));
+
+        } else {
+            raise_wab(obj);
+        }
     }
 
     @Override
