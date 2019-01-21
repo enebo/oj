@@ -215,7 +215,6 @@ public class WabDump extends Dump {
             dump_str((RubyString) TypeConverter.checkStringType(runtime, obj.callMethod(context, "to_s")));
         } else if (obj.getMetaClass() == resolveURIHTTPClass()) {
             dump_str((RubyString) TypeConverter.checkStringType(runtime, obj.callMethod(context, "to_s")));
-
         } else {
             raise_wab(obj);
         }

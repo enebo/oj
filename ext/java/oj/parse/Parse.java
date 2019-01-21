@@ -321,6 +321,11 @@ public abstract class Parse {
 
                         source.advance();
                         if ('\\' != source.current || 'u' != source.peek(1)) {
+                            if (options.allow_invalid) {
+                                source.advance(-1);
+                                unicode_to_chars(buf, code);
+                                break;
+                            }
                             source.advance(-1);
                             setError("invalid escaped character");
                             return;

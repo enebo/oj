@@ -54,7 +54,7 @@ public class Options {
     public static final ByteList JSON_CLASS = new ByteList(new byte[] {'j', 's', 'o', 'n', '_', 'c', 'l', 'a', 's', 's'});
 
     boolean allow_gc = true; // allow GC during parse
-    boolean allow_invalid = false; // Allow invalid unicode
+    public boolean allow_invalid = false; // Allow invalid unicode
     public boolean allow_nan = true; // For parsing only
     public boolean as_json = false;
     public boolean auto_define = false;

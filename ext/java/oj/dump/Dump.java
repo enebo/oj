@@ -175,6 +175,25 @@ public abstract class Dump {
             1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
             1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
 
+    // JSON XSS combo
+    static int hixss_friendly_chars[] = {
+            6,6,6,6,6,6,6,6,2,2,2,6,2,2,6,6,  // 0
+            6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,  // 1
+            1,1,2,1,1,1,6,1,1,1,1,1,1,1,1,1,  // 2
+            1,1,1,1,1,1,1,1,1,1,1,1,6,1,6,1,  // 3
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // 4
+            1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,  // 5
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // 6
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // 7
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // 8
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // 9
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // a
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // b
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // c
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  // d
+            1,1,6,1,1,1,1,1,1,1,1,1,1,1,1,1,  // e
+            1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}; // f
+
     // JSON standard
     static int hibit_friendly_chars[] = {
             6,6,6,6,6,6,6,6,2,2,2,6,2,2,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
@@ -210,42 +229,27 @@ public abstract class Dump {
             3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3};
 
 
-    static int newline_friendly_size(ByteList str) {
+    static int string_hixss_size(int[] sizes, ByteList str) {
         int len = str.length();
         int	size = 0;
+        int check = 0;
 
         for (int i = 0; 0 < len; i++, len--) {
-            size += newline_friendly_chars[str.get(i) & 0xff];
+            int c = str.get(i) & 0xff;
+            size += sizes[c];
+            if ((c & 0x80) != 0) {
+                check = 1;
+            }
         }
-        return size - len * (int)'0';
+        return size - len * (int)'0' + check;
     }
 
-    static int hibit_friendly_size(ByteList str) {
+    static int string_size(int[] sizes, ByteList str) {
         int len = str.length();
         int	size = 0;
 
         for (int i = 0; 0 < len; i++, len--) {
-            size += hibit_friendly_chars[str.get(i) & 0xff];
-        }
-        return size - len * (int)'0';
-    }
-
-    static int ascii_friendly_size(ByteList str) {
-        int len = str.length();
-        int	size = 0;
-
-        for (int i = 0; 0 < len; i++, len--) {
-            size += ascii_friendly_chars[str.get(i) & 0xff];
-        }
-        return size - len * (int)'0';
-    }
-
-    static int xss_friendly_size(ByteList str) {
-        int len = str.length();
-        int	size = 0;
-
-        for (int i = 0; 0 < len; i++, len--) {
-            size += xss_friendly_chars[str.get(i) & 0xff];
+            size += sizes[str.get(i) & 0xff];
         }
         return size - len * (int)'0';
     }
@@ -509,29 +513,30 @@ public abstract class Dump {
     }
 
     public void dump_cstr(ByteList str, boolean is_sym, boolean escape1) {
-        int	size;
         int[] cmap;
         int str_i = 0;
+        int size = -1;
 
         // FIXME: bench with and without size calc first.  Seems like this 2 pass may not be worth it in Java.
         switch (opts.escape_mode) {
             case NLEsc:
                 cmap = newline_friendly_chars;
-                size = newline_friendly_size(str);
                 break;
             case ASCIIEsc:
                 cmap = ascii_friendly_chars;
-                size = ascii_friendly_size(str);
+                break;
+            case JXEsc:
+                cmap = hixss_friendly_chars;
+                size = string_hixss_size(cmap, str);
                 break;
             case XSSEsc:
                 cmap = xss_friendly_chars;
-                size = xss_friendly_size(str);
                 break;
             case JSONEsc:
             default:
                 cmap = hibit_friendly_chars;
-                size = hibit_friendly_size(str);
         }
+        if (size == -1) size = string_size(cmap, str);
         int cnt = str.length();
 
         append('"');
@@ -551,13 +556,26 @@ public abstract class Dump {
             append(str.unsafeBytes(), str.begin() + str_i, cnt);
             append('"');
         } else {
+            //System.out.println("A.2");
+            int check_start = str_i;
+
             if (is_sym) {
                 append(':');
             }
             for (; str_i < cnt; str_i++) {
-                switch (cmap[(int)str.get(str_i) & 0xff]) {
+                int c = (int) str.get(str_i) & 0xff;
+                switch (cmap[c]) {
                     case 1:
-                        append(str.get(str_i));
+                        if (opts.escape_mode == JXEsc && str_i >= check_start) {
+                            if ((c & 0x80) != 0) {
+                                if ((c & 0xC0) != 0) {
+                                    check_start = check_unicode(str, str_i, cnt);
+                                } else {
+                                    throw context.runtime.newEncodingError("Invalid Unicode\n");
+                                }
+                            }
+                        }
+                        append(c);
                         break;
                     case 2:
                         append('\\');
@@ -568,18 +586,38 @@ public abstract class Dump {
                             case '\n':	append('n');	break;
                             case '\f':	append('f');	break;
                             case '\r':	append('r');	break;
-                            default:	append(str.get(str_i));	break;
+                            default:	append(c);	break;
                         }
                         break;
                     case 3: // Unicode
+                        if (opts.escape_mode == JXEsc && c == 0xe2 && cnt - str_i >= 2) {
+                            if (isExtension(str, str_i)) {
+                                str_i = dump_unicode(str, str_i, cnt);
+                            } else {
+                                check_start = check_unicode(str, str_i, cnt);
+                                append(c);
+                            }
+                            break;
+                        }
                         str_i = dump_unicode(str, str_i, cnt);
                         break;
                     case 6: // control characters
-                        append('\\');
-                        append('u');
-                        append('0');
-                        append('0');
-                        dump_hex(str.get(str_i));
+                        if (c < 0x80) {
+                            append('\\');
+                            append('u');
+                            append('0');
+                            append('0');
+                            dump_hex(c);
+                        } else {
+                            if (opts.escape_mode == JXEsc && c == 0xe2 && cnt - str_i >= 2) {
+                                if (isExtension(str, str_i)) {
+                                    str_i = dump_unicode(str, str_i, cnt);
+                                } else {
+                                    check_start = check_unicode(str, str_i, cnt);
+                                    append(c);
+                                }
+                            }
+                        }
                         break;
                     default:
                         break; // ignore, should never happen if the table is correct
@@ -587,6 +625,40 @@ public abstract class Dump {
             }
             append('"');
         }
+    }
+
+    private boolean isExtension(ByteList str, int str_i) {
+        int c2 = (int) str.get(str_i + 1) & 0xff;
+        int c3 = (int) str.get(str_i + 2) & 0xff;
+
+        return c2 == 0x80 && (c3 == 0xa8 || c3 == 0xa9);
+    }
+
+    int check_unicode(ByteList string, int start, int end) {
+        byte b = (byte) (string.get(start) & 0xff);
+        int cnt = 0;
+
+        if (0xC0 == (0xE0 & b)) {
+            cnt = 1;
+        } else if (0xE0 == (0xF0 & b)) {
+            cnt = 2;
+        } else if (0xF0 == (0xF8 & b)) {
+            cnt = 3;
+        } else if (0xF8 == (0xFC & b)) {
+            cnt = 4;
+        } else if (0xFC == (0xFE & b)) {
+            cnt = 5;
+        } else {
+            throw context.runtime.newEncodingError("Invalid Unicode\n");
+        }
+        start++;
+        for (; 0 < cnt; cnt--, start++) {
+            b = (byte) (string.get(start) & 0xff);
+            if (end <= start || 0x80 != (0xC0 & b)) {
+                throw context.runtime.newEncodingError("Invalid Unicode\n");
+            }
+        }
+        return start;
     }
 
     protected abstract void dump_bigdecimal(RubyBigDecimal bigdecimal, int depth);
