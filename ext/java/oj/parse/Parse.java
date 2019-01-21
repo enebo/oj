@@ -823,7 +823,8 @@ public abstract class Parse {
 
         if (!options.quirks_mode) {
             if (result instanceof RubyNil || result instanceof RubyBoolean || result instanceof RubyFixnum ||
-                    result instanceof RubyFloat || result instanceof RubyModule || result instanceof RubySymbol) {
+                    result instanceof RubyFloat || result instanceof RubyModule || result instanceof RubyString ||
+                    result instanceof RubySymbol) {
                 parseError("unexpected non-document Object: " + result.getMetaClass());
             }
         }
