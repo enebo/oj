@@ -662,6 +662,10 @@ public abstract class Parse {
                 setError("unexpected characters after the JSON document");
             }
 
+            if (!options.empty_string && first && source.current == '\0') {
+                setError("unexpected character");
+            }
+
             switch (source.current) {
                 case '{':
                     hash_start();
