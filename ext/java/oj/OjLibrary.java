@@ -1,5 +1,8 @@
 package oj;
 
+import oj.rails.RailsHolder;
+import oj.rails.RubyOjRails;
+import oj.rails.RubyOjRailsEncoder;
 import org.jruby.Ruby;
 import org.jruby.RubyClass;
 import org.jruby.RubyKernel;
@@ -16,12 +19,17 @@ import java.util.List;
  * Created by enebo on 8/28/15.
  */
 public class OjLibrary implements Library {
+    // FIXME: remove as static since it contains IRubyObject and this could leak in server scenario or leak across n runtimes
     public static Options default_options;
     private RubyClass parseError;
     public RubyClass stringWriter;
     public RubyModule oj;
     public RubyClass bag;
+    private RubyModule rails;
+    private RubyClass encoder;
     private List<Odd> odds;
+    private IRubyObject mimicState;
+    private RailsHolder railsHolder;
 
     public void load(Ruby runtime, boolean wrap) {
         RubyKernel.require(runtime.getKernel(), runtime.newString("time"), Block.NULL_BLOCK);
@@ -47,6 +55,16 @@ public class OjLibrary implements Library {
         RubyKernel.require(runtime.getKernel(), runtime.newString("oj/bag"), Block.NULL_BLOCK);
 
         bag = (RubyClass) oj.getConstantAt("Bag");
+
+        rails = oj.defineModuleUnder("Rails");
+        rails.defineAnnotatedMethods(RubyOjRails.class);
+
+        encoder = rails.defineClassUnder("Encoder", runtime.getObject(), RubyOjRailsEncoder.INSTANCE_ALLOCATOR);
+        encoder.defineAnnotatedMethods(RubyOjRailsEncoder.class);
+
+        // FIXME: lots of mim
+        mimicState = null;
+        railsHolder = new RailsHolder();
     }
 
     public RubyClass getParseError() {
@@ -127,5 +145,21 @@ public class OjLibrary implements Library {
         }
 
         odds.add(odd);
+    }
+
+    public IRubyObject getOjRailsEncoder() {
+        return encoder;
+    }
+
+    public IRubyObject getMimicState() {
+        return mimicState;
+    }
+
+    public void setMimicState(IRubyObject mimicState) {
+        this.mimicState = mimicState;
+    }
+
+    public RailsHolder getRailsHolder() {
+        return railsHolder;
     }
 }

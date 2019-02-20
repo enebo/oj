@@ -155,6 +155,7 @@ public class ObjectDump extends Dump {
     @Override
     protected void dump_bigdecimal(RubyBigDecimal obj, int depth) {
         ByteList str = stringToByteList(obj, "to_s");
+
         if (opts.bigdec_as_num != No) {
             dump_raw(str);
         } else if (INFINITY.equals(str)) {

@@ -5,7 +5,7 @@ import oj.Odd;
 import oj.OjLibrary;
 import oj.Options;
 import oj.parse.Parse;
-import oj.ROptTable;
+import oj.rails.ROptTable;
 import oj.options.DumpCaller;
 import oj.options.NanDump;
 import org.jcodings.specific.UTF8Encoding;
@@ -81,6 +81,7 @@ public abstract class Dump {
             case StrictMode: return new StrictDump(context, oj, opts);
             case CompatMode: return new CompatDump(context, oj, opts);
             case CustomMode: return new CustomDump(context, oj, opts);
+            case RailsMode: return new RailsDump(context, oj, opts);
             case WabMode: return new WabDump(context, oj, opts);
             case ObjectMode:
             default: //FIXME consider not defaulting or understand what default is.
@@ -1172,10 +1173,14 @@ public abstract class Dump {
         throw runtime.newTypeError("Failed to dump " + obj.getMetaClass().getName() + " Object to JSON in strict mode.");
     }
 
-    public void dump_val(IRubyObject obj, int depth) {
-        if (MAX_DEPTH < depth) {
+    protected void depthCheck(int depth) {
+        if (depth > MAX_DEPTH) {
             throw new RaiseException(context.runtime, context.runtime.getNoMemoryError(), "Too deeply nested.", true);
         }
+    }
+
+    public void dump_val(IRubyObject obj, int depth) {
+        depthCheck(depth);
 
         if (obj instanceof RubyNil) {
             dump_nil();

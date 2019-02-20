@@ -7,4 +7,9 @@ public class RxClass {
     public Regex regex; // rrx in rxclass.c (also somewhat rx since we support regexp on windows)
     public RubyClass clas;
     public String error; // Error if this
+
+    public RxClass(Regex regex, RubyClass clas) {
+        this.regex = regex;
+        this.clas = clas;
+    }
 }

@@ -14,11 +14,13 @@ import oj.parse.StringParserSource;
 import oj.parse.WabParse;
 import org.jruby.Ruby;
 import org.jruby.RubyArray;
+import org.jruby.RubyClass;
 import org.jruby.RubyFile;
 import org.jruby.RubyFixnum;
 import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyNumeric;
+import org.jruby.RubyRegexp;
 import org.jruby.RubyString;
 import org.jruby.RubySymbol;
 import org.jruby.anno.JRubyMethod;
@@ -31,6 +33,7 @@ import org.jruby.util.ByteList;
 import org.jruby.util.TypeConverter;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import static oj.Options.*;
 import static oj.options.NanDump.*;
@@ -391,16 +394,49 @@ public class RubyOj extends RubyModule {
         v = ropts.fastARef(runtime.newSymbol("array_class"));
         if (v != null && !v.isNil()) copts.array_class = v;
 
+        parseOptMatchString(context, copts.str_rx, ropts);
+
         v = ropts.fastARef(runtime.newSymbol("ignore"));
         if (v != null && !v.isNil()) {
             RubyArray array = (RubyArray) TypeConverter.checkArrayType(runtime, v);
             int length = array.size();
             copts.ignore = new ArrayList<>(length);
             for (int i = 0; i < length; i++) {
-                // FIXME: we don't know what is in this array...check for module/class
+                // FIXME: we don't know what is in this array...check, for module/class
                 copts.ignore.add((RubyModule) array.eltInternal(i));
             }
         }
+    }
+
+    public static void parseOptMatchString(ThreadContext context, List<RxClass> rc, RubyHash options) {
+        final Ruby runtime = context.runtime;
+        IRubyObject v = options.op_aref(context, context.runtime.newSymbol("match_string"));
+
+        if (!v.isNil()) {
+            RubyHash hash = v.convertToHash();
+
+            rc.clear();
+
+            hash.visitAll(new RubyHash.Visitor() {
+                @Override
+                public void visit(IRubyObject key, IRubyObject value) {
+                    if (!(value instanceof RubyClass)) {
+                        throw runtime.newArgumentError("for :match_string, the hash values must be a Class.");
+                    }
+
+                    if (key instanceof RubyRegexp) {
+                        rc.add(0, new RxClass(((RubyRegexp) key).getPattern(), (RubyClass) value));
+                    } else if (key instanceof RubyString) {
+                        RubyRegexp regexp = RubyRegexp.newRegexp(context.runtime, ((RubyString) key).getByteList(), 0);
+                        rc.add(new RxClass(((RubyRegexp) key).getPattern(), (RubyClass) value));
+                    } else {
+                        throw runtime.newArgumentError("for :match_string, keys must either a String or RegExp.");
+                    }
+                }
+            });
+
+        }
+
     }
 
     private static boolean setBoolean(ThreadContext context, RubyHash options, String symbolName, boolean defaultValue) {
@@ -600,17 +636,15 @@ public class RubyOj extends RubyModule {
     }
 
     public static ParserSource processArgs(ThreadContext context, IRubyObject[] args, Options options) {
-        Ruby runtime = context.runtime;
-        IRubyObject	input;
-        ByteList byteSource;
+        if (args.length < 1) throw context.runtime.newArgumentError("Wrong number of arguments to parse.");
+        if (2 == args.length) RubyOj.parse_options(context, args[1], options);
 
-        if (args.length < 1) {
-            throw runtime.newArgumentError("Wrong number of arguments to parse.");
-        }
-        input = args[0];
-        if (2 == args.length) {
-            RubyOj.parse_options(context, args[1], options);
-        }
+        return getSource(context, args[0], options);
+    }
+
+    public static ParserSource getSource(ThreadContext context, IRubyObject input, Options options) {
+        Ruby runtime = context.runtime;
+        ByteList byteSource;
 
         if (input instanceof RubyString) {
             byteSource = ((RubyString) input).getByteList();
