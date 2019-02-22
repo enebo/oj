@@ -7,17 +7,28 @@ import org.jruby.RubyRange;
 import org.jruby.RubyRational;
 import org.jruby.RubyString;
 import org.jruby.RubyStruct;
+import org.jruby.RubySymbol;
 import org.jruby.RubyTime;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
 
+import static oj.Options.JXEsc;
 import static oj.Options.No;
+import static oj.Options.RailsEsc;
 
 public class RailsDump extends Dump {
-    RailsDump(ThreadContext context, OjLibrary oj, Options opts) {
+    public RailsDump(ThreadContext context, OjLibrary oj, Options opts) {
         super(context, oj, opts);
+
+        if (oj.getRailsHolder().escapeHTML) {
+            opts.escape_mode = JXEsc;
+        } else {
+            opts.escape_mode = RailsEsc;
+        }
+
+        omit_nil = opts.dump_opts.omit_nil;
     }
 
     @Override
@@ -104,5 +115,36 @@ public class RailsDump extends Dump {
     // FIXME: not right (codes stuff back to compat with _alt calls)
     private void dump_obj(IRubyObject obj, int depth) {
         dump_obj_comp(obj, depth);
+    }
+
+    protected void visit_hash(IRubyObject key, IRubyObject value) {
+        int saved_depth = depth;
+        if (omit_nil && value.isNil()) return;
+
+        if (!(key instanceof RubyString)) {
+            key = key.callMethod(context, "to_s");
+        }
+
+        if (opts.dump_opts.use) {
+            dump_hash_nl_indent(saved_depth);
+            if (key instanceof RubyString) {
+                dump_str((RubyString) key);
+            } else { // FIXME: Report issue since to_s above can return anything so both C and Java ports should crash here.
+                dump_sym((RubySymbol) key);
+            }
+            dump_colon();
+        } else {
+            fill_indent(saved_depth);
+            if (key instanceof RubyString) {
+                dump_str((RubyString) key);
+            } else {
+                dump_sym((RubySymbol) key);
+            }
+            append(':');
+        }
+        dump_val(value, saved_depth);
+        append(',');
+
+        depth = saved_depth;
     }
 }

@@ -2,16 +2,21 @@ package oj.rails;
 
 import oj.DumpFunc;
 import oj.OjLibrary;
+import oj.Options;
 import oj.RubyMimic;
+import oj.RubyOj;
+import oj.dump.Dump;
+import oj.dump.RailsDump;
+import oj.parse.ParserSource;
 import org.jruby.Ruby;
 import org.jruby.RubyClass;
 import org.jruby.RubyException;
 import org.jruby.RubyModule;
-import org.jruby.RubyObject;
 import org.jruby.RubyString;
 import org.jruby.RubySymbol;
 import org.jruby.anno.JRubyMethod;
 import org.jruby.anno.JRubyModule;
+import org.jruby.runtime.Block;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
@@ -77,6 +82,24 @@ public class RubyOjRails extends RubyModule {
         return context.nil;
     }
 
+    @JRubyMethod(module = true)
+    public static IRubyObject encode(ThreadContext context, IRubyObject self, IRubyObject obj) {
+        OjLibrary oj = RubyOj.oj(context);
+        Options options = OjLibrary.getDefaultOptions(context);
+        ByteList result = new RailsDump(context, oj, options).obj_to_json(obj);
+        return context.runtime.newString(result); // FIXME: should use oj_encode.
+    }
+
+    @JRubyMethod(module = true)
+    public static IRubyObject encode(ThreadContext context, IRubyObject self, IRubyObject obj, IRubyObject opts) {
+        OjLibrary oj = RubyOj.oj(context);
+        Options options = OjLibrary.getDefaultOptions(context);
+
+        RubyOj.parse_options(context, opts, options);
+        ByteList result = new RailsDump(context, oj, options).obj_to_json(obj);
+        return context.runtime.newString(result); // FIXME: should use oj_encode.
+    }
+
     @JRubyMethod(module = true, rest = true)
     public static IRubyObject optimize(ThreadContext context, IRubyObject self, IRubyObject[] args) {
         return optimize(context, args, holder(context).ropts, true);
@@ -116,11 +139,29 @@ public class RubyOjRails extends RubyModule {
         RubyModule encoding = module(context, json, "Encoding");
 
         // FIXME: Unsure why cext needs to undef when it will redef over it?
-        encoding.undef(context, "use_standard_json_time_format=");
-        encoding.undef(context, "escape_html_entities_in_json=");
-        encoding.undef(context, "time_precision=");
+        encoding.getMetaClass().undef(context, "use_standard_json_time_format=");
+        encoding.getMetaClass().undef(context, "escape_html_entities_in_json=");
+        encoding.getMetaClass().undef(context, "time_precision=");
 
-        encoding.defineAnnotatedMethods(RubyOjRailsEncoderReplacements.class);
+        /*encoding.getMetaClass().addModuleFunction("use_standard_json_time_format=", new DynamicMethod("use_standard_json_time_format=") {
+            @Override
+            public IRubyObject call(ThreadContext context, IRubyObject iRubyObject, RubyModule rubyModule, String s, IRubyObject[] args, Block block) {
+                if (args.length != 1) throw context.runtime.newArgumentError(args.length, 1);
+
+                IRubyObject state = context.runtime.newBoolean(args[0].isTrue());
+
+                self.getInstanceVariables().setInstanceVariable("@use_standard_json_time_format", state);
+
+                return state;
+            }
+
+            @Override
+            public DynamicMethod dup() {
+                return null;
+            }
+        });*/
+
+        encoding.getMetaClass().defineAnnotatedMethods(RubyOjRailsEncoderReplacements.class);
 
         OjLibrary.default_options.sec_prec = encoding.getInstanceVariable("@time_precision").convertToInteger().getIntValue();
 

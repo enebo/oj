@@ -9,6 +9,7 @@ public class RailsHolder {
     boolean railsHashOpt = false;
     boolean railsArrayOpt = false;
     boolean railsFloatOpt = false;
+    public boolean escapeHTML = true;
 
     Map<IRubyObject, ROpt> ropts = new HashMap<>(4);
 

@@ -202,6 +202,8 @@ public class RubyOj extends RubyModule {
     }
 
     public static void parse_options(ThreadContext context, IRubyObject roptsArg, Options copts) {
+        if (roptsArg.isNil()) return; // nil as options is same as passing none in.
+
         parse_options(context, roptsArg, copts, false);
     }
 
