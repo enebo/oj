@@ -71,6 +71,8 @@ public class Options {
     public IRubyObject hash_class;	// class to use in place of Hash on load
     public int indent = 0; // indention for dump
     public char mode = ObjectMode;
+    public long integer_range_min = 0;
+    public long integer_range_max = 0;
     public boolean nilnil = false;
     public boolean quirks_mode = true; // allow single JSON values instead of documents
     public int sec_prec = 9; // second precision when dumping time
@@ -108,6 +110,8 @@ public class Options {
         newOptions.to_hash = to_hash;
         newOptions.to_json = to_json;
         newOptions.as_json = as_json;
+        newOptions.integer_range_min = integer_range_min;
+        newOptions.integer_range_max = integer_range_max;
         newOptions.nilnil = nilnil;
         newOptions.empty_string = empty_string;
         newOptions.allow_gc = allow_gc;

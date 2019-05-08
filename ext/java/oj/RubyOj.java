@@ -20,6 +20,7 @@ import org.jruby.RubyFixnum;
 import org.jruby.RubyHash;
 import org.jruby.RubyModule;
 import org.jruby.RubyNumeric;
+import org.jruby.RubyRange;
 import org.jruby.RubyRegexp;
 import org.jruby.RubyString;
 import org.jruby.RubySymbol;
@@ -105,7 +106,16 @@ public class RubyOj extends RubyModule {
                 opts.fastASet(runtime.newSymbol("mode"), runtime.newSymbol("object"));
                 break;
         }
-        RubySymbol escapeMode = runtime.newSymbol("escape_mode"); 
+        if (oj.default_options.integer_range_max != 0 || oj.default_options.integer_range_min != 0) {
+            IRubyObject range = RubyRange.newRange(context,
+                    runtime.newFixnum(oj.default_options.integer_range_min),
+                    runtime.newFixnum(oj.default_options.integer_range_max),
+                    false);
+            opts.fastASet(runtime.newSymbol("integer_range"), range);
+        } else {
+            opts.fastASet(runtime.newSymbol("integer_range"), context.nil);
+        }
+        RubySymbol escapeMode = runtime.newSymbol("escape_mode");
         switch (oj.default_options.escape_mode) {
             case NLEsc:
                 opts.fastASet(escapeMode, runtime.newSymbol("newline")); break;
@@ -406,6 +416,23 @@ public class RubyOj extends RubyModule {
             for (int i = 0; i < length; i++) {
                 // FIXME: we don't know what is in this array...check, for module/class
                 copts.ignore.add((RubyModule) array.eltInternal(i));
+            }
+        }
+
+        v = ropts.fastARef(runtime.newSymbol("integer_range"));
+        if (v != null && !v.isNil()) {
+            if (v instanceof RubyRange) {
+                RubyRange range = (RubyRange) v;
+                IRubyObject min = range.begin(context);
+                IRubyObject max = range.end(context);
+                if (!(min instanceof RubyFixnum) || !(max instanceof RubyFixnum)) {
+                    throw runtime.newArgumentError(":integer_range range bounds is not Fixnum.");
+                }
+
+                copts.integer_range_min = RubyNumeric.fix2long(min);
+                copts.integer_range_max = RubyNumeric.fix2long(max);
+            } else if (v != Qfalse) {
+                throw runtime.newArgumentError(":integer_range must be a range of Fixnum.");
             }
         }
     }

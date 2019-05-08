@@ -407,6 +407,13 @@ public abstract class Dump {
         int	b = buf.length - 1;
         long num = obj.getLongValue();
         boolean neg = false;
+        boolean dumpAsString = false;
+
+        if (opts.integer_range_max != 0 && opts.integer_range_min != 0 &&
+                (opts.integer_range_max < num || opts.integer_range_min > num)) {
+            dumpAsString = true;
+            buf[b--] = '"';
+        }
 
         if (num < 0) {
             num = -num;
@@ -426,14 +433,33 @@ public abstract class Dump {
             }
         }
 
+
+        if (dumpAsString) {
+            b--;
+            buf[b] = '"';
+        }
+
         int size = buf.length - b;
         append(buf, b, size);
     }
 
     protected void dump_bignum(RubyBignum obj) {
+        // FIXME: Missing use_bignum_alt
+
         // Note: This uses boxed call to to_s because 9.1 -> 9.2 changed return type on non-boxed version
         // from IRubyObject -> RubyString.
-        append(obj.to_s(new IRubyObject[] { context.runtime.newFixnum(10) }).convertToString().getByteList());
+        IRubyObject rstr = obj.to_s(new IRubyObject[] { context.runtime.newFixnum(10) });
+        RubyString str = (RubyString) TypeConverter.checkStringType(context.runtime, rstr);
+        boolean dumpAsString = false;
+
+        if (opts.integer_range_min != 0 || opts.integer_range_max != 0) {
+            dumpAsString = true;
+            append('"');
+        }
+
+        append(str.convertToString().getByteList());
+
+        if (dumpAsString) append('"');
     }
 
     // fIXME: this may be for object only
@@ -728,16 +754,27 @@ public abstract class Dump {
         int saved_depth = depth;
         if (omit_nil && value.isNil()) return;
 
-        if (!(key instanceof RubyString)) {
-            throw context.runtime.newTypeError("In :" + modeName() + " mode all Hash keys must be Strings, not " + key.getMetaClass().getName());
+        boolean isString = key instanceof RubyString;
+        if (!isString && !(key instanceof RubySymbol)) {
+            throw context.runtime.newTypeError("In :strict and :null mode all Hash keys must be Strings, not " +
+                    key.getMetaClass().getName());
         }
+
         if (opts.dump_opts.use) {
             dump_hash_nl_indent(saved_depth);
-            dump_str((RubyString) key);
+            if (isString) {
+                dump_str((RubyString) key);
+            } else {
+                dump_sym((RubySymbol) key);
+            }
             dump_colon();
         } else {
             fill_indent(saved_depth);
-            dump_str((RubyString) key);
+            if (isString) {
+                dump_str((RubyString) key);
+            } else {
+                dump_sym((RubySymbol) key);
+            }
             append(':');
         }
         dump_val(value, saved_depth);

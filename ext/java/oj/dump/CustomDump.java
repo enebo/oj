@@ -17,6 +17,7 @@ import org.jruby.RubyString;
 import org.jruby.RubySymbol;
 import org.jruby.RubyTime;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;
+import org.jruby.ext.date.RubyDate;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.util.ByteList;
@@ -111,8 +112,40 @@ public class CustomDump extends CompatDump {
     }
 
     protected void dump_date(IRubyObject obj, int depth) {
-        IRubyObject[] values = new IRubyObject[] { obj.callMethod(context, "iso8601") };
-        code_attrs(obj, DATE_METHODS, values, depth, opts.create_ok, Attr.AttrType.VALUE);
+        if (opts.create_ok) {
+            IRubyObject[] values = new IRubyObject[] {obj.callMethod(context, "iso8601")};
+            code_attrs(obj, DATE_METHODS, values, depth, opts.create_ok, Attr.AttrType.VALUE);
+        } else {
+            switch (opts.time_format) {
+                case RubyTime:
+                case XmlTime:
+                    dump_cstr(stringToByteList(obj.callMethod(context, "iso8601"), "to_s"), false, false);
+                    break;
+                case UnixZTime: {
+                    IRubyObject v = obj.callMethod(context, "to_time");
+
+                    if (obj instanceof RubyDate) {
+                        _dump_time(utcOnDate(v), false);
+                    } else {
+                        _dump_time(v, true);
+                    }
+                    break;
+                }
+                default: {
+                    IRubyObject v = obj.callMethod(context, "to_time");
+
+                    if (obj instanceof RubyDate) v = utcOnDate(v);
+
+                    _dump_time(v, false);
+                    break;
+                }
+            }
+        }
+    }
+
+    // FIXME: Can use non-dyn dispatch if none of these methods have been overridden.
+    private IRubyObject utcOnDate(IRubyObject object) {
+        return object.callMethod(context, "utc").callMethod(context, "+", object.callMethod(context, "utc_offset"));
     }
 
     protected void dump_datetime(IRubyObject obj, int depth) {
