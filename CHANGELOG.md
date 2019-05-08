@@ -1,15 +1,115 @@
 # CHANGELOG
 
+## 3.7.12 - 2019-04-14
+
+- The `:omit_nil` option did not work in `:rails` mode. That has been fixed.
+
+## 3.7.11 - 2019-03-19
+
+- Fix to Rails optimize that missed initializing the mimic JSON `:symbolize_names` value.
+
+## 3.7.10 - 2019-03-14
+
+- Corrected time dump so that the none-leap years after a 400 year period are correct.
+
+## 3.7.9 - 2019-02-18
+
+- Return correct value in `create_opt` C function.
+
+- Return `Oj::ParseError` if an invalid big decimal string is encounted instead of an argument error
+
+## 3.7.8 - 2019-01-21
+
+- Replace `gmtime` with a custom function.
+
+- Oj::Doc crash fix.
+
+- Mark odd args to avoid GC.
+
+## 3.7.7 - 2019-01-14
+
+  - Exception with other than a single argument initializer can now be decoded.
+
+  - StreamWriter bug fixed that forces UTF-8 when appending to a stream. Ruby likes to convert to ASCII-8BIT but forcing the append to be UTF-8 avoids that issue.
+
+## 3.7.6 - 2018-12-30
+
+  - Changed time encoding for 32 bit to work around a Ruby bug in `rb_time_timespec()` that fails for times before 1970.
+
+  - Addressed issue #514 by changing reserved identifiers.
+
+  - Addressed issue #515 by adding return value checks on `strdup()` and `pthread_mutex_init()`.
+
+## 3.7.5 - 2018-12-27
+
+  - Address issue #517 with a special escape table for mimicing the JSON gem.
+
+## 3.7.4 - 2018-11-29
+
+  - Allow `+` in front of numbers in parse as well as stream parse **EXCEPT** when mimicing the JSON gem.
+
+## 3.7.3 - 2018-11-29
+
+  - Allow `+` in front of numbers in parse as well as stream parse.
+
+## 3.7.2 - 2018-11-29
+
+  - More tolerant float parsing to allow `123.`.
+
+  - Parse exceptions raised by user code now preserve the message content of the exception.
+
+## 3.7.1 - 2018-11-09
+
+  - Updated to support TruffleRuby.
+
+## 3.7.0 - 2018-10-29
+
+  - Thanks to Ziaw for adding a integer range where integers outside that range are written as strings.
+
+## 3.6.13 - 2018-10-25
+
+  - Fixed issue where exceptions were not being cleared on parsing.
+
+  - Added addition unicode dump error information.
+
+## 3.6.12 - 2018-10-16
+
+  - Fixed random `:omit_nil` setting with StringWriter and StreamWriter.
+
+## 3.6.11 - 2018-09-26
+
+  - Added the JSON path to parse error messages.
+
+  - BigDecimal parse errors now return Oj::ParseError instead of ArgumentError.
+
+## 3.6.10 - 2018-09-13
+
+  - Additional occurances of `SYM2ID(sym)` replaced.
+
+## 3.6.9 - 2018-09-12
+
+  - `SYM2ID(sym)` causes a memory leak. A work around is now used.
+
+## 3.6.8 - 2018-09-08
+
+  - Stopped setting the default options when optimze rails is called as the documentaiton has indicated.
+
+  - In custom mode `Date` and `DateTime` instances default to use the `:time_format` option is the `:create_additions` option is false.
+
+## 3.6.7 - 2018-08-26
+
+  - Fixed incorrect check in StreamWriter when adding raw JSON.
+
 ## 3.6.6 - 2018-08-16
 
   - Fixed Debian build issues on several platforms.
-  
+
   - `oj_slash_string` is now frozen.
 
 ## 3.6.5 - 2018-07-26
 
   - Fixed GC issue with Oj::Doc.
-  
+
   - Fixed issue with time encoding with Windows.
 
 ## 3.6.4 - 2018-07-10
@@ -938,4 +1038,3 @@
 ## 0.5 - 2012-02-19
 
 - This is the first release with a version of 0.5 indicating it is only half done. Basic load() and dump() is supported for Hash, Array, NilClass, TrueClass, FalseClass, Fixnum, Float, Symbol, and String Objects.
-

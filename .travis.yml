@@ -9,11 +9,10 @@ env:
 
 language: ruby
 rvm:
-  #- 2.1.10
-  - 2.2.6
-  - 2.3.3
-  - 2.4.2
-  - 2.5.1
+  - 2.3.8
+  - 2.4.5
+  - 2.5.3
+  - 2.6.1
   - ruby-head
 
 gemfile:
@@ -30,12 +29,6 @@ matrix:
     - rvm: ruby-head
 
   exclude:
-    - gemfile: gemfiles/rails_5.gemfile
-      rvm: 2.1.10
-    - gemfile: gemfiles/no_rails.gemfile
-      rvm: 2.1.10
-    - gemfile: gemfiles/no_rails.gemfile
-      rvm: 2.2.6
     - gemfile: gemfiles/no_rails.gemfile
       rvm: 2.3.3
     - gemfile: gemfiles/no_rails.gemfile

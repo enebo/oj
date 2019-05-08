@@ -123,15 +123,11 @@ dump_to_json(VALUE obj, Out out) {
     if (Yes == out->opts->trace) {
 	oj_trace("to_json", obj, __FILE__, __LINE__, 0, TraceRubyIn);
     }
-#if HAS_METHOD_ARITY
     if (0 == rb_obj_method_arity(obj, oj_to_json_id)) {
 	rs = rb_funcall(obj, oj_to_json_id, 0);
     } else {
 	rs = rb_funcall2(obj, oj_to_json_id, out->argc, out->argv);
     }
-#else
-    rs = rb_funcall2(obj, oj_to_json_id, out->argc, out->argv);
-#endif
     if (Yes == out->opts->trace) {
 	oj_trace("to_json", obj, __FILE__, __LINE__, 0, TraceRubyOut);
     }
@@ -221,7 +217,7 @@ static ID	_dump_id = 0;
 
 static void
 bigdecimal_alt(VALUE obj, int depth, Out out) {
-    struct _Attr	attrs[] = {
+    struct _attr	attrs[] = {
 	{ "b", 1, Qnil },
 	{ NULL, 0, Qnil },
     };
@@ -239,7 +235,7 @@ static ID	imag_id = 0;
 
 static void
 complex_alt(VALUE obj, int depth, Out out) {
-    struct _Attr	attrs[] = {
+    struct _attr	attrs[] = {
 	{ "r", 1, Qnil },
 	{ "i", 1, Qnil },
 	{ NULL, 0, Qnil },
@@ -262,7 +258,7 @@ static ID	start_id = 0;
 
 static void
 date_alt(VALUE obj, int depth, Out out) {
-    struct _Attr	attrs[] = {
+    struct _attr	attrs[] = {
 	{ "y", 1, Qnil },
 	{ "m", 1, Qnil },
 	{ "d", 1, Qnil },
@@ -290,7 +286,7 @@ static ID	offset_id = 0;
 
 static void
 datetime_alt(VALUE obj, int depth, Out out) {
-    struct _Attr	attrs[] = {
+    struct _attr	attrs[] = {
 	{ "y", 1, Qnil },
 	{ "m", 1, Qnil },
 	{ "d", 1, Qnil },
@@ -379,7 +375,7 @@ static ID	table_id = 0;
 
 static void
 openstruct_alt(VALUE obj, int depth, Out out) {
-    struct _Attr	attrs[] = {
+    struct _attr	attrs[] = {
 	{ "t", 1, Qnil },
 	{ NULL, 0, Qnil },
     };
@@ -429,7 +425,7 @@ static ID	denominator_id = 0;
 
 static void
 rational_alt(VALUE obj, int depth, Out out) {
-    struct _Attr	attrs[] = {
+    struct _attr	attrs[] = {
 	{ "n", 1, Qnil },
 	{ "d", 1, Qnil },
 	{ NULL, 0, Qnil },
@@ -449,7 +445,7 @@ static ID	source_id = 0;
 
 static void
 regexp_alt(VALUE obj, int depth, Out out) {
-    struct _Attr	attrs[] = {
+    struct _attr	attrs[] = {
 	{ "o", 1, Qnil },
 	{ "s", 1, Qnil },
 	{ NULL, 0, Qnil },
@@ -466,7 +462,7 @@ regexp_alt(VALUE obj, int depth, Out out) {
 
 static void
 time_alt(VALUE obj, int depth, Out out) {
-    struct _Attr	attrs[] = {
+    struct _attr	attrs[] = {
 	{ "s", 1, Qundef, 0, Qundef },
 	{ "n", 1, Qundef, 0, Qundef },
 	{ NULL, 0, Qnil },
@@ -474,19 +470,19 @@ time_alt(VALUE obj, int depth, Out out) {
     time_t	sec;
     long long	nsec;
 
-#if HAS_RB_TIME_TIMESPEC
-    {
+#ifdef HAVE_RB_TIME_TIMESPEC
+    if (16 <= sizeof(struct timespec)) {
 	struct timespec	ts = rb_time_timespec(obj);
-	sec = ts.tv_sec;
+
+	sec = (long long)ts.tv_sec;
 	nsec = ts.tv_nsec;
+    } else {
+	sec = rb_num2ll(rb_funcall2(obj, oj_tv_sec_id, 0, 0));
+	nsec = rb_num2ll(rb_funcall2(obj, oj_tv_nsec_id, 0, 0));
     }
 #else
     sec = rb_num2ll(rb_funcall2(obj, oj_tv_sec_id, 0, 0));
-#if HAS_NANO_TIME
     nsec = rb_num2ll(rb_funcall2(obj, oj_tv_nsec_id, 0, 0));
-#else
-    nsec = rb_num2ll(rb_funcall2(obj, oj_tv_usec_id, 0, 0)) * 1000;
-#endif
 #endif
 
     attrs[0].num = sec;
@@ -495,7 +491,7 @@ time_alt(VALUE obj, int depth, Out out) {
     oj_code_attrs(obj, attrs, depth, out, true);
 }
 
-struct _Code	oj_compat_codes[] = {
+struct _code	oj_compat_codes[] = {
     { "BigDecimal", Qnil, bigdecimal_alt, NULL, false },
     { "Complex", Qnil, complex_alt, NULL, false },
     { "Date", Qnil, date_alt, false },
@@ -870,6 +866,7 @@ dump_bignum(VALUE obj, int depth, Out out, bool as_ok) {
     // this must use to_s to pass the json gem unit tests.
     volatile VALUE	rs;
     int			cnt;
+	bool		dump_as_string = false;
 
     if (use_bignum_alt) {
 	rs = rb_big2str(obj, 10);
@@ -878,9 +875,22 @@ dump_bignum(VALUE obj, int depth, Out out, bool as_ok) {
     }
     rb_check_type(rs, T_STRING);
     cnt = (int)RSTRING_LEN(rs);
-    assure_size(out, cnt);
+
+	if (out->opts->integer_range_min != 0 || out->opts->integer_range_max != 0) {
+	dump_as_string = true; // Bignum cannot be inside of Fixnum range
+	assure_size(out, cnt + 2);
+	*out->cur++ = '"';
+	} else {
+	assure_size(out, cnt);
+	}
+
     memcpy(out->cur, rb_string_value_ptr((VALUE*)&rs), cnt);
     out->cur += cnt;
+
+	if(dump_as_string) {
+	*out->cur++ = '"';
+	}
+
     *out->cur = '\0';
 }
 

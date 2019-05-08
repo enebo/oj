@@ -19,11 +19,7 @@
 #include "rails.h"
 #include "encode.h"
 
-#if !HAS_ENCODING_SUPPORT || defined(RUBINIUS_RUBY)
-#define rb_eEncodingError	rb_eException
-#endif
-
-typedef struct _YesNoOpt {
+typedef struct _yesNoOpt {
     VALUE	sym;
     char	*attr;
 } *YesNoOpt;
@@ -116,6 +112,7 @@ static VALUE	create_id_sym;
 static VALUE	custom_sym;
 static VALUE	empty_string_sym;
 static VALUE	escape_mode_sym;
+static VALUE	integer_range_sym;
 static VALUE	float_prec_sym;
 static VALUE	float_sym;
 static VALUE	huge_sym;
@@ -147,21 +144,17 @@ static VALUE	word_sym;
 static VALUE	xmlschema_sym;
 static VALUE	xss_safe_sym;
 
-#if HAS_ENCODING_SUPPORT
 rb_encoding	*oj_utf8_encoding = 0;
-#else
-VALUE		oj_utf8_encoding = Qnil;
-#endif
 
-#if USE_PTHREAD_MUTEX
+#if HAVE_LIBPTHREAD
 pthread_mutex_t	oj_cache_mutex;
-#elif USE_RB_MUTEX
+#else
 VALUE oj_cache_mutex = Qnil;
 #endif
 
 const char	oj_json_class[] = "json_class";
 
-struct _Options	oj_default_options = {
+struct _options	oj_default_options = {
     0,		// indent
     No,		// circular
     No,		// auto_define
@@ -183,6 +176,8 @@ struct _Options	oj_default_options = {
     No,		// create_ok
     Yes,	// allow_nan
     No,		// trace
+    0,		// integer_range_min
+    0,		// integer_range_max
     oj_json_class,	// create_id
     10,		// create_id_len
     9,		// sec_prec
@@ -250,6 +245,7 @@ struct _Options	oj_default_options = {
  * - *:array_class* [_Class_|_nil_] Class to use instead of Array on load
  * - *:omit_nil* [_true_|_false_] if true Hash and Object attributes with nil values are omitted
  * - *:ignore* [_nil_|Array] either nil or an Array of classes to ignore when dumping
+ * - *:integer_range* [_Range_] Dump integers outside range as strings. 
  * - *:trace* [_true,_|_false_] Trace all load and dump calls, default is false (trace is off)
  *
  * Return [_Hash_] all current option settings.
@@ -290,6 +286,18 @@ get_def_opts(VALUE self) {
     case RailsMode:	rb_hash_aset(opts, mode_sym, rails_sym);	break;
     case WabMode:	rb_hash_aset(opts, mode_sym, wab_sym);		break;
     default:		rb_hash_aset(opts, mode_sym, object_sym);	break;
+    }
+    
+    if (oj_default_options.integer_range_max != 0 || oj_default_options.integer_range_min != 0) {
+    VALUE range = rb_obj_alloc(rb_cRange);
+    VALUE min = LONG2FIX(oj_default_options.integer_range_min);
+    VALUE max = LONG2FIX(oj_default_options.integer_range_max);
+    rb_ivar_set(range, oj_begin_id, min);
+    rb_ivar_set(range, oj_end_id, max);
+    rb_hash_aset(opts, integer_range_sym, range);
+    }
+    else {
+    rb_hash_aset(opts, integer_range_sym, Qnil);
     }
     switch (oj_default_options.escape_mode) {
     case NLEsc:		rb_hash_aset(opts, escape_mode_sym, newline_sym);	break;
@@ -380,6 +388,7 @@ get_def_opts(VALUE self) {
  *   - *:array_class* [_Class_|_nil_] Class to use instead of Array on load.
  *   - *:omit_nil* [_true_|_false_] if true Hash and Object attributes with nil values are omitted.
  *   - *:ignore* [_nil_|Array] either nil or an Array of classes to ignore when dumping
+ *   - *:integer_range* [_Range_] Dump integers outside range as strings. 
  *   - *:trace* [_Boolean_] turn trace on or off.
  */
 static VALUE
@@ -392,7 +401,7 @@ set_def_opts(VALUE self, VALUE opts) {
 
 void
 oj_parse_options(VALUE ropts, Options copts) {
-    struct _YesNoOpt	ynos[] = {
+    struct _yesNoOpt	ynos[] = {
 	{ circular_sym, &copts->circular },
 	{ auto_define_sym, &copts->auto_define },
 	{ symbol_keys_sym, &copts->sym_key },
@@ -715,6 +724,21 @@ oj_parse_options(VALUE ropts, Options copts) {
 	    }
 	}
     }
+    if (Qnil != (v = rb_hash_lookup(ropts, integer_range_sym))) {
+    if (TYPE(v) == T_STRUCT && rb_obj_class(v) == rb_cRange) {
+        VALUE min = rb_funcall(v, oj_begin_id, 0);
+        VALUE max = rb_funcall(v, oj_end_id, 0);
+
+        if (TYPE(min) != T_FIXNUM || TYPE(max) != T_FIXNUM) {
+            rb_raise(rb_eArgError, ":integer_range range bounds is not Fixnum.");
+        }
+
+        copts->integer_range_min = FIX2LONG(min);
+        copts->integer_range_max = FIX2LONG(max);
+    } else if (Qfalse != v) {
+        rb_raise(rb_eArgError, ":integer_range must be a range of Fixnum.");
+    }
+    }
 }
 
 static int
@@ -877,7 +901,7 @@ load_file(int argc, VALUE *argv, VALUE self) {
     char		*path;
     int			fd;
     Mode		mode = oj_default_options.mode;
-    struct _ParseInfo	pi;
+    struct _parseInfo	pi;
 
     if (1 > argc) {
 	rb_raise(rb_eArgError, "Wrong number of arguments to load().");
@@ -952,7 +976,7 @@ load_file(int argc, VALUE *argv, VALUE self) {
  */
 static VALUE
 safe_load(VALUE self, VALUE doc) {
-    struct _ParseInfo	pi;
+    struct _parseInfo	pi;
     VALUE		args[1];
 
     parse_info_init(&pi);
@@ -1004,8 +1028,8 @@ safe_load(VALUE self, VALUE doc) {
 static VALUE
 dump(int argc, VALUE *argv, VALUE self) {
     char		buf[4096];
-    struct _Out		out;
-    struct _Options	copts = oj_default_options;
+    struct _out		out;
+    struct _options	copts = oj_default_options;
     VALUE		rstr;
 
     if (1 > argc) {
@@ -1056,8 +1080,8 @@ dump(int argc, VALUE *argv, VALUE self) {
 static VALUE
 to_json(int argc, VALUE *argv, VALUE self) {
     char		buf[4096];
-    struct _Out		out;
-    struct _Options	copts = oj_default_options;
+    struct _out		out;
+    struct _options	copts = oj_default_options;
     VALUE		rstr;
 
     if (1 > argc) {
@@ -1101,7 +1125,7 @@ to_json(int argc, VALUE *argv, VALUE self) {
  */
 static VALUE
 to_file(int argc, VALUE *argv, VALUE self) {
-    struct _Options	copts = oj_default_options;
+    struct _options	copts = oj_default_options;
     
     if (3 == argc) {
 	oj_parse_options(argv[2], &copts);
@@ -1124,7 +1148,7 @@ to_file(int argc, VALUE *argv, VALUE self) {
  */
 static VALUE
 to_stream(int argc, VALUE *argv, VALUE self) {
-    struct _Options	copts = oj_default_options;
+    struct _options	copts = oj_default_options;
     
     if (3 == argc) {
 	oj_parse_options(argv[2], &copts);
@@ -1298,22 +1322,6 @@ extern VALUE	oj_compat_parse(int argc, VALUE *argv, VALUE self);
  * valid. If the input is not a valid JSON document (an empty string is not a
  * valid JSON document) an exception is raised.
  *
- * Note: Oj is not able to automatically deserialize all classes that are a
- * subclass of a Ruby Exception. Only exception that take one required string
- * argument in the initialize() method are supported. This is an example of how
- * to write an Exception subclass that supports both a single string intializer
- * and an Exception as an argument. Additional optional arguments can be added
- * as well.
- *
- * The reason for this restriction has to do with a design decision on the part
- * of the Ruby developers. Exceptions are special Objects. They do not follow the
- * rules of other Objects. Exceptions have 'mesg' and a 'bt' attribute. Note that
- * these are not '@mesg' and '@bt'. They can not be set using the normal C or
- * Ruby calls. The only way I have found to set the 'mesg' attribute is through
- * the initializer. Unfortunately that means any subclass that provides a
- * different initializer can not be automatically decoded. A way around this is
- * to use a create function but this example shows an alternative.
- *
  * A block can be provided with a single argument. That argument will be the
  * parsed JSON document. This is useful when parsing a string that includes
  * multiple JSON documents. The block can take up to 3 arguments, the parsed
@@ -1456,23 +1464,6 @@ hash_test(VALUE self) {
 }
 */
 
-#if !HAS_ENCODING_SUPPORT
-static VALUE
-iconv_encoder(VALUE x) {
-    VALUE	iconv;
-
-    rb_require("iconv");
-    iconv = rb_const_get(rb_cObject, rb_intern("Iconv"));
-
-    return rb_funcall(iconv, rb_intern("new"), 2, rb_str_new2("ASCII//TRANSLIT"), rb_str_new2("UTF-8"));
-}
-
-static VALUE
-iconv_rescue(VALUE x) {
-    return Qnil;
-}
-#endif
-
 static VALUE
 protect_require(VALUE x) {
     rb_require("time");
@@ -1522,17 +1513,8 @@ Init_oj() {
     rb_require("date");
     // On Rubinius the require fails but can be done from a ruby file.
     rb_protect(protect_require, Qnil, &err);
-#if NEEDS_RATIONAL
-    rb_require("rational");
-#endif
     rb_require("stringio");
-#if HAS_ENCODING_SUPPORT
     oj_utf8_encoding = rb_enc_find("UTF-8");
-#else
-    // need an option to turn this on
-    oj_utf8_encoding = rb_rescue(iconv_encoder, Qnil, iconv_rescue, Qnil);
-    oj_utf8_encoding = Qnil;
-#endif
 
     //rb_define_module_function(Oj, "hash_test", hash_test, 0);
 
@@ -1645,6 +1627,7 @@ Init_oj() {
     custom_sym = ID2SYM(rb_intern("custom"));			rb_gc_register_address(&custom_sym);
     empty_string_sym = ID2SYM(rb_intern("empty_string"));	rb_gc_register_address(&empty_string_sym);
     escape_mode_sym = ID2SYM(rb_intern("escape_mode"));		rb_gc_register_address(&escape_mode_sym);
+    integer_range_sym = ID2SYM(rb_intern("integer_range"));	rb_gc_register_address(&integer_range_sym);
     float_prec_sym = ID2SYM(rb_intern("float_precision"));	rb_gc_register_address(&float_prec_sym);
     float_sym = ID2SYM(rb_intern("float"));			rb_gc_register_address(&float_sym);
     huge_sym = ID2SYM(rb_intern("huge"));			rb_gc_register_address(&huge_sym);
@@ -1699,9 +1682,11 @@ Init_oj() {
     oj_odd_init();
     oj_mimic_rails_init();
 
-#if USE_PTHREAD_MUTEX
-    pthread_mutex_init(&oj_cache_mutex, 0);
-#elif USE_RB_MUTEX
+#if HAVE_LIBPTHREAD
+    if (0 != (err = pthread_mutex_init(&oj_cache_mutex, 0))) {
+	rb_raise(rb_eException, "failed to initialize a mutex. %s", strerror(err));
+    }
+#else
     oj_cache_mutex = rb_mutex_new();
     rb_gc_register_address(&oj_cache_mutex);
 #endif

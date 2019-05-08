@@ -3,22 +3,19 @@
  * All rights reserved.
  */
 
-#include <stdlib.h>
 #include <errno.h>
-#if !IS_WINDOWS
-#include <sys/time.h>
-#endif
-#include <time.h>
-#include <stdio.h>
-#include <string.h>
 #include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
-#include <errno.h>
 
 #include "oj.h"
 #include "cache8.h"
 #include "dump.h"
 #include "odd.h"
+#include "util.h"
 
 // Workaround in case INFINITY is not defined in math.h or if the OS is CentOS
 #define OJ_INFINITY (1.0/0.0)
@@ -84,6 +81,17 @@ static char	xss_friendly_chars[256] = "\
 
 // JSON XSS combo
 static char	hixss_friendly_chars[256] = "\
+66666666222622666666666666666666\
+11211111111111111111111111111111\
+11111111111111111111111111112111\
+11111111111111111111111111111111\
+11111111111111111111111111111111\
+11111111111111111111111111111111\
+11111111111111111111111111111111\
+11611111111111111111111111111111";
+
+// Rails XSS combo
+static char	rails_xss_friendly_chars[256] = "\
 66666666222622666666666666666666\
 11211161111111111111111111116161\
 11111111111111111111111111112111\
@@ -169,6 +177,17 @@ hixss_friendly_size(const uint8_t *str, size_t len) {
 }
 
 inline static size_t
+rails_xss_friendly_size(const uint8_t *str, size_t len) {
+    size_t	size = 0;
+    size_t	i = len;
+
+    for (; 0 < i; str++, i--) {
+	size += rails_xss_friendly_chars[*str];
+    }
+    return size - len * (size_t)'0';
+}
+
+inline static size_t
 rails_friendly_size(const uint8_t *str, size_t len) {
     size_t	size = 0;
     size_t	i = len;
@@ -230,12 +249,37 @@ dump_hex(uint8_t c, Out out) {
     *out->cur++ = hex_chars[d];
 }
 
+static void
+raise_invalid_unicode(const char *str, int len, int pos) {
+    char	buf[len + 1];
+    char	c;
+    char	code[32];
+    char	*cp = code;
+    int		i;
+    uint8_t	d;
+
+    *cp++ = '[';
+    for (i = pos; i < len && i - pos < 5; i++) {
+	c = str[i];
+	d = (c >> 4) & 0x0F;
+	*cp++ = hex_chars[d];
+	d = c & 0x0F;
+	*cp++ = hex_chars[d];
+	*cp++ = ' ';
+    }
+    cp--;
+    *cp++ = ']';
+    *cp = '\0';
+    strncpy(buf, str, len);
+    rb_raise(oj_json_generator_error_class, "Invalid Unicode %s at %d in '%s'", code, pos, buf);
+}
+
 static const char*
-dump_unicode(const char *str, const char *end, Out out) {
+dump_unicode(const char *str, const char *end, Out out, const char *orig) {
     uint32_t	code = 0;
     uint8_t	b = *(uint8_t*)str;
     int		i, cnt;
-    
+
     if (0xC0 == (0xE0 & b)) {
 	cnt = 1;
 	code = b & 0x0000001F;
@@ -253,13 +297,13 @@ dump_unicode(const char *str, const char *end, Out out) {
 	code = b & 0x00000001;
     } else {
 	cnt = 0;
-	rb_raise(oj_json_generator_error_class, "Invalid Unicode");
+	raise_invalid_unicode(orig, (int)(end - orig), (int)(str - orig));
     }
     str++;
     for (; 0 < cnt; cnt--, str++) {
 	b = *(uint8_t*)str;
 	if (end <= str || 0x80 != (0xC0 & b)) {
-	    rb_raise(oj_json_generator_error_class, "Invalid Unicode");
+	    raise_invalid_unicode(orig, (int)(end - orig), (int)(str - orig));
 	}
 	code = (code << 6) | (b & 0x0000003F);
     }
@@ -284,9 +328,9 @@ dump_unicode(const char *str, const char *end, Out out) {
 }
 
 static const char*
-check_unicode(const char *str, const char *end) {
+check_unicode(const char *str, const char *end, const char *orig) {
     uint8_t	b = *(uint8_t*)str;
-    int		cnt;
+    int		cnt = 0;
     
     if (0xC0 == (0xE0 & b)) {
 	cnt = 1;
@@ -299,13 +343,13 @@ check_unicode(const char *str, const char *end) {
     } else if (0xFC == (0xFE & b)) {
 	cnt = 5;
     } else {
-	rb_raise(oj_json_generator_error_class, "Invalid Unicode");
+	raise_invalid_unicode(orig, (int)(end - orig), (int)(str - orig));
     }
     str++;
     for (; 0 < cnt; cnt--, str++) {
 	b = *(uint8_t*)str;
 	if (end <= str || 0x80 != (0xC0 & b)) {
-	    rb_raise(oj_json_generator_error_class, "Invalid Unicode");
+	    raise_invalid_unicode(orig, (int)(end - orig), (int)(str - orig));
 	}
     }
     return str;
@@ -350,22 +394,24 @@ oj_dump_time(VALUE obj, Out out, int withZone) {
     long long	sec;
     long long	nsec;
 
-#if HAS_RB_TIME_TIMESPEC
-    {
+#ifdef HAVE_RB_TIME_TIMESPEC
+    // rb_time_timespec as well as rb_time_timeeval have a bug that causes an
+    // exception to be raised if a time is before 1970 on 32 bit systems so
+    // check the timespec size and use the ruby calls if a 32 bit system.
+    if (16 <= sizeof(struct timespec)) {
 	struct timespec	ts = rb_time_timespec(obj);
 
 	sec = (long long)ts.tv_sec;
 	nsec = ts.tv_nsec;
+    } else {
+	sec = rb_num2ll(rb_funcall2(obj, oj_tv_sec_id, 0, 0));
+	nsec = rb_num2ll(rb_funcall2(obj, oj_tv_nsec_id, 0, 0));
     }
 #else
     sec = rb_num2ll(rb_funcall2(obj, oj_tv_sec_id, 0, 0));
-#if HAS_NANO_TIME
     nsec = rb_num2ll(rb_funcall2(obj, oj_tv_nsec_id, 0, 0));
-#else
-    nsec = rb_num2ll(rb_funcall2(obj, oj_tv_usec_id, 0, 0)) * 1000;
 #endif
-#endif
-
+    
     *b-- = '\0';
     if (withZone) {
 	long	tzsecs = NUM2LONG(rb_funcall2(obj, oj_utc_offset_id, 0, 0));
@@ -439,33 +485,33 @@ void
 oj_dump_ruby_time(VALUE obj, Out out) {
     volatile VALUE	rstr = rb_funcall(obj, oj_to_s_id, 0);
 
-    oj_dump_cstr(rb_string_value_ptr((VALUE*)&rstr), RSTRING_LEN(rstr), 0, 0, out);
+    oj_dump_cstr(rb_string_value_ptr((VALUE*)&rstr), (int)RSTRING_LEN(rstr), 0, 0, out);
 }
 
 void
 oj_dump_xml_time(VALUE obj, Out out) {
-    char	buf[64];
-    struct tm	*tm;
-    long	one = 1000000000;
-    time_t	sec;
-    long long	nsec;
-    long	tzsecs = NUM2LONG(rb_funcall2(obj, oj_utc_offset_id, 0, 0));
-    int		tzhour, tzmin;
-    char	tzsign = '+';
+    char		buf[64];
+    struct _timeInfo	ti;
+    long		one = 1000000000;
+    int64_t		sec;
+    long long		nsec;
+    long		tzsecs = NUM2LONG(rb_funcall2(obj, oj_utc_offset_id, 0, 0));
+    int			tzhour, tzmin;
+    char		tzsign = '+';
 
-#if HAS_RB_TIME_TIMESPEC
-    {
+#ifdef HAVE_RB_TIME_TIMESPEC
+    if (16 <= sizeof(struct timespec)) {
 	struct timespec	ts = rb_time_timespec(obj);
+
 	sec = ts.tv_sec;
 	nsec = ts.tv_nsec;
+    } else {
+	sec = rb_num2ll(rb_funcall2(obj, oj_tv_sec_id, 0, 0));
+	nsec = rb_num2ll(rb_funcall2(obj, oj_tv_nsec_id, 0, 0));
     }
 #else
     sec = rb_num2ll(rb_funcall2(obj, oj_tv_sec_id, 0, 0));
-#if HAS_NANO_TIME
     nsec = rb_num2ll(rb_funcall2(obj, oj_tv_nsec_id, 0, 0));
-#else
-    nsec = rb_num2ll(rb_funcall2(obj, oj_tv_usec_id, 0, 0)) * 1000;
-#endif
 #endif
 
     assure_size(out, 36);
@@ -492,8 +538,7 @@ oj_dump_xml_time(VALUE obj, Out out) {
     // 2012-01-05T23:58:07.123456000+09:00
     //tm = localtime(&sec);
     sec += tzsecs;
-    tm = gmtime(&sec);
-#if 1
+    sec_as_time((int64_t)sec, &ti);
     if (0 > tzsecs) {
         tzsign = '-';
         tzhour = (int)(tzsecs / -3600);
@@ -502,26 +547,12 @@ oj_dump_xml_time(VALUE obj, Out out) {
         tzhour = (int)(tzsecs / 3600);
         tzmin = (int)(tzsecs / 60) - (tzhour * 60);
     }
-#else
-    if (0 > tm->tm_gmtoff) {
-        tzsign = '-';
-        tzhour = (int)(tm->tm_gmtoff / -3600);
-        tzmin = (int)(tm->tm_gmtoff / -60) - (tzhour * 60);
-    } else {
-        tzhour = (int)(tm->tm_gmtoff / 3600);
-        tzmin = (int)(tm->tm_gmtoff / 60) - (tzhour * 60);
-    }
-#endif
     if (0 == nsec || 0 == out->opts->sec_prec) {
 	if (0 == tzsecs && rb_funcall2(obj, oj_utcq_id, 0, 0)) {
-	    sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02dZ",
-		    tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-		    tm->tm_hour, tm->tm_min, tm->tm_sec);
+	    sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02dZ", ti.year, ti.mon, ti.day, ti.hour, ti.min, ti.sec);
 	    oj_dump_cstr(buf, 20, 0, 0, out);
 	} else {
-	    sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02d%c%02d:%02d",
-		    tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-		    tm->tm_hour, tm->tm_min, tm->tm_sec,
+	    sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02d%c%02d:%02d", ti.year, ti.mon, ti.day, ti.hour, ti.min, ti.sec,
 		    tzsign, tzhour, tzmin);
 	    oj_dump_cstr(buf, 25, 0, 0, out);
 	}
@@ -533,9 +564,7 @@ oj_dump_xml_time(VALUE obj, Out out) {
 	    format[32] = '0' + out->opts->sec_prec;
 	    len -= 9 - out->opts->sec_prec;
 	}
-	sprintf(buf, format,
-		tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-		tm->tm_hour, tm->tm_min, tm->tm_sec, (long)nsec);
+	sprintf(buf, format, ti.year, ti.mon, ti.day, ti.hour, ti.min, ti.sec, (long)nsec);
 	oj_dump_cstr(buf, len, 0, 0, out);
     } else {
 	char	format[64] = "%04d-%02d-%02dT%02d:%02d:%02d.%09ld%c%02d:%02d";
@@ -545,10 +574,7 @@ oj_dump_xml_time(VALUE obj, Out out) {
 	    format[32] = '0' + out->opts->sec_prec;
 	    len -= 9 - out->opts->sec_prec;
 	}
-	sprintf(buf, format,
-		tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-		tm->tm_hour, tm->tm_min, tm->tm_sec, (long)nsec,
-		tzsign, tzhour, tzmin);
+	sprintf(buf, format, ti.year, ti.mon, ti.day, ti.hour, ti.min, ti.sec, (long)nsec, tzsign, tzhour, tzmin);
 	oj_dump_cstr(buf, len, 0, 0, out);
     }
 }
@@ -605,7 +631,7 @@ oj_dump_obj_to_json_using_params(VALUE obj, Options copts, Out out, int argc, VA
 void
 oj_write_obj_to_file(VALUE obj, const char *path, Options copts) {
     char	buf[4096];
-    struct _Out out;
+    struct _out out;
     size_t	size;
     FILE	*f;
     int		ok;
@@ -637,7 +663,7 @@ oj_write_obj_to_file(VALUE obj, const char *path, Options copts) {
 void
 oj_write_obj_to_stream(VALUE obj, VALUE stream, Options copts) {
     char	buf[4096];
-    struct _Out out;
+    struct _out out;
     ssize_t	size;
     VALUE	clas = rb_obj_class(stream);
 #if !IS_WINDOWS
@@ -679,21 +705,22 @@ oj_write_obj_to_stream(VALUE obj, VALUE stream, Options copts) {
 
 void
 oj_dump_str(VALUE obj, int depth, Out out, bool as_ok) {
-#if HAS_ENCODING_SUPPORT
     rb_encoding	*enc = rb_to_encoding(rb_obj_encoding(obj));
 
     if (rb_utf8_encoding() != enc) {
 	obj = rb_str_conv_enc(obj, enc, rb_utf8_encoding());
     }
-#endif
-    oj_dump_cstr(rb_string_value_ptr((VALUE*)&obj), RSTRING_LEN(obj), 0, 0, out);
+    oj_dump_cstr(rb_string_value_ptr((VALUE*)&obj), (int)RSTRING_LEN(obj), 0, 0, out);
 }
 
 void
 oj_dump_sym(VALUE obj, int depth, Out out, bool as_ok) {
-    const char	*sym = rb_id2name(SYM2ID(obj));
+    // This causes a memory leak in 2.5.1. Maybe in other versions as well.
+    //const char	*sym = rb_id2name(SYM2ID(obj));
 
-    oj_dump_cstr(sym, strlen(sym), 0, 0, out);
+    volatile VALUE	s = rb_sym_to_s(obj);
+
+    oj_dump_cstr(rb_string_value_ptr((VALUE*)&s), (int)RSTRING_LEN(s), 0, 0, out);
 }
 
 static void
@@ -736,6 +763,10 @@ oj_dump_cstr(const char *str, size_t cnt, bool is_sym, bool escape1, Out out) {
 	cmap = hixss_friendly_chars;
 	size = hixss_friendly_size((uint8_t*)str, cnt);
 	break;
+    case RailsXEsc:
+	cmap = rails_xss_friendly_chars;
+	size = rails_xss_friendly_size((uint8_t*)str, cnt);
+	break;
     case RailsEsc:
 	cmap = rails_friendly_chars;
 	size = rails_friendly_size((uint8_t*)str, cnt);
@@ -777,12 +808,12 @@ oj_dump_cstr(const char *str, size_t cnt, bool is_sym, bool escape1, Out out) {
 	for (; str < end; str++) {
 	    switch (cmap[(uint8_t)*str]) {
 	    case '1':
-		if (JXEsc == out->opts->escape_mode && check_start <= str) {
+		if ((JXEsc == out->opts->escape_mode || RailsXEsc == out->opts->escape_mode) && check_start <= str) {
 		    if (0 != (0x80 & (uint8_t)*str)) {
 			if (0xC0 == (0xC0 & (uint8_t)*str)) {
-			    check_start = check_unicode(str, end);
+			    check_start = check_unicode(str, end, orig);
 			} else {
-			    rb_raise(oj_json_generator_error_class, "Invalid Unicode");
+			    raise_invalid_unicode(orig, (int)(end - orig), (int)(str - orig));
 			}
 		    }
 		}
@@ -801,16 +832,16 @@ oj_dump_cstr(const char *str, size_t cnt, bool is_sym, bool escape1, Out out) {
 		}
 		break;
 	    case '3': // Unicode
-		if (0xe2 == (uint8_t)*str && JXEsc == out->opts->escape_mode && 2 <= end - str) {
+		if (0xe2 == (uint8_t)*str && (JXEsc == out->opts->escape_mode || RailsXEsc == out->opts->escape_mode) && 2 <= end - str) {
 		    if (0x80 == (uint8_t)str[1] && (0xa8 == (uint8_t)str[2] || 0xa9 == (uint8_t)str[2])) {
-			str = dump_unicode(str, end, out);
+			str = dump_unicode(str, end, out, orig);
 		    } else {
-			check_start = check_unicode(str, end);
+			check_start = check_unicode(str, end, orig);
 			*out->cur++ = *str;
 		    }
 		    break;
 		}
-		str = dump_unicode(str, end, out);
+		str = dump_unicode(str, end, out, orig);
 		break;
 	    case '6': // control characters
 		if (*(uint8_t*)str < 0x80) {
@@ -820,16 +851,16 @@ oj_dump_cstr(const char *str, size_t cnt, bool is_sym, bool escape1, Out out) {
 		    *out->cur++ = '0';
 		    dump_hex((uint8_t)*str, out);
 		} else {
-		    if (0xe2 == (uint8_t)*str && JXEsc == out->opts->escape_mode && 2 <= end - str) {
+		    if (0xe2 == (uint8_t)*str && (JXEsc == out->opts->escape_mode || RailsXEsc == out->opts->escape_mode) && 2 <= end - str) {
 			if (0x80 == (uint8_t)str[1] && (0xa8 == (uint8_t)str[2] || 0xa9 == (uint8_t)str[2])) {
-			    str = dump_unicode(str, end, out);
+			    str = dump_unicode(str, end, out, orig);
 			} else {
-			    check_start = check_unicode(str, end);
+			    check_start = check_unicode(str, end, orig);
 			    *out->cur++ = *str;
 			}
 			break;
 		    }
-		    str = dump_unicode(str, end, out);
+		    str = dump_unicode(str, end, out, orig);
 		}
 		break;
 	    default:
@@ -838,7 +869,7 @@ oj_dump_cstr(const char *str, size_t cnt, bool is_sym, bool escape1, Out out) {
 	}
 	*out->cur++ = '"'; 
     }
-    if (JXEsc == out->opts->escape_mode && 0 < str - orig && 0 != (0x80 & *(str - 1))) {
+    if ((JXEsc == out->opts->escape_mode || RailsXEsc == out->opts->escape_mode) && 0 < str - orig && 0 != (0x80 & *(str - 1))) {
 	uint8_t	c = (uint8_t)*(str - 1);
 	int	i;
 	int	scnt = (int)(str - orig);
@@ -892,7 +923,7 @@ void
 oj_dump_obj_to_s(VALUE obj, Out out) {
     volatile VALUE	rstr = rb_funcall(obj, oj_to_s_id, 0);
 
-    oj_dump_cstr(rb_string_value_ptr((VALUE*)&rstr), RSTRING_LEN(rstr), 0, 0, out);
+    oj_dump_cstr(rb_string_value_ptr((VALUE*)&rstr), (int)RSTRING_LEN(rstr), 0, 0, out);
 }
 
 void
@@ -965,12 +996,24 @@ oj_dump_fixnum(VALUE obj, int depth, Out out, bool as_ok) {
     char	*b = buf + sizeof(buf) - 1;
     long long	num = rb_num2ll(obj);
     int		neg = 0;
+	bool	dump_as_string = false;
+
+	if (out->opts->integer_range_max != 0 && out->opts->integer_range_min != 0 &&
+		(out->opts->integer_range_max < num || out->opts->integer_range_min > num)) {
+	dump_as_string = true;
+	}
 
     if (0 > num) {
 	neg = 1;
 	num = -num;
     }
+
     *b-- = '\0';
+
+	if (dump_as_string) {
+	*b-- = '"';
+	}
+
     if (0 < num) {
 	for (; 0 < num; num /= 10, b--) {
 	    *b = (num % 10) + '0';
@@ -983,6 +1026,11 @@ oj_dump_fixnum(VALUE obj, int depth, Out out, bool as_ok) {
     } else {
 	*b = '0';
     }
+
+	if (dump_as_string) {
+	*--b = '"';
+	}
+
     assure_size(out, (sizeof(buf) - (b - buf)));
     for (; '\0' != *b; b++) {
 	*out->cur++ = *b;
@@ -994,10 +1042,23 @@ void
 oj_dump_bignum(VALUE obj, int depth, Out out, bool as_ok) {
     volatile VALUE	rs = rb_big2str(obj, 10);
     int			cnt = (int)RSTRING_LEN(rs);
+	bool		dump_as_string = false;
 
-    assure_size(out, cnt);
+	if (out->opts->integer_range_max != 0 || out->opts->integer_range_min != 0) { // Bignum cannot be inside of Fixnum range
+	dump_as_string = true; 
+	assure_size(out, cnt + 2);
+	*out->cur++ = '"';
+	} else {
+	assure_size(out, cnt);
+	}
+
     memcpy(out->cur, rb_string_value_ptr((VALUE*)&rs), cnt);
     out->cur += cnt;
+
+	if(dump_as_string) {
+	*out->cur++ = '"';
+	}
+
     *out->cur = '\0';
 }
 

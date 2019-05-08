@@ -188,7 +188,7 @@ unicode_to_chars(ParseInfo pi, Buf buf, uint32_t code) {
 // entered at /
 static void
 read_escaped_str(ParseInfo pi, const char *start) {
-    struct _Buf	buf;
+    struct _buf	buf;
     const char	*s;
     int		cnt = (int)(pi->cur - start);
     uint32_t	code;
@@ -378,7 +378,7 @@ read_str(ParseInfo pi) {
 
 static void
 read_num(ParseInfo pi) {
-    struct _NumInfo	ni;
+    struct _numInfo	ni;
     Val			parent = stack_peek(&pi->stack);
 
     ni.str = pi->cur;
@@ -418,7 +418,7 @@ read_num(ParseInfo pi) {
     } else {
 	int	dec_cnt = 0;
 	bool	zero1 = false;
-	
+
 	for (; '0' <= *pi->cur && *pi->cur <= '9'; pi->cur++) {
 	    if (0 == ni.i && '0' == *pi->cur) {
 		zero1 = true;
@@ -444,9 +444,13 @@ read_num(ParseInfo pi) {
 	}
 	if ('.' == *pi->cur) {
 	    pi->cur++;
-	    if (*pi->cur < '0' || '9' < *pi->cur) {
-		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "not a number");
-		return;
+	    // A trailing . is not a valid decimal but if encountered allow it
+	    // except when mimicing the JSON gem.
+	    if (CompatMode == pi->options.mode) {
+		if (*pi->cur < '0' || '9' < *pi->cur) {
+		    oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "not a number");
+		    return;
+		}
 	    }
 	    for (; '0' <= *pi->cur && *pi->cur <= '9'; pi->cur++) {
 		int	d = (*pi->cur - '0');
@@ -603,7 +607,7 @@ oj_parse2(ParseInfo pi) {
     while (1) {
 	if (0 < pi->max_depth && pi->max_depth <= pi->stack.tail - pi->stack.head - 1) {
 	    VALUE	err_clas = oj_get_json_err_class("NestingError");
-	    
+
 	    oj_set_error_at(pi, err_clas, __FILE__, __LINE__, "Too deeply nested.");
 	    pi->err_class = err_clas;
 	    return;
@@ -642,6 +646,14 @@ oj_parse2(ParseInfo pi) {
 	    read_str(pi);
 	    break;
 	    //case '+':
+	case '+':
+	    if (CompatMode == pi->options.mode) {
+		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "unexpected character");
+		return;
+	    }
+	    pi->cur--;
+	    read_num(pi);
+	    break;
 	case '-':
 	case '0':
 	case '1':
@@ -707,12 +719,7 @@ oj_parse2(ParseInfo pi) {
 		if (Qnil == pi->proc) {
 		    rb_yield_values2(3, args);
 		} else {
-#if HAS_PROC_WITH_BLOCK
 		    rb_proc_call_with_block(pi->proc, 3, args, Qnil);
-#else
-		    rb_raise(rb_eNotImpError,
-			     "Calling a Proc with a block not supported in this version. Use func() {|x| } syntax instead.");
-#endif
 		}
 	    } else if (!pi->has_callbacks) {
 		first = 0;
@@ -720,6 +727,17 @@ oj_parse2(ParseInfo pi) {
 	    start = pi->cur - pi->json;
 	}
     }
+}
+
+static VALUE
+rescue_big_decimal(VALUE str) {
+    rb_raise(oj_parse_error_class, "Invalid value for BigDecimal()");
+    return Qnil;
+}
+
+static VALUE
+parse_big_decimal(VALUE str) {
+    return rb_funcall(rb_cObject, oj_bigdecimal_id, 1, str);
 }
 
 VALUE
@@ -759,7 +777,9 @@ oj_num_as_value(NumInfo ni) {
 	}
     } else { // decimal
 	if (ni->big) {
-	    rnum = rb_funcall(rb_cObject, oj_bigdecimal_id, 1, rb_str_new(ni->str, ni->len));
+	    volatile VALUE	bd = rb_str_new(ni->str, ni->len);
+
+	    rnum = rb_rescue2(parse_big_decimal, bd, rescue_big_decimal, bd, rb_eException, 0);
 	    if (ni->no_big) {
 		rnum = rb_funcall(rnum, rb_intern("to_f"), 0);
 	    }
@@ -772,7 +792,9 @@ oj_num_as_value(NumInfo ni) {
 	    // 15 digits. This attempts to fix those few cases where this
 	    // occurs.
 	    if ((long double)INT64_MAX > d && (int64_t)d != (ni->i * ni->div + ni->num)) {
-		rnum = rb_funcall(rb_cObject, oj_bigdecimal_id, 1, rb_str_new(ni->str, ni->len));
+		volatile VALUE	bd = rb_str_new(ni->str, ni->len);
+
+		rnum = rb_rescue2(parse_big_decimal, bd, rescue_big_decimal, bd, rb_eException, 0);
 		if (ni->no_big) {
 		    rnum = rb_funcall(rnum, rb_intern("to_f"), 0);
 		}
@@ -796,12 +818,42 @@ oj_num_as_value(NumInfo ni) {
 void
 oj_set_error_at(ParseInfo pi, VALUE err_clas, const char* file, int line, const char *format, ...) {
     va_list	ap;
-    char	msg[128];
+    char	msg[256];
+    char	*p = msg;
+    char	*end = p + sizeof(msg) - 2;
+    char	*start;
+    Val		vp;
 
     va_start(ap, format);
-    vsnprintf(msg, sizeof(msg) - 1, format, ap);
+    p += vsnprintf(msg, sizeof(msg) - 1, format, ap);
     va_end(ap);
     pi->err.clas = err_clas;
+    if (p + 3 < end) {
+	*p++ = ' ';
+	*p++ = '(';
+	start = p;
+	for (vp = pi->stack.head; vp < pi->stack.tail; vp++) {
+	    if (end <= p + 1 + vp->klen) {
+		break;
+	    }
+	    if (NULL != vp->key) {
+		if (start < p) {
+		    *p++ = '.';
+		}
+		memcpy(p, vp->key, vp->klen);
+		p += vp->klen;
+	    } else {
+		if (RUBY_T_ARRAY == rb_type(vp->val)) {
+		    if (end <= p + 12) {
+			break;
+		    }
+		    p += snprintf(p, end - p, "[%ld]", RARRAY_LEN(vp->val));
+		}
+	    }
+	}
+	*p++ = ')';
+    }
+    *p = '\0';
     if (0 == pi->json) {
 	oj_err_set(&pi->err, err_clas, "%s at line %d, column %d [%s:%d]", msg, pi->rd.line, pi->rd.col, file, line);
     } else {
@@ -820,13 +872,11 @@ extern int oj_utf8_index;
 
 static void
 oj_pi_set_input_str(ParseInfo pi, volatile VALUE *inputp) {
-#if HAS_ENCODING_SUPPORT
     rb_encoding	*enc = rb_to_encoding(rb_obj_encoding(*inputp));
 
     if (rb_utf8_encoding() != enc) {
 	*inputp = rb_str_conv_enc(*inputp, enc, rb_utf8_encoding());
     }
-#endif
     pi->json = rb_string_value_ptr((VALUE*)inputp);
     pi->end = pi->json + RSTRING_LEN(*inputp);
 }
@@ -936,26 +986,38 @@ oj_pi_parse(int argc, VALUE *argv, ParseInfo pi, char *json, size_t len, int yie
     if (!err_has(&pi->err)) {
 	// If the stack is not empty then the JSON terminated early.
 	Val	v;
+	VALUE	err_class = oj_parse_error_class;
 
-	if (0 != (v = stack_peek(&pi->stack))) {
+	if (0 != line) {
+	    VALUE	ec = rb_obj_class(rb_errinfo());
+
+	    if (rb_eArgError != ec && 0 != ec) {
+		err_class = ec;
+	    }
+	    if (rb_eIOError != ec) {
+		goto CLEANUP;
+	    }
+	}
+	if (NULL != (v = stack_peek(&pi->stack))) {
 	    switch (v->next) {
 	    case NEXT_ARRAY_NEW:
 	    case NEXT_ARRAY_ELEMENT:
 	    case NEXT_ARRAY_COMMA:
-		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "Array not terminated");
+		oj_set_error_at(pi, err_class, __FILE__, __LINE__, "Array not terminated");
 		break;
 	    case NEXT_HASH_NEW:
 	    case NEXT_HASH_KEY:
 	    case NEXT_HASH_COLON:
 	    case NEXT_HASH_VALUE:
 	    case NEXT_HASH_COMMA:
-		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "Hash/Object not terminated");
+		oj_set_error_at(pi, err_class, __FILE__, __LINE__, "Hash/Object not terminated");
 		break;
 	    default:
-		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "not terminated");
+		oj_set_error_at(pi, err_class, __FILE__, __LINE__, "not terminated");
 	    }
 	}
     }
+CLEANUP:
     // proceed with cleanup
     if (0 != pi->circ_array) {
 	oj_circ_array_free(pi->circ_array);
@@ -969,10 +1031,8 @@ oj_pi_parse(int argc, VALUE *argv, ParseInfo pi, char *json, size_t len, int yie
     if (pi->str_rx.head != oj_default_options.str_rx.head) {
 	oj_rxclass_cleanup(&pi->str_rx);
     }
-    if (0 != line) {
-	rb_jump_tag(line);
-    }
     if (err_has(&pi->err)) {
+	rb_set_errinfo(Qnil);
 	if (Qnil != pi->err_class) {
 	    pi->err.clas = pi->err_class;
 	}
@@ -992,6 +1052,8 @@ oj_pi_parse(int argc, VALUE *argv, ParseInfo pi, char *json, size_t len, int yie
 	} else {
 	    oj_err_raise(&pi->err);
 	}
+    } else if (0 != line) {
+	rb_jump_tag(line);
     }
     if (pi->options.quirks_mode == No) {
 	switch (rb_type(result)) {
@@ -1003,7 +1065,7 @@ oj_pi_parse(int argc, VALUE *argv, ParseInfo pi, char *json, size_t len, int yie
 	case T_CLASS:
 	case T_STRING:
 	case T_SYMBOL: {
-	    struct _Err	err;
+	    struct _err	err;
 
 	    if (Qnil == pi->err_class) {
 		err.clas = oj_parse_error_class;

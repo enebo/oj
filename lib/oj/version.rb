@@ -1,5 +1,5 @@
 
 module Oj
-  # Current version of the module. 
-  VERSION = '3.6.6'
+  # Current version of the module.
+  VERSION = '3.7.12'
 end

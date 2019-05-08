@@ -28,7 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <string.h>
+
 #include "oj.h"
+#include "odd.h"
 #include "val_stack.h"
 
 static void
@@ -39,9 +42,9 @@ mark(void *ptr) {
     if (0 == ptr) {
 	return;
     }
-#if USE_PTHREAD_MUTEX
+#if HAVE_LIBPTHREAD
     pthread_mutex_lock(&stack->mutex);
-#elif USE_RB_MUTEX
+#else
     rb_mutex_lock(stack->mutex);
     rb_gc_mark(stack->mutex);
 #endif
@@ -52,31 +55,48 @@ mark(void *ptr) {
 	if (Qnil != v->key_val && Qundef != v->key_val) {
 	    rb_gc_mark(v->key_val);
 	}
+	if (NULL != v->odd_args) {
+	    VALUE	*a;
+	    int		i;
+
+	    for (i = v->odd_args->odd->attr_cnt, a = v->odd_args->args; 0 < i; i--, a++) {
+		if (Qnil != *a) {
+		    rb_gc_mark(*a);
+		}
+	    }
+	}
     }
-#if USE_PTHREAD_MUTEX
+#if HAVE_LIBPTHREAD
     pthread_mutex_unlock(&stack->mutex);
-#elif USE_RB_MUTEX
+#else
     rb_mutex_unlock(stack->mutex);
 #endif
 }
 
 VALUE
 oj_stack_init(ValStack stack) {
-#if USE_PTHREAD_MUTEX
-    pthread_mutex_init(&stack->mutex, 0);
-#elif USE_RB_MUTEX
+#if HAVE_LIBPTHREAD
+    int	err;
+    
+    if (0 != (err = pthread_mutex_init(&stack->mutex, 0))) {
+	rb_raise(rb_eException, "failed to initialize a mutex. %s", strerror(err));
+    }
+#else
     stack->mutex = rb_mutex_new();
 #endif
     stack->head = stack->base;
-    stack->end = stack->base + sizeof(stack->base) / sizeof(struct _Val);
+    stack->end = stack->base + sizeof(stack->base) / sizeof(struct _val);
     stack->tail = stack->head;
     stack->head->val = Qundef;
-    stack->head->key = 0;
+    stack->head->key = NULL;
     stack->head->key_val = Qundef;
-    stack->head->classname = 0;
+    stack->head->classname = NULL;
+    stack->head->odd_args = NULL;
+    stack->head->clas = Qundef;
     stack->head->klen = 0;
     stack->head->clen = 0;
     stack->head->next = NEXT_NONE;
+
     return Data_Wrap_Struct(oj_cstack_class, mark, 0, stack);
 }
 

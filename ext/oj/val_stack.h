@@ -28,13 +28,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __OJ_VAL_STACK_H__
-#define __OJ_VAL_STACK_H__
+#ifndef OJ_VAL_STACK_H
+#define OJ_VAL_STACK_H
 
 #include "ruby.h"
 #include "odd.h"
 #include <stdint.h>
-#if USE_PTHREAD_MUTEX
+#if HAVE_LIBPTHREAD
 #include <pthread.h>
 #endif
 
@@ -52,18 +52,14 @@ typedef enum {
     NEXT_HASH_COMMA	= 'n',
 } ValNext;
 
-typedef struct _Val {
+typedef struct _val {
     volatile VALUE	val;
     const char		*key;
     char		karray[32];
     volatile VALUE	key_val;
-    union {
-	struct {
-	    const char	*classname;
-	    VALUE	clas;
-	};
-	OddArgs		odd_args;
-    };
+    const char		*classname;
+    VALUE		clas;
+    OddArgs		odd_args;
     uint16_t		klen;
     uint16_t		clen;
     char		next; // ValNext
@@ -71,14 +67,14 @@ typedef struct _Val {
     char		kalloc;
 } *Val;
 
-typedef struct _ValStack {
-    struct _Val		base[STACK_INC];
+typedef struct _valStack {
+    struct _val		base[STACK_INC];
     Val			head;	// current stack
     Val			end;	// stack end
     Val			tail;	// pointer to one past last element name on stack
-#if USE_PTHREAD_MUTEX
+#if HAVE_LIBPTHREAD
     pthread_mutex_t	mutex;
-#elif USE_RB_MUTEX
+#else
     VALUE		mutex;
 #endif
 
@@ -109,22 +105,22 @@ stack_push(ValStack stack, VALUE val, ValNext next) {
 	// A realloc can trigger a GC so make sure it happens outside the lock
 	// but lock before changing pointers.
 	if (stack->base == stack->head) {
-	    head = ALLOC_N(struct _Val, len + STACK_INC);
-	    memcpy(head, stack->base, sizeof(struct _Val) * len);
+	    head = ALLOC_N(struct _val, len + STACK_INC);
+	    memcpy(head, stack->base, sizeof(struct _val) * len);
 	} else {
-	    REALLOC_N(head, struct _Val, len + STACK_INC);
+	    REALLOC_N(head, struct _val, len + STACK_INC);
 	}
-#if USE_PTHREAD_MUTEX
+#if HAVE_LIBPTHREAD
 	pthread_mutex_lock(&stack->mutex);
-#elif USE_RB_MUTEX
+#else
 	rb_mutex_lock(stack->mutex);
 #endif
 	stack->head = head;
 	stack->tail = stack->head + toff;
 	stack->end = stack->head + len + STACK_INC;
-#if USE_PTHREAD_MUTEX
+#if HAVE_LIBPTHREAD
 	pthread_mutex_unlock(&stack->mutex);
-#elif USE_RB_MUTEX
+#else
 	rb_mutex_unlock(stack->mutex);
 #endif
     }
@@ -132,6 +128,7 @@ stack_push(ValStack stack, VALUE val, ValNext next) {
     stack->tail->next = next;
     stack->tail->classname = NULL;
     stack->tail->clas = Qundef;
+    stack->tail->odd_args = NULL;
     stack->tail->key = 0;
     stack->tail->key_val = Qundef;
     stack->tail->clen = 0;
@@ -185,4 +182,4 @@ stack_pop(ValStack stack) {
 
 extern const char*	oj_stack_next_string(ValNext n);
 
-#endif /* __OJ_VAL_STACK_H__ */
+#endif /* OJ_VAL_STACK_H */

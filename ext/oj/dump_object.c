@@ -204,7 +204,7 @@ dump_str_class(VALUE obj, VALUE clas, int depth, Out out) {
 	dump_obj_attrs(obj, clas, 0, depth, out);
     } else {
 	const char	*s = rb_string_value_ptr((VALUE*)&obj);
-	size_t		len = RSTRING_LEN(obj);
+	size_t		len = (int)RSTRING_LEN(obj);
 	char		s1 = s[1];
 
 	oj_dump_cstr(s, len, 0, (':' == *s || ('^' == *s && ('r' == s1 || 'i' == s1))), out);
@@ -218,9 +218,9 @@ dump_str(VALUE obj, int depth, Out out, bool as_ok) {
 
 static void
 dump_sym(VALUE obj, int depth, Out out, bool as_ok) {
-    const char	*sym = rb_id2name(SYM2ID(obj));
-    
-    oj_dump_cstr(sym, strlen(sym), 1, 0, out);
+    volatile VALUE	s = rb_sym_to_s(obj);
+
+    oj_dump_cstr(rb_string_value_ptr((VALUE*)&s), (int)RSTRING_LEN(s), 1, 0, out);
 }
 
 static int
@@ -346,7 +346,7 @@ dump_hash_class(VALUE obj, VALUE clas, int depth, Out out) {
     *out->cur = '\0';
 }
 
-#if HAS_IVAR_HELPERS
+#ifdef HAVE_RB_IVAR_FOREACH
 static int
 dump_attr_cb(ID key, VALUE value, Out out) {
     int		depth = out->depth;
@@ -364,11 +364,9 @@ dump_attr_cb(ID key, VALUE value, Out out) {
     if (NULL == attr) {
 	attr = "";
     }
-#if HAS_EXCEPTION_MAGIC
     if (0 == strcmp("bt", attr) || 0 == strcmp("mesg", attr)) {
 	return ST_CONTINUE;
     }
-#endif
     assure_size(out, size);
     fill_indent(out, depth);
     if ('@' == *attr) {
@@ -425,7 +423,7 @@ dump_odd(VALUE obj, Odd odd, VALUE clas, int depth, Out out) {
     if (odd->raw) {
 	v = rb_funcall(obj, *odd->attrs, 0);
 	if (Qundef == v || T_STRING != rb_type(v)) {
-	    rb_raise(rb_eEncodingError, "Invalid type for raw JSON.\n");
+	    rb_raise(rb_eEncodingError, "Invalid type for raw JSON.");
 	} else {	    
 	    const char	*s = rb_string_value_ptr((VALUE*)&v);
 	    int		len = (int)RSTRING_LEN(v);
@@ -464,7 +462,9 @@ dump_odd(VALUE obj, Odd odd, VALUE clas, int depth, Out out) {
 		ID	i;
 	    
 		if (sizeof(nbuf) <= nlen) {
-		    n2 = strdup(name);
+		    if (NULL == (n2 = strdup(name))) {
+			rb_raise(rb_eNoMemError, "for attribute name.");
+		    }
 		} else {
 		    strcpy(n2, name);
 		}
@@ -544,7 +544,7 @@ dump_obj_attrs(VALUE obj, VALUE clas, slot_t id, int depth, Out out) {
 	*out->cur++ = 'f';
 	*out->cur++ = '"';
 	*out->cur++ = ':';
-	oj_dump_cstr(rb_string_value_ptr((VALUE*)&obj), RSTRING_LEN(obj), 0, 0, out);
+	oj_dump_cstr(rb_string_value_ptr((VALUE*)&obj), (int)RSTRING_LEN(obj), 0, 0, out);
 	break;
     case T_ARRAY:
 	assure_size(out, d2 * out->indent + 14);
@@ -577,7 +577,7 @@ dump_obj_attrs(VALUE obj, VALUE clas, slot_t id, int depth, Out out) {
     }
     {
 	int	cnt;
-#if HAS_IVAR_HELPERS
+#ifdef HAVE_RB_IVAR_COUNT
 	cnt = (int)rb_ivar_count(obj);
 #else
 	volatile VALUE	vars = rb_funcall2(obj, oj_instance_variables_id, 0, 0);
@@ -601,7 +601,7 @@ dump_obj_attrs(VALUE obj, VALUE clas, slot_t id, int depth, Out out) {
 	    }
 	}
 	out->depth = depth + 1;
-#if HAS_IVAR_HELPERS
+#ifdef HAVE_RB_IVAR_FOREACH
 	rb_ivar_foreach(obj, dump_attr_cb, (VALUE)out);
 	if (',' == *(out->cur - 1)) {
 	    out->cur--; // backup to overwrite last comma
@@ -644,7 +644,6 @@ dump_obj_attrs(VALUE obj, VALUE clas, slot_t id, int depth, Out out) {
 	    assure_size(out, 2);
 	}
 #endif
-#if HAS_EXCEPTION_MAGIC
 	if (rb_obj_is_kind_of(obj, rb_eException)) {
 	    volatile VALUE	rv;
 
@@ -669,7 +668,6 @@ dump_obj_attrs(VALUE obj, VALUE clas, slot_t id, int depth, Out out) {
 	    oj_dump_obj_val(rv, d2, out);
 	    assure_size(out, 2);
 	}
-#endif
 	out->depth = depth;
     }
     fill_indent(out, depth);
@@ -701,7 +699,6 @@ dump_struct(VALUE obj, int depth, Out out, bool as_ok) {
     *out->cur++ = '"';
     *out->cur++ = ':';
     *out->cur++ = '[';
-#if HAS_STRUCT_MEMBERS
     if ('#' == *class_name) {
 	VALUE		ma = rb_struct_s_members(clas);
 	const char	*name;
@@ -709,8 +706,10 @@ dump_struct(VALUE obj, int depth, Out out, bool as_ok) {
 
 	*out->cur++ = '[';
 	for (i = 0; i < cnt; i++) {
-	    name = rb_id2name(SYM2ID(rb_ary_entry(ma, i)));
-	    len = strlen(name);
+	    volatile VALUE	s = rb_sym_to_s(rb_ary_entry(ma, i));
+
+	    name = rb_string_value_ptr((VALUE*)&s);
+	    len = (int)RSTRING_LEN(s);
 	    size = len + 3;
 	    assure_size(out, size);
 	    if (0 < i) {
@@ -723,9 +722,6 @@ dump_struct(VALUE obj, int depth, Out out, bool as_ok) {
 	}
 	*out->cur++ = ']';
     } else {
-#else
-    if (true) {
-#endif
 	fill_indent(out, d3);
 	*out->cur++ = '"';
 	memcpy(out->cur, class_name, len);

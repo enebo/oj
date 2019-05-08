@@ -15,6 +15,7 @@
 #include "encode.h"
 #include "dump.h"
 #include "trace.h"
+#include "util.h"
 
 // Workaround in case INFINITY is not defined in math.h or if the OS is CentOS
 #define OJ_INFINITY (1.0/0.0)
@@ -193,34 +194,32 @@ dump_hash(VALUE obj, int depth, Out out, bool as_ok) {
 
 static void
 dump_time(VALUE obj, Out out) {
-    char	buf[64];
-    struct tm	*tm;
-    int		len;
-    time_t	sec;
-    long long	nsec;
+    char		buf[64];
+    struct _timeInfo	ti;
+    int			len;
+    time_t		sec;
+    long long		nsec;
 
-#if HAS_RB_TIME_TIMESPEC
-    {
+#ifdef HAVE_RB_TIME_TIMESPEC
+    if (16 <= sizeof(struct timespec)) {
 	struct timespec	ts = rb_time_timespec(obj);
+
 	sec = ts.tv_sec;
 	nsec = ts.tv_nsec;
+    } else {
+	sec = rb_num2ll(rb_funcall2(obj, oj_tv_sec_id, 0, 0));
+	nsec = rb_num2ll(rb_funcall2(obj, oj_tv_nsec_id, 0, 0));
     }
 #else
     sec = rb_num2ll(rb_funcall2(obj, oj_tv_sec_id, 0, 0));
-#if HAS_NANO_TIME
     nsec = rb_num2ll(rb_funcall2(obj, oj_tv_nsec_id, 0, 0));
-#else
-    nsec = rb_num2ll(rb_funcall2(obj, oj_tv_usec_id, 0, 0)) * 1000;
-#endif
 #endif
 
     assure_size(out, 36);
     // 2012-01-05T23:58:07.123456000Z
-    tm = gmtime(&sec);
+    sec_as_time(sec, &ti);
 
-    len = sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02d.%09ldZ",
-		  tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-		  tm->tm_hour, tm->tm_min, tm->tm_sec, (long)nsec);
+    len = sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02d.%09ldZ", ti.year, ti.mon, ti.day, ti.hour, ti.min, ti.sec, (long)nsec);
     oj_dump_cstr(buf, len, 0, 0, out);
 }
 
@@ -233,7 +232,7 @@ dump_obj(VALUE obj, int depth, Out out, bool as_ok) {
     } else if (oj_bigdecimal_class == clas) {
 	volatile VALUE	rstr = rb_funcall(obj, oj_to_s_id, 0);
 
-	oj_dump_raw(rb_string_value_ptr((VALUE*)&rstr), RSTRING_LEN(rstr), out);
+	oj_dump_raw(rb_string_value_ptr((VALUE*)&rstr), (int)RSTRING_LEN(rstr), out);
     } else if (resolve_wab_uuid_class() == clas) {
 	oj_dump_str(rb_funcall(obj, oj_to_s_id, 0), depth, out, false);
     } else if (resolve_uri_http_class() == clas) {
@@ -295,21 +294,21 @@ oj_dump_wab_val(VALUE obj, int depth, Out out) {
 ///// load functions /////
 
 static void
-hash_end(struct _ParseInfo *pi) {
+hash_end(ParseInfo pi) {
     if (Yes == pi->options.trace) {
 	oj_trace_parse_hash_end(pi, __FILE__, __LINE__);
     }
 }
 
 static void
-array_end(struct _ParseInfo *pi) {
+array_end(ParseInfo pi) {
     if (Yes == pi->options.trace) {
 	oj_trace_parse_array_end(pi, __FILE__, __LINE__);
     }
 }
 
 static VALUE
-noop_hash_key(struct _ParseInfo *pi, const char *key, size_t klen) {
+noop_hash_key(ParseInfo pi, const char *key, size_t klen) {
     return Qundef;
 }
 
@@ -520,7 +519,7 @@ hash_set_cstr(ParseInfo pi, Val parent, const char *str, size_t len, const char 
 }
 
 static void
-hash_set_num(struct _ParseInfo *pi, Val parent, NumInfo ni) {
+hash_set_num(ParseInfo pi, Val parent, NumInfo ni) {
     volatile VALUE	rval = Qnil;
     
     if (ni->infinity || ni->nan) {
@@ -602,7 +601,7 @@ oj_set_wab_callbacks(ParseInfo pi) {
 
 VALUE
 oj_wab_parse(int argc, VALUE *argv, VALUE self) {
-    struct _ParseInfo	pi;
+    struct _parseInfo	pi;
 
     parse_info_init(&pi);
     pi.options = oj_default_options;
@@ -619,7 +618,7 @@ oj_wab_parse(int argc, VALUE *argv, VALUE self) {
 
 VALUE
 oj_wab_parse_cstr(int argc, VALUE *argv, char *json, size_t len) {
-    struct _ParseInfo	pi;
+    struct _parseInfo	pi;
 
     parse_info_init(&pi);
     pi.options = oj_default_options;

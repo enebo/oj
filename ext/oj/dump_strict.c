@@ -14,10 +14,6 @@
 #include "dump.h"
 #include "trace.h"
 
-#if !HAS_ENCODING_SUPPORT || defined(RUBINIUS_RUBY)
-#define rb_eEncodingError	rb_eException
-#endif
-
 // Workaround in case INFINITY is not defined in math.h or if the OS is CentOS
 #define OJ_INFINITY (1.0/0.0)
 
@@ -316,7 +312,7 @@ dump_data_strict(VALUE obj, int depth, Out out, bool as_ok) {
     if (oj_bigdecimal_class == clas) {
 	volatile VALUE	rstr = rb_funcall(obj, oj_to_s_id, 0);
 
-	oj_dump_raw(rb_string_value_ptr((VALUE*)&rstr), RSTRING_LEN(rstr), out);
+	oj_dump_raw(rb_string_value_ptr((VALUE*)&rstr), (int)RSTRING_LEN(rstr), out);
     } else {
 	raise_strict(obj);
     }
@@ -329,7 +325,7 @@ dump_data_null(VALUE obj, int depth, Out out, bool as_ok) {
     if (oj_bigdecimal_class == clas) {
 	volatile VALUE	rstr = rb_funcall(obj, oj_to_s_id, 0);
 
-	oj_dump_raw(rb_string_value_ptr((VALUE*)&rstr), RSTRING_LEN(rstr), out);
+	oj_dump_raw(rb_string_value_ptr((VALUE*)&rstr), (int)RSTRING_LEN(rstr), out);
     } else {
 	oj_dump_nil(Qnil, depth, out, false);
     }

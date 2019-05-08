@@ -3,6 +3,7 @@
  * All rights reserved.
  */
 
+#include <stdint.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -14,6 +15,7 @@
 #include "odd.h"
 #include "encode.h"
 #include "trace.h"
+#include "util.h"
 
 inline static long
 read_long(const char *str, size_t len) {
@@ -291,24 +293,19 @@ hat_num(ParseInfo pi, Val parent, Val kval, NumInfo ni) {
 		    // match the expected value.
 		    parent->val = rb_funcall2(parent->val, oj_utc_id, 0, 0);
 		} else if (ni->hasExp) {
-		    time_t	t = (time_t)(ni->i + ni->exp);
-		    struct tm	*st = gmtime(&t);
-		    VALUE	args[8];
+		    int64_t		t = (int64_t)(ni->i + ni->exp);
+		    struct _timeInfo	ti;
+		    VALUE		args[8];
 
-		    // Windows does not support dates before 1970 so ignore
-		    // the zone and do the best we can.
-		    if (NULL == st) {
-			parent->val = rb_time_nano_new(ni->i, (long)nsec);
-		    } else {
-			args[0] = LONG2NUM((long)(1900 + st->tm_year));
-			args[1] = LONG2NUM(1 + st->tm_mon);
-			args[2] = LONG2NUM(st->tm_mday);
-			args[3] = LONG2NUM(st->tm_hour);
-			args[4] = LONG2NUM(st->tm_min);
-			args[5] = rb_float_new((double)st->tm_sec + ((double)nsec + 0.5) / 1000000000.0);
-			args[6] = LONG2NUM(ni->exp);
-			parent->val = rb_funcall2(rb_cTime, oj_new_id, 7, args);
-		    }
+		    sec_as_time(t, &ti);
+		    args[0] = LONG2NUM((long)(ti.year));
+		    args[1] = LONG2NUM(ti.mon);
+		    args[2] = LONG2NUM(ti.day);
+		    args[3] = LONG2NUM(ti.hour);
+		    args[4] = LONG2NUM(ti.min);
+		    args[5] = rb_float_new((double)ti.sec + ((double)nsec + 0.5) / 1000000000.0);
+		    args[6] = LONG2NUM(ni->exp);
+		    parent->val = rb_funcall2(rb_cTime, oj_new_id, 7, args);
 		} else {
 		    parent->val = rb_time_nano_new(ni->i, (long)nsec);
 		}
@@ -403,23 +400,6 @@ hat_value(ParseInfo pi, Val parent, const char *key, size_t klen, volatile VALUE
     return 0;
 }
 
-static void
-copy_ivars(VALUE target, VALUE src) {
-    volatile VALUE	vars = rb_funcall(src, oj_instance_variables_id, 0);
-    volatile VALUE	*np = RARRAY_PTR(vars);
-    ID			vid;
-    int			i, cnt = (int)RARRAY_LEN(vars);
-    const char		*attr;
-
-    for (i = cnt; 0 < i; i--, np++) {
-	vid = rb_to_id(*np);
-	attr = rb_id2name(vid);
-	if ('@' == *attr) {
-	    rb_ivar_set(target, vid, rb_ivar_get(src, vid));
-	}
-    }
-}
-
 void
 oj_set_obj_ivar(Val parent, Val kval, VALUE value) {
     const char	*key = kval->key;
@@ -427,21 +407,9 @@ oj_set_obj_ivar(Val parent, Val kval, VALUE value) {
     ID		var_id;
     ID		*slot;
 
-    if ('~' == *key && Qtrue == rb_obj_is_kind_of(parent->val, rb_eException)) {
-	if (5 == klen && 0 == strncmp("~mesg", key, klen)) {
-	    VALUE		args[1];
-	    volatile VALUE	prev = parent->val;
-
-	    args[0] = value;
-	    parent->val = rb_class_new_instance(1, args, rb_class_of(parent->val));
-	    copy_ivars(parent->val, prev);
-	} else if (3 == klen && 0 == strncmp("~bt", key, klen)) {
-	    rb_funcall(parent->val, rb_intern("set_backtrace"), 1, value);
-	}
-    }
-#if USE_PTHREAD_MUTEX
+#if HAVE_LIBPTHREAD
     pthread_mutex_lock(&oj_cache_mutex);
-#elif USE_RB_MUTEX
+#else
     rb_mutex_lock(oj_cache_mutex);
 #endif
     if (0 == (var_id = oj_attr_hash_get(key, klen, &slot))) {
@@ -473,9 +441,9 @@ oj_set_obj_ivar(Val parent, Val kval, VALUE value) {
 	}
 	*slot = var_id;
     }
-#if USE_PTHREAD_MUTEX
+#if HAVE_LIBPTHREAD
     pthread_mutex_unlock(&oj_cache_mutex);
-#elif USE_RB_MUTEX
+#else
     rb_mutex_unlock(oj_cache_mutex);
 #endif
     rb_ivar_set(parent->val, var_id, value);
@@ -491,7 +459,7 @@ hash_set_cstr(ParseInfo pi, Val kval, const char *str, size_t len, const char *o
  WHICH_TYPE:
     switch (rb_type(parent->val)) {
     case T_NIL:
-	parent->odd_args = 0; // make sure it is 0 in case not odd
+	parent->odd_args = NULL; // make sure it is NULL in case not odd
 	if ('^' != *key || !hat_cstr(pi, parent, kval, str, len)) {
 	    parent->val = rb_hash_new();
 	    goto WHICH_TYPE;
@@ -513,7 +481,7 @@ hash_set_cstr(ParseInfo pi, Val kval, const char *str, size_t len, const char *o
 	oj_set_obj_ivar(parent, kval, rval);
 	break;
     case T_CLASS:
-	if (0 == parent->odd_args) {
+	if (NULL == parent->odd_args) {
 	    oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "%s is not an odd class", rb_class2name(rb_obj_class(parent->val)));
 	    return;
 	} else {
@@ -549,7 +517,7 @@ hash_set_num(ParseInfo pi, Val kval, NumInfo ni) {
  WHICH_TYPE:
     switch (rb_type(parent->val)) {
     case T_NIL:
-	parent->odd_args = 0; // make sure it is 0 in case not odd
+	parent->odd_args = NULL; // make sure it is NULL in case not odd
 	if ('^' != *key || !hat_num(pi, parent, kval, ni)) {
 	    parent->val = rb_hash_new();
 	    goto WHICH_TYPE;
@@ -569,7 +537,7 @@ hash_set_num(ParseInfo pi, Val kval, NumInfo ni) {
 	}
 	break;
     case T_CLASS:
-	if (0 == parent->odd_args) {
+	if (NULL == parent->odd_args) {
 	    oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "%s is not an odd class", rb_class2name(rb_obj_class(parent->val)));
 	    return;
 	} else {
@@ -604,7 +572,7 @@ hash_set_value(ParseInfo pi, Val kval, VALUE value) {
  WHICH_TYPE:
     switch (rb_type(parent->val)) {
     case T_NIL:
-	parent->odd_args = 0; // make sure it is 0 in case not odd
+	parent->odd_args = NULL; // make sure it is NULL in case not odd
 	if ('^' != *key || !hat_value(pi, parent, key, klen, value)) {
 	    parent->val = rb_hash_new();
 	    goto WHICH_TYPE;
@@ -645,7 +613,7 @@ hash_set_value(ParseInfo pi, Val kval, VALUE value) {
 	break;
     case T_MODULE:
     case T_CLASS:
-	if (0 == parent->odd_args) {
+	if (NULL == parent->odd_args) {
 	    oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "%s is not an odd class", rb_class2name(rb_obj_class(parent->val)));
 	    return;
 	} else if (0 !=	oj_odd_set_arg(parent->odd_args, key, klen, value)) {
@@ -677,17 +645,17 @@ start_hash(ParseInfo pi) {
 }
 
 static void
-end_hash(struct _ParseInfo *pi) {
+end_hash(ParseInfo pi) {
     Val	parent = stack_peek(&pi->stack);
 
     if (Qnil == parent->val) {
 	parent->val = rb_hash_new();
-    } else if (0 != parent->odd_args) {
+    } else if (NULL != parent->odd_args) {
 	OddArgs	oa = parent->odd_args;
 
 	parent->val = rb_funcall2(oa->odd->create_obj, oa->odd->create_op, oa->odd->attr_cnt, oa->args);
 	oj_odd_free(oa);
-	parent->odd_args = 0;
+	parent->odd_args = NULL;
     }
     if (Yes == pi->options.trace) {
 	oj_trace_parse_hash_end(pi, __FILE__, __LINE__);
@@ -765,7 +733,7 @@ oj_set_object_callbacks(ParseInfo pi) {
 
 VALUE
 oj_object_parse(int argc, VALUE *argv, VALUE self) {
-    struct _ParseInfo	pi;
+    struct _parseInfo	pi;
 
     parse_info_init(&pi);
     pi.options = oj_default_options;
@@ -782,7 +750,7 @@ oj_object_parse(int argc, VALUE *argv, VALUE self) {
 
 VALUE
 oj_object_parse_cstr(int argc, VALUE *argv, char *json, size_t len) {
-    struct _ParseInfo	pi;
+    struct _parseInfo	pi;
 
     parse_info_init(&pi);
     pi.options = oj_default_options;

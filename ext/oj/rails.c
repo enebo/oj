@@ -8,13 +8,14 @@
 #include "code.h"
 #include "encode.h"
 #include "trace.h"
+#include "util.h"
 
 #define OJ_INFINITY (1.0/0.0)
 
 // TBD keep static array of strings and functions to help with rails optimization
-typedef struct _Encoder {
-    struct _ROptTable	ropts;
-    struct _Options	opts;
+typedef struct _encoder {
+    struct _rOptTable	ropts;
+    struct _options	opts;
     VALUE		arg;
 } *Encoder;
 
@@ -28,7 +29,7 @@ static void	dump_rails_val(VALUE obj, int depth, Out out, bool as_ok);
 
 extern VALUE	Oj;
 
-static struct _ROptTable	ropts = { 0, 0, NULL };
+static struct _rOptTable	ropts = { 0, 0, NULL };
 
 static VALUE	encoder_class = Qnil;
 static bool	escape_html = true;
@@ -79,8 +80,8 @@ copy_opts(ROptTable src, ROptTable dest) {
     if (NULL == src->table) {
 	dest->table = NULL;
     } else {
-	dest->table = ALLOC_N(struct _ROpt, dest->alen);
-	memcpy(dest->table, src->table, sizeof(struct _ROpt) * dest->alen);
+	dest->table = ALLOC_N(struct _rOpt, dest->alen);
+	memcpy(dest->table, src->table, sizeof(struct _rOpt) * dest->alen);
     }
     return NULL;
 }
@@ -96,11 +97,9 @@ dump_attr_cb(ID key, VALUE value, Out out) {
     if (NULL == attr) {
 	attr = "";
     }
-#if HAS_EXCEPTION_MAGIC
     if (0 == strcmp("bt", attr) || 0 == strcmp("mesg", attr)) {
 	return ST_CONTINUE;
     }
-#endif
     assure_size(out, size);
     fill_indent(out, depth);
     if ('@' == *attr) {
@@ -118,7 +117,7 @@ dump_attr_cb(ID key, VALUE value, Out out) {
     dump_rails_val(value, depth, out, true);
     out->depth = depth;
     *out->cur++ = ',';
-    
+
     return ST_CONTINUE;
 }
 
@@ -164,8 +163,10 @@ dump_struct(VALUE obj, int depth, Out out, bool as_ok) {
     assure_size(out, 2);
     *out->cur++ = '{';
     for (i = 0; i < cnt; i++) {
-	name = rb_id2name(SYM2ID(rb_ary_entry(ma, i)));
-	len = (int)strlen(name);
+	volatile VALUE	s = rb_sym_to_s(rb_ary_entry(ma, i));
+
+	name = rb_string_value_ptr((VALUE*)&s);
+	len = (int)RSTRING_LEN(s);
 	assure_size(out, size + sep_len + 6);
 	if (0 < i) {
 	    *out->cur++ = ',';
@@ -214,22 +215,22 @@ dump_bigdecimal(VALUE obj, int depth, Out out, bool as_ok) {
     if ('I' == *str || 'N' == *str || ('-' == *str && 'I' == str[1])) {
 	oj_dump_nil(Qnil, depth, out, false);
     } else if (Yes == out->opts->bigdec_as_num) {
-	oj_dump_raw(str, RSTRING_LEN(rstr), out);
+	oj_dump_raw(str, (int)RSTRING_LEN(rstr), out);
     } else {
-	oj_dump_cstr(str, RSTRING_LEN(rstr), 0, 0, out);
+	oj_dump_cstr(str, (int)RSTRING_LEN(rstr), 0, 0, out);
     }
 }
 
 static void
-dump_sec_nano(VALUE obj, time_t sec, long nsec, Out out) {
+dump_sec_nano(VALUE obj, int64_t sec, long nsec, Out out) {
     char		buf[64];
-    struct tm		*tm;
+    struct _timeInfo	ti;
     long		one = 1000000000;
     long		tzsecs = NUM2LONG(rb_funcall2(obj, oj_utc_offset_id, 0, 0));
     int			tzhour, tzmin;
     char		tzsign = '+';
     int			len;
-    
+
     if (out->end - out->cur <= 36) {
 	assure_size(out, 36);
     }
@@ -248,7 +249,7 @@ dump_sec_nano(VALUE obj, time_t sec, long nsec, Out out) {
     }
     // 2012-01-05T23:58:07.123456000+09:00 or 2012/01/05 23:58:07 +0900
     sec += tzsecs;
-    tm = gmtime(&sec);
+    sec_as_time(sec, &ti);
     if (0 > tzsecs) {
         tzsign = '-';
         tzhour = (int)(tzsecs / -3600);
@@ -258,19 +259,12 @@ dump_sec_nano(VALUE obj, time_t sec, long nsec, Out out) {
         tzmin = (int)(tzsecs / 60) - (tzhour * 60);
     }
     if (!xml_time) {
-	len = sprintf(buf, "%04d/%02d/%02d %02d:%02d:%02d %c%02d%02d",
-		      tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-		      tm->tm_hour, tm->tm_min, tm->tm_sec, tzsign, tzhour, tzmin);
+	len = sprintf(buf, "%04d/%02d/%02d %02d:%02d:%02d %c%02d%02d", ti.year, ti.mon, ti.day, ti.hour, ti.min, ti.sec, tzsign, tzhour, tzmin);
     } else if (0 == out->opts->sec_prec) {
 	if (0 == tzsecs && rb_funcall2(obj, oj_utcq_id, 0, 0)) {
-	    len = sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02dZ",
-			  tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-			  tm->tm_hour, tm->tm_min, tm->tm_sec);
+	    len = sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02dZ", ti.year, ti.mon, ti.day, ti.hour, ti.min, ti.sec);
 	} else {
-	    len = sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02d%c%02d:%02d",
-			  tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-			  tm->tm_hour, tm->tm_min, tm->tm_sec,
-			  tzsign, tzhour, tzmin);
+	    len = sprintf(buf, "%04d-%02d-%02dT%02d:%02d:%02d%c%02d:%02d", ti.year, ti.mon, ti.day, ti.hour, ti.min, ti.sec, tzsign, tzhour, tzmin);
 	}
     } else if (0 == tzsecs && rb_funcall2(obj, oj_utcq_id, 0, 0)) {
 	char	format[64] = "%04d-%02d-%02dT%02d:%02d:%02d.%09ldZ";
@@ -280,9 +274,7 @@ dump_sec_nano(VALUE obj, time_t sec, long nsec, Out out) {
 	    format[32] = '0' + out->opts->sec_prec;
 	    len -= 9 - out->opts->sec_prec;
 	}
-	len = sprintf(buf, format,
-		      tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-		      tm->tm_hour, tm->tm_min, tm->tm_sec, nsec);
+	len = sprintf(buf, format, ti.year, ti.mon, ti.day, ti.hour, ti.min, ti.sec, nsec);
     } else {
 	char	format[64] = "%04d-%02d-%02dT%02d:%02d:%02d.%09ld%c%02d:%02d";
 
@@ -291,39 +283,36 @@ dump_sec_nano(VALUE obj, time_t sec, long nsec, Out out) {
 	    format[32] = '0' + out->opts->sec_prec;
 	    len -= 9 - out->opts->sec_prec;
 	}
-	len = sprintf(buf, format,
-		      tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-		      tm->tm_hour, tm->tm_min, tm->tm_sec, nsec,
-		      tzsign, tzhour, tzmin);
+	len = sprintf(buf, format, ti.year, ti.mon, ti.day, ti.hour, ti.min, ti.sec, nsec, tzsign, tzhour, tzmin);
     }
     oj_dump_cstr(buf, len, 0, 0, out);
 }
 
 static void
 dump_time(VALUE obj, int depth, Out out, bool as_ok) {
-    time_t	sec;
+    long long	sec;
     long long	nsec;
 
-#if HAS_RB_TIME_TIMESPEC
-    {
+#ifdef HAVE_RB_TIME_TIMESPEC
+    if (16 <= sizeof(struct timespec)) {
 	struct timespec	ts = rb_time_timespec(obj);
-	sec = ts.tv_sec;
+
+	sec = (long long)ts.tv_sec;
 	nsec = ts.tv_nsec;
+    } else {
+	sec = rb_num2ll(rb_funcall2(obj, oj_tv_sec_id, 0, 0));
+	nsec = rb_num2ll(rb_funcall2(obj, oj_tv_nsec_id, 0, 0));
     }
 #else
     sec = rb_num2ll(rb_funcall2(obj, oj_tv_sec_id, 0, 0));
-#if HAS_NANO_TIME
     nsec = rb_num2ll(rb_funcall2(obj, oj_tv_nsec_id, 0, 0));
-#else
-    nsec = rb_num2ll(rb_funcall2(obj, oj_tv_usec_id, 0, 0)) * 1000;
-#endif
 #endif
     dump_sec_nano(obj, sec, nsec, out);
 }
 
 static void
 dump_timewithzone(VALUE obj, int depth, Out out, bool as_ok) {
-    time_t	sec = NUM2LONG(rb_funcall2(obj, oj_tv_sec_id, 0, 0));
+    int64_t	sec = NUM2LONG(rb_funcall2(obj, oj_tv_sec_id, 0, 0));
     long long	nsec = 0;
 
     if (rb_respond_to(obj, oj_tv_nsec_id)) {
@@ -338,12 +327,12 @@ static void
 dump_to_s(VALUE obj, int depth, Out out, bool as_ok) {
     volatile VALUE	rstr = rb_funcall(obj, oj_to_s_id, 0);
 
-    oj_dump_cstr(rb_string_value_ptr((VALUE*)&rstr), RSTRING_LEN(rstr), 0, 0, out);
+    oj_dump_cstr(rb_string_value_ptr((VALUE*)&rstr), (int)RSTRING_LEN(rstr), 0, 0, out);
 }
 
 static ID	parameters_id = 0;
 
-typedef struct _StrLen {
+typedef struct _strLen {
     const char	*str;
     int		len;
 } *StrLen;
@@ -364,9 +353,9 @@ columns_array(VALUE rcols, int *ccnt) {
     StrLen		cols;
     int			i;
     int			cnt = (int)RARRAY_LEN(rcols);
-    
+
     *ccnt = cnt;
-    cols = ALLOC_N(struct _StrLen, cnt);
+    cols = ALLOC_N(struct _strLen, cnt);
     for (i = 0, cp = cols; i < cnt; i++, cp++) {
 	v = rb_ary_entry(rcols, i);
 	if (T_STRING != rb_type(v)) {
@@ -383,7 +372,7 @@ dump_row(VALUE row, StrLen cols, int ccnt, int depth, Out out) {
     size_t	size;
     int		d2 = depth + 1;
     int		i;
-				   
+
     assure_size(out, 2);
     *out->cur++ = '{';
     size = depth * out->indent + 3;
@@ -443,7 +432,7 @@ dump_activerecord_result(VALUE obj, int depth, Out out, bool as_ok) {
     int			i, rcnt;
     size_t		size;
     int			d2 = depth + 1;
-    
+
     if (0 == rows_id) {
 	rows_id = rb_intern("@rows");
 	columns_id = rb_intern("@columns");
@@ -451,7 +440,7 @@ dump_activerecord_result(VALUE obj, int depth, Out out, bool as_ok) {
     out->argc = 0;
     cols = columns_array(rb_ivar_get(obj, columns_id), &ccnt);
     rows = rb_ivar_get(obj, rows_id);
-    rcnt = RARRAY_LEN(rows);
+    rcnt = (int)RARRAY_LEN(rows);
     assure_size(out, 2);
     *out->cur++ = '[';
     if (out->opts->dump_opts.use) {
@@ -504,7 +493,7 @@ dump_activerecord_result(VALUE obj, int depth, Out out, bool as_ok) {
     *out->cur++ = ']';
 }
 
-typedef struct _NamedFunc {
+typedef struct _namedFunc {
     const char	*name;
     DumpFunc	func;
 } *NamedFunc;
@@ -527,15 +516,11 @@ dump_as_json(VALUE obj, int depth, Out out, bool as_ok) {
     }
     // Some classes elect to not take an options argument so check the arity
     // of as_json.
-#if HAS_METHOD_ARITY
     if (0 == rb_obj_method_arity(obj, oj_as_json_id)) {
 	ja = rb_funcall(obj, oj_as_json_id, 0);
     } else {
 	ja = rb_funcall2(obj, oj_as_json_id, out->argc, out->argv);
     }
-#else
-    ja = rb_funcall2(obj, oj_as_json_id, out->argc, out->argv);
-#endif
     if (Yes == out->opts->trace) {
 	oj_trace("as_json", obj, __FILE__, __LINE__, depth + 1, TraceRubyOut);
     }
@@ -565,7 +550,7 @@ dump_regexp(VALUE obj, int depth, Out out, bool as_ok) {
     dump_as_string(obj, depth, out, as_ok);
 }
 
-static struct _NamedFunc	dump_map[] = {
+static struct _namedFunc	dump_map[] = {
     { "ActionController::Parameters", dump_actioncontroller_parameters },
     { "ActiveRecord::Result", dump_activerecord_result },
     { "ActiveSupport::TimeWithZone", dump_timewithzone },
@@ -599,12 +584,12 @@ create_opt(ROptTable rot, VALUE clas) {
     rot->len++;
     if (NULL == rot->table) {
 	rot->alen = 256;
-	rot->table = ALLOC_N(struct _ROpt, rot->alen);
-	memset(rot->table, 0, sizeof(struct _ROpt) * rot->alen);
+	rot->table = ALLOC_N(struct _rOpt, rot->alen);
+	memset(rot->table, 0, sizeof(struct _rOpt) * rot->alen);
     } else if (rot->alen <= rot->len) {
 	rot->alen *= 2;
-	REALLOC_N(rot->table, struct _ROpt, rot->alen);
-	memset(rot->table + olen, 0, sizeof(struct _ROpt) * olen);
+	REALLOC_N(rot->table, struct _rOpt, rot->alen);
+	memset(rot->table + olen, 0, sizeof(struct _rOpt) * olen);
     }
     if (0 == olen) {
 	ro = rot->table;
@@ -612,10 +597,10 @@ create_opt(ROptTable rot, VALUE clas) {
 	ro = &rot->table[olen];
     } else {
 	int	i;
-	
+
 	for (i = 0, ro = rot->table; i < olen; i++, ro++) {
 	    if (clas < ro->clas) {
-		memmove(ro + 1, ro, sizeof(struct _ROpt) * (olen - i));
+		memmove(ro + 1, ro, sizeof(struct _rOpt) * (olen - i));
 		break;
 	    }
 	}
@@ -648,7 +633,7 @@ create_opt(ROptTable rot, VALUE clas) {
 	    ro->dump = dump_to_s;
 	}
     }
-    return NULL;
+    return ro;
 }
 
 static void
@@ -682,12 +667,12 @@ encoder_mark(void *ptr) {
  */
 static VALUE
 encoder_new(int argc, VALUE *argv, VALUE self) {
-    Encoder	e = ALLOC(struct _Encoder);
+    Encoder	e = ALLOC(struct _encoder);
 
     e->opts = oj_default_options;
     e->arg = Qnil;
     copy_opts(&ropts, &e->ropts);
-    
+
     if (1 <= argc && Qnil != *argv) {
 	oj_parse_options(*argv, &e->opts);
 	e->arg = *argv;
@@ -742,7 +727,7 @@ optimize(int argc, VALUE *argv, ROptTable rot, bool on) {
 	int		i;
 	NamedFunc	nf;
 	VALUE		clas;
-	
+
 	oj_rails_hash_opt = on;
 	oj_rails_array_opt = on;
 	oj_rails_float_opt = on;
@@ -774,14 +759,14 @@ optimize(int argc, VALUE *argv, ROptTable rot, bool on) {
 
 /* Document-method optimize
  *	call-seq: optimize(*classes)
- * 
+ *
  * Use Oj rails optimized routines to encode the specified classes. This
  * ignores the as_json() method on the class and uses an internal encoding
  * instead. Passing in no classes indicates all should use the optimized
  * version of encoding for all previously optimized classes. Passing in the
  * Object class set a global switch that will then use the optimized behavior
  * for all classes.
- * 
+ *
  * - *classes* [_Class_] a list of classes to optimize
  */
 static VALUE
@@ -795,14 +780,14 @@ encoder_optimize(int argc, VALUE *argv, VALUE self) {
 
 /* Document-method: optimize
  *	call-seq: optimize(*classes)
- * 
+ *
  * Use Oj rails optimized routines to encode the specified classes. This
  * ignores the as_json() method on the class and uses an internal encoding
  * instead. Passing in no classes indicates all should use the optimized
  * version of encoding for all previously optimized classes. Passing in the
  * Object class set a global switch that will then use the optimized behavior
  * for all classes.
- * 
+ *
  * - *classes* [_Class_] a list of classes to optimize
  */
 static VALUE
@@ -821,21 +806,21 @@ rails_optimize(int argc, VALUE *argv, VALUE self) {
 VALUE
 rails_mimic_json(VALUE self) {
     VALUE	json;
-    
+
     if (rb_const_defined_at(rb_cObject, rb_intern("JSON"))) {
 	json = rb_const_get_at(rb_cObject, rb_intern("JSON"));
     } else {
 	json = rb_define_module("JSON");
     }
     oj_mimic_json_methods(json);
-    oj_default_options.mode = RailsMode;
+    //oj_default_options.mode = RailsMode;
 
     return Qnil;
 }
 
 /* Document-method: deoptimize
  *	call-seq: deoptimize(*classes)
- * 
+ *
  * Turn off Oj rails optimization on the specified classes.
  *
  * - *classes* [_Class_] a list of classes to deoptimize
@@ -851,7 +836,7 @@ encoder_deoptimize(int argc, VALUE *argv, VALUE self) {
 
 /* Document-method: deoptimize
  *	call-seq: deoptimize(*classes)
- * 
+ *
  * Turn off Oj rails optimization on the specified classes.
  *
  * - *classes* [_Class_] a list of classes to deoptimize
@@ -865,7 +850,7 @@ rails_deoptimize(int argc, VALUE *argv, VALUE self) {
 
 /* Document-method:optimized?
  *	call-seq: optimized?(clas)
- * 
+ *
  * - *clas* [_Class_] Class to check
  *
  * @return true if the class is being optimized for rails and false otherwise
@@ -883,7 +868,7 @@ encoder_optimized(VALUE self, VALUE clas) {
 
 /* Document-method: optimized?
  *	call-seq: optimized?(clas)
- * 
+ *
  * Returns true if the specified Class is being optimized.
  */
 static VALUE
@@ -896,7 +881,7 @@ rails_optimized(VALUE self, VALUE clas) {
     return (ro->on) ? Qtrue : Qfalse;
 }
 
-typedef struct _OO {
+typedef struct _oo {
     Out		out;
     VALUE	obj;
 } *OO;
@@ -913,10 +898,10 @@ protect_dump(VALUE ov) {
 static VALUE
 encode(VALUE obj, ROptTable ropts, Options opts, int argc, VALUE *argv) {
     char		buf[4096];
-    struct _Out		out;
-    struct _Options	copts = *opts;
+    struct _out		out;
+    struct _options	copts = *opts;
     volatile VALUE	rstr = Qnil;
-    struct _OO		oo;
+    struct _oo		oo;
     int			line = 0;
 
     oo.out = &out;
@@ -925,7 +910,7 @@ encode(VALUE obj, ROptTable ropts, Options opts, int argc, VALUE *argv) {
     copts.str_rx.tail = NULL;
     copts.mode = RailsMode;
     if (escape_html) {
-	copts.escape_mode = JXEsc;
+	copts.escape_mode = RailsXEsc;
     } else {
 	copts.escape_mode = RailsEsc;
     }
@@ -981,7 +966,7 @@ encode(VALUE obj, ROptTable ropts, Options opts, int argc, VALUE *argv) {
 
 /* Document-method: encode
  *	call-seq: encode(obj)
- * 
+ *
  * - *obj* [_Object_] object to encode
  *
  * Returns encoded object as a JSON string.
@@ -992,7 +977,7 @@ encoder_encode(VALUE self, VALUE obj) {
 
     if (Qnil != e->arg) {
 	VALUE	argv[1] = { e->arg };
-	
+
 	return encode(obj, &e->ropts, &e->opts, 1, argv);
     }
     return encode(obj, &e->ropts, &e->opts, 0, NULL);
@@ -1000,9 +985,9 @@ encoder_encode(VALUE self, VALUE obj) {
 
 /* Document-method: encode
  *	call-seq: encode(obj, opts=nil)
- * 
+ *
  * Encode obj as a JSON String.
- * 
+ *
  * - *obj* [_Object_|Hash|Array] object to convert to a JSON String
  * - *opts* [_Hash_] options
  *
@@ -1022,16 +1007,11 @@ rails_encode(int argc, VALUE *argv, VALUE self) {
 
 static VALUE
 rails_use_standard_json_time_format(VALUE self, VALUE state) {
-    switch (state) {
-    case Qtrue:
-    case Qfalse:
-	break;
-    case Qnil:
+    if (Qtrue == state || Qfalse == state) {
+    } else if (Qnil == state) {
 	state = Qfalse;
-	break;
-    default:
+    } else {
 	state = Qtrue;
-	break;
     }
     rb_iv_set(self, "@use_standard_json_time_format", state);
     xml_time = Qtrue == state;
@@ -1057,7 +1037,7 @@ rails_time_precision(VALUE self, VALUE prec) {
 
 /* Document-method: set_encoder
  *	call-seq: set_encoder()
- * 
+ *
  * Sets the ActiveSupport.encoder to Oj::Rails::Encoder and wraps some of the
  * formatting globals used by ActiveSupport to allow the use of those globals
  * in the Oj::Rails optimizations.
@@ -1069,7 +1049,7 @@ rails_set_encoder(VALUE self) {
     VALUE	encoding;
     VALUE	pv;
     VALUE	verbose;
-    
+
     if (rb_const_defined_at(rb_cObject, rb_intern("ActiveSupport"))) {
 	active = rb_const_get_at(rb_cObject, rb_intern("ActiveSupport"));
     } else {
@@ -1110,7 +1090,7 @@ rails_set_decoder(VALUE self) {
     VALUE	json;
     VALUE	json_error;
     VALUE	verbose;
-    
+
     if (rb_const_defined_at(rb_cObject, rb_intern("JSON"))) {
 	json = rb_const_get_at(rb_cObject, rb_intern("JSON"));
     } else {
@@ -1133,7 +1113,7 @@ rails_set_decoder(VALUE self) {
     rb_undef_method(json, "parse");
     rb_define_module_function(json, "parse", oj_mimic_parse, -1);
     rb_gv_set("$VERBOSE", verbose);
-    
+
     return Qnil;
 }
 
@@ -1153,7 +1133,7 @@ oj_optimize_rails(VALUE self) {
 }
 
 /* Document-module: Oj::Rails
- * 
+ *
  * Module that provides rails and active support compatibility.
  */
 /* Document-class: Oj::Rails::Encoder
@@ -1163,7 +1143,7 @@ oj_optimize_rails(VALUE self) {
 void
 oj_mimic_rails_init() {
     VALUE	rails = rb_define_module_under(Oj, "Rails");
-    
+
     rb_define_module_function(rails, "encode", rails_encode, -1);
 
     encoder_class = rb_define_class_under(rails, "Encoder", rb_cObject);
@@ -1303,7 +1283,10 @@ hash_cb(VALUE key, VALUE value, Out out) {
     int		depth = out->depth;
     long	size;
     int		rtype = rb_type(key);
-    
+
+    if (out->omit_nil && Qnil == value) {
+	return ST_CONTINUE;
+    }
     if (rtype != T_STRING && rtype != T_SYMBOL) {
 	key = rb_funcall(key, oj_to_s_id, 0);
 	rtype = rb_type(key);
@@ -1494,7 +1477,7 @@ oj_dump_rails_val(VALUE obj, int depth, Out out) {
     out->opts->str_rx.head = NULL;
     out->opts->str_rx.tail = NULL;
     if (escape_html) {
-	out->opts->escape_mode = JXEsc;
+	out->opts->escape_mode = RailsXEsc;
     } else {
 	out->opts->escape_mode = RailsEsc;
     }

@@ -29,7 +29,7 @@ class Juice < Minitest::Test
     end
     alias == eql?
 
-  end# Jam
+  end # Jam
 
   class Jeez < Jam
     def initialize(x, y)
@@ -43,7 +43,7 @@ class Juice < Minitest::Test
     def self.json_create(h)
       self.new(h['x'], h['y'])
     end
-  end# Jeez
+  end # Jeez
 
   # contributed by sauliusg to fix as_json
   class Orange < Jam
@@ -86,7 +86,7 @@ class Juice < Minitest::Test
     def self.json_create(h)
       self.new(h['x'], h['y'])
     end
-  end# Jazz
+  end # Jazz
 
   def setup
     @default_options = Oj.default_options
@@ -154,6 +154,7 @@ class Juice < Minitest::Test
       :hash_class=>Hash,
       :omit_nil=>false,
       :allow_nan=>true,
+      :integer_range=>nil,
       :array_class=>Array,
       :ignore=>nil,
       :trace=>true,
@@ -393,6 +394,12 @@ class Juice < Minitest::Test
     out = Oj.dump(x)
     assert_equal(json, out)
   end
+  def test_dump_invalid_utf8
+    Oj.default_options = { :escape_mode => :ascii }
+    assert_raises(EncodingError) {
+      Oj.dump(["abc\xbe\x1f\x11"], mode: :strict)
+    }
+  end
 
   # Symbol
   def test_symbol_null
@@ -411,6 +418,14 @@ class Juice < Minitest::Test
     t = Time.parse("1900-01-01 00:18:59 UTC")
     json = Oj.dump(t, :mode => :custom, :time_format => :unix)
     assert_equal('-2208987661.000000000', json)
+  end
+
+  def test_time_years
+    (-2020..2020).each { |year|
+      s = "%04d-03-01T15:14:13Z" % [year]
+      json = Oj.dump(Time.parse(s), mode: :custom, time_format: :xmlschema)
+      assert_equal(s, json[1..-2])
+    }
   end
 
   # Class
@@ -659,6 +674,31 @@ class Juice < Minitest::Test
   def test_quirks_string_mode
     assert_raises(Oj::ParseError) { Oj.load('"string"', :quirks_mode => false) }
     assert_equal('string', Oj.load('"string"', :quirks_mode => true))
+  end
+
+  def test_error_path
+    msg = ''
+    assert_raises(Oj::ParseError) {
+      begin
+	Oj.load(%|{
+  "first": [
+    1, 2, { "third": 123x }
+  ]
+}|)
+      rescue Oj::ParseError => e
+	msg = e.message
+	raise e
+      end
+    }
+    assert_equal('first[2].third', msg.split('(')[1].split(')')[0])
+  end
+
+  def test_bad_bignum
+    if '2.4.0' < RUBY_VERSION
+      assert_raises Oj::ParseError do
+	Oj.load(%|{ "big": -e123456789 }|, mode: :strict)
+      end
+    end
   end
 
   def test_quirks_array_mode

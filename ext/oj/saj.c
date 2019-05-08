@@ -19,7 +19,7 @@
 #include "oj.h"
 #include "encode.h"
 
-typedef struct _ParseInfo {
+typedef struct _parseInfo {
     char	*str;		/* buffer being read from */
     char	*s;		/* current position in buffer */
     void	*stack_min;
@@ -605,7 +605,7 @@ read_quoted_value(ParseInfo pi) {
 static void
 saj_parse(VALUE handler, char *json) {
     volatile VALUE	obj = Qnil;
-    struct _ParseInfo	pi;
+    struct _parseInfo	pi;
 
     if (0 == json) {
 	if (pi.has_error) {
@@ -626,7 +626,7 @@ saj_parse(VALUE handler, char *json) {
     {
 	struct rlimit	lim;
 
-	if (0 == getrlimit(RLIMIT_STACK, &lim)) {
+	if (0 == getrlimit(RLIMIT_STACK, &lim) && RLIM_INFINITY != lim.rlim_cur) {
 	    pi.stack_min = (void*)((char*)&obj - (lim.rlim_cur / 4 * 3)); /* let 3/4ths of the stack be used only */
 	} else {
 	    pi.stack_min = 0; /* indicates not to check stack limit */

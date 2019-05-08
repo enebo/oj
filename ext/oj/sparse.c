@@ -203,7 +203,7 @@ unicode_to_chars(ParseInfo pi, Buf buf, uint32_t code) {
 // entered at backslash
 static void
 read_escaped_str(ParseInfo pi) {
-    struct _Buf	buf;
+    struct _buf	buf;
     char	c;
     uint32_t	code;
     Val		parent = stack_peek(&pi->stack);
@@ -393,7 +393,7 @@ read_str(ParseInfo pi) {
 
 static void
 read_num(ParseInfo pi) {
-    struct _NumInfo	ni;
+    struct _numInfo	ni;
     char		c;
 
     reader_protect(&pi->rd);
@@ -456,8 +456,12 @@ read_num(ParseInfo pi) {
 	}
 	if ('.' == c) {
 	    c = reader_get(&pi->rd);
-	    if (c < '0' || '9' < c) {
-		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "not a number");
+	    // A trailing . is not a valid decimal but if encountered allow it
+	    // except when mimicing the JSON gem.
+	    if (CompatMode == pi->options.mode) {
+		if (c < '0' || '9' < c) {
+		    oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "not a number");
+		}
 	    }
 	    for (; '0' <= c && c <= '9'; c = reader_get(&pi->rd)) {
 		int	d = (c - '0');
@@ -521,7 +525,7 @@ read_num(ParseInfo pi) {
 
 static void
 read_nan(ParseInfo pi) {
-    struct _NumInfo	ni;
+    struct _numInfo	ni;
     char		c;
 
     ni.str = pi->rd.str;
@@ -660,6 +664,13 @@ oj_sparse2(ParseInfo pi) {
 	    read_str(pi);
 	    break;
 	case '+':
+	    if (CompatMode == pi->options.mode) {
+		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "unexpected character");
+		return;
+	    }
+	    pi->cur--;
+	    read_num(pi);
+	    break;
 	case '-':
 	case '0':
 	case '1':
@@ -707,7 +718,7 @@ oj_sparse2(ParseInfo pi) {
 		    return;
 		}
 	    } else if ('a' == c) {
-		struct _NumInfo	ni;
+		struct _numInfo	ni;
 
 		c = reader_get(&pi->rd);
 		if ('N' != c && 'n' != c) {
@@ -756,13 +767,7 @@ oj_sparse2(ParseInfo pi) {
 		if (Qnil == pi->proc) {
 		    rb_yield_values2(3, args);
 		} else {
-#if HAS_PROC_WITH_BLOCK
 		    rb_proc_call_with_block(pi->proc, 3, args, Qnil);
-#else
-		    oj_set_error_at(pi, rb_eNotImpError, __FILE__, __LINE__,
-				    "Calling a Proc with a block not supported in this version. Use func() {|x| } syntax instead.");
-		    return;
-#endif
 		}
 	    } else if (!pi->has_callbacks) {
 		first = 0;
@@ -839,26 +844,39 @@ oj_pi_sparse(int argc, VALUE *argv, ParseInfo pi, int fd) {
     if (!err_has(&pi->err)) {
 	// If the stack is not empty then the JSON terminated early.
 	Val	v;
+	VALUE	err_class = oj_parse_error_class;
 
+	if (0 != line) {
+	    VALUE	ec = rb_obj_class(rb_errinfo());
+
+	    if (rb_eIOError != ec) {
+		goto CLEANUP;
+	    }
+	    // Sometimes the class of the error is 0 which seems broken.
+	    if (rb_eArgError != ec && 0 != ec) {
+		err_class = ec;
+	    }
+	}
 	if (0 != (v = stack_peek(&pi->stack))) {
 	    switch (v->next) {
 	    case NEXT_ARRAY_NEW:
 	    case NEXT_ARRAY_ELEMENT:
 	    case NEXT_ARRAY_COMMA:
-		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "Array not terminated");
+		oj_set_error_at(pi, err_class, __FILE__, __LINE__, "Array not terminated");
 		break;
 	    case NEXT_HASH_NEW:
 	    case NEXT_HASH_KEY:
 	    case NEXT_HASH_COLON:
 	    case NEXT_HASH_VALUE:
 	    case NEXT_HASH_COMMA:
-		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "Hash/Object not terminated");
+		oj_set_error_at(pi, err_class, __FILE__, __LINE__, "Hash/Object not terminated");
 		break;
 	    default:
-		oj_set_error_at(pi, oj_parse_error_class, __FILE__, __LINE__, "not terminated");
+		oj_set_error_at(pi, err_class, __FILE__, __LINE__, "not terminated");
 	    }
 	}
     }
+CLEANUP:
     // proceed with cleanup
     if (0 != pi->circ_array) {
 	oj_circ_array_free(pi->circ_array);
@@ -867,11 +885,9 @@ oj_pi_sparse(int argc, VALUE *argv, ParseInfo pi, int fd) {
     if (0 != fd) {
 	close(fd);
     }
-    if (0 != line) {
-	rb_jump_tag(line);
-    }
     if (err_has(&pi->err)) {
-	if (Qnil != pi->err_class) {
+	rb_set_errinfo(Qnil);
+	if (Qnil != pi->err_class && 0 != pi->err_class) {
 	    pi->err.clas = pi->err_class;
 	}
 	if (CompatMode == pi->options.mode) {
@@ -886,8 +902,9 @@ oj_pi_sparse(int argc, VALUE *argv, ParseInfo pi, int fd) {
 	} else {
 	    oj_err_raise(&pi->err);
 	}
-
 	oj_err_raise(&pi->err);
+    } else if (0 != line) {
+	rb_jump_tag(line);
     }
     return result;
 }
