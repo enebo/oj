@@ -50,4 +50,32 @@ public class StringParserSource extends ParserSource {
 
         return json.get(currentOffset + amount);
     }
+
+    public int column() {
+        int col = 1;
+
+        for (int i = currentOffset; i > 0 && json.get(i) != '\n'; i--) {
+            col++;
+        }
+
+        return col;
+    }
+
+    public int row() {
+        int row = 1;
+        int length = json.length();
+        byte[] buf = json.unsafeBytes();
+        int beg = json.begin();
+
+        for (int i = beg; i < length && i < beg + currentOffset; i++) {
+            if (buf[i] == '\n') row++;
+        }
+
+        return row;
+    }
+
+    @Override
+    public boolean canCalculateSourcePositions() {
+        return true;
+    }
 }

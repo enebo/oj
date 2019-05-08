@@ -43,26 +43,20 @@ public class SajParse { // extends Parse {
     void call_error(String msg) {
         StringBuilder buf = new StringBuilder(msg);
 
-        // FIXME: Implement source.pos() -> [line, col]
-        /*
-        int		jline = 1;
-        int		col = 1;
+        int row = -1;
+        int column = -1;
 
-        for (; pi.str < s && '\n' != *s; s--) {
-            col++;
-        }
-        for (; pi.str < s; s--) {
-            if ('\n' == *s) {
-                jline++;
-            }
+        if (source.canCalculateSourcePositions()) {
+            row = source.row();
+            column = source.column();
+
+            buf.append(" at line " + row + ", column " + column);
         }
 
-        sprintf(buf, "%s at line %d, column %d [%s:%d]", msg, jline, col, file, line);
-        */
         handler.callMethod(context, "error",
                 new IRubyObject[] {context.runtime.newString(buf.toString()),
-                context.runtime.newFixnum(-1),
-                context.runtime.newFixnum(-1)});
+                context.runtime.newFixnum(row),
+                context.runtime.newFixnum(column)});
     }
 
     void non_white() {

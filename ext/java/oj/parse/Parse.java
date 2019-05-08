@@ -51,7 +51,6 @@ public abstract class Parse {
     protected ThreadContext context;
     public Stack<Val> stack;
     public Block proc;
-    public IRubyObject undef;
     public String error = null;
     public Options options;
     public IRubyObject handler;
@@ -94,8 +93,14 @@ public abstract class Parse {
         return error != null;
     }
 
-    public void setError(String error) {
-        this.error = error;
+    public void setError(String message) {
+        String extras = ")";
+
+        if (source.canCalculateSourcePositions()) {
+            extras = ") at line " + source.row() + ", column " + source.column();
+        }
+
+        this.error = message + "(" + stackAsString() + extras;
     }
 
     public IRubyObject nilValue() {
@@ -968,5 +973,25 @@ public abstract class Parse {
     }
 
     protected void trace_parse_hash_end() {
+    }
+
+    private String stackAsString() {
+        StringBuilder buf = new StringBuilder();
+        boolean first = true;
+
+        for(Val val: stack) {
+            if (val.key != null) {
+                if (!first) buf.append('.');
+
+                first = false;
+                buf.append(val.key);
+            } else if (val.val instanceof RubyArray) {
+                buf.append('[');
+                buf.append("" + ((RubyArray) val.val).size());
+                buf.append(']');
+            }
+        }
+
+        return buf.toString();
     }
 }

@@ -28,4 +28,8 @@ public class Val {
     public String keyAsInstanceVariableId() {
         return "@" + key;
     }
+
+    public String toString() {
+        return "key: " + key + ", key_val: " + key_val + ", val: " + val;
+    }
 }

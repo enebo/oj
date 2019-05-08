@@ -22,4 +22,20 @@ public abstract class ParserSource {
     abstract ByteList subStr(int offset, int length);
     abstract boolean startsWith(ByteList str);
     abstract int peek(int amount);
+
+    /**
+     * Can this source type determine the line and column offsets?
+     * @return true if so
+     */
+    public boolean canCalculateSourcePositions() {
+        return false;
+    }
+
+    public int column() {
+        throw new RuntimeException("column() not implemented for this type: " + this.getClass());
+    }
+
+    public int row() {
+        throw new RuntimeException("row() not implemented for this type: " + this.getClass());
+    }
 }
