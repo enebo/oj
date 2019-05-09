@@ -56,13 +56,7 @@ public class CompatDump extends Dump {
         } else if (opts.to_json && obj.respondsTo("to_json")) {
             append(stringToByteList(obj, "to_json"));
         } else {
-            switch (opts.time_format) {
-                case RubyTime: dump_ruby_time(obj); break;
-                case XmlTime: dump_xml_time(obj); break;
-                case UnixZTime: _dump_time(obj, true); break;
-                case UnixTime:
-                default: _dump_time(obj, false); break;
-            }
+            dump_cstr(stringToByteList(obj, "to_s"), false, false);
         }
     }
 
