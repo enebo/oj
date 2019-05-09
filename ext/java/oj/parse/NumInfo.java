@@ -2,6 +2,7 @@ package oj.parse;
 
 import org.jruby.Ruby;
 import org.jruby.RubyBignum;
+import org.jruby.exceptions.ArgumentError;
 import org.jruby.ext.bigdecimal.RubyBigDecimal;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
@@ -53,7 +54,12 @@ public class NumInfo {
 
     // FIXME: This could potentially use an access point which directly consumed a bytelist (although JRuby needs to add one).
     private IRubyObject newBigDecimal(Ruby runtime, IRubyObject string) {
-        return RubyBigDecimal.newInstance(runtime.getCurrentContext(), runtime.getClass("BigDecimal"), string);
+        try {
+            return RubyBigDecimal.newInstance(runtime.getCurrentContext(), runtime.getClass("BigDecimal"), string);
+        } catch (ArgumentError e) {
+            parse.parseError(e.getMessage());
+            return null; // not reached
+        }
     }
 
     // C: oj_num_as_value
