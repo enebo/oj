@@ -986,80 +986,42 @@ public abstract class Dump {
         dump_cstr(stringToByteList(obj, "to_s"), false, false);
     }
 
-    protected void dump_xml_time(IRubyObject obj) {
-        long[] timespec = extractTimespec(context, obj);
-        long sec = timespec[0];
-        long nsec = timespec[1];
-        StringBuilder buf = new StringBuilder();
-        Formatter formatter = new Formatter(buf);
+    private boolean anyNanoSeconds(long nsec) {
         long one = 1000000000;
-        long tzsecs = obj.callMethod(context, "utc_offset").convertToInteger().getLongValue();
-        int tzhour, tzmin;
-        char tzsign = '+';
 
-        if (9 > opts.sec_prec) {
-            int	i;
-
-            for (i = 9 - opts.sec_prec; 0 < i; i--) {
+        if (opts.sec_prec < 9) {
+            for (int i = 9 - opts.sec_prec; 0 < i; i--) {
                 nsec = (nsec + 5) / 10;
                 one /= 10;
             }
-            if (one <= nsec) {
-                nsec -= one;
-                sec++;
-            }
-        }
-        // 2012-01-05T23:58:07.123456000+09:00
-        //tm = localtime(&sec);
-        sec += tzsecs;
-        Date date = new Date(sec*1000); // milliseconds since epoch
-        Calendar tm = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
-        tm.setTime(date);
-
-        if (0 > tzsecs) {
-            tzsign = '-';
-            tzhour = (int)(tzsecs / -3600);
-            tzmin = (int)(tzsecs / -60) - (tzhour * 60);
-        } else {
-            tzhour = (int)(tzsecs / 3600);
-            tzmin = (int)(tzsecs / 60) - (tzhour * 60);
+            if (one <= nsec) nsec -= one;
         }
 
-        if (0 == nsec || 0 == opts.sec_prec) {
-            if (0 == tzsecs && obj.callMethod(context, "utc?").isTrue()) {
-                formatter.format("%04d-%02d-%02dT%02d:%02d:%02dZ",
-                        tm.get(Calendar.YEAR), tm.get(Calendar.MONTH) + 1, tm.get(Calendar.DAY_OF_MONTH),
-                        tm.get(Calendar.HOUR_OF_DAY), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND));
-                dump_cstr(buf.toString(), false, false);
+        return nsec == 0;
+    }
+
+    protected void dump_xml_time(IRubyObject obj) {
+        // FIXME: I feel like extractTimespec may not be needed here but I am not convinced this may not be Time.
+        boolean noNanoSeconds = anyNanoSeconds(extractTimespec(context, obj)[1]);
+        boolean noTimezone = obj.callMethod(context, "utc_offset").convertToInteger().getLongValue() == 0;
+
+        RubyString fmt;
+        if (noNanoSeconds || 0 == opts.sec_prec) {
+            if (noTimezone && obj.callMethod(context, "utc?").isTrue()) {
+                // FIXME: This can constantize the format string
+                fmt = context.runtime.newString("%4Y-%m-%dT%TZ");
             } else {
-                formatter.format("%04d-%02d-%02dT%02d:%02d:%02d%c%02d:%02d",
-                        tm.get(Calendar.YEAR), tm.get(Calendar.MONTH) + 1, tm.get(Calendar.DAY_OF_MONTH),
-                        tm.get(Calendar.HOUR_OF_DAY), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND),
-                        tzsign, tzhour, tzmin);
-                dump_cstr(buf.toString(), false, false);
+                fmt = context.runtime.newString("%4Y-%m-%dT%T%:z");
             }
-        } else if (0 == tzsecs && obj.callMethod(context, "utc?").isTrue()) {
-            String format = "%04d-%02d-%02dT%02d:%02d:%02d.%09dZ";
-
-            if (9 > opts.sec_prec) {
-                format = "%04d-%02d-%02dT%02d:%02d:%02d.%0" + (char) ('0' + opts.sec_prec);
-            }
-            formatter.format(format,
-                    tm.get(Calendar.YEAR), tm.get(Calendar.MONTH) + 1, tm.get(Calendar.DAY_OF_MONTH),
-                    tm.get(Calendar.HOUR_OF_DAY), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND), nsec);
-            dump_cstr(buf.toString(), false, false);
+        } else if (noTimezone && obj.callMethod(context, "utc?").isTrue()) {
+            fmt = context.runtime.newString("%4Y-%m-%dT%T.%0" + opts.sec_prec + "NZ");
         } else {
-            String format = "%04d-%02d-%02dT%02d:%02d:%02d.%09d%c%02d:%02d";
-
-            if (9 > opts.sec_prec) {
-                format = "%04d-%02d-%02dT%02d:%02d:%02d.%0" + (char) ('0' + opts.sec_prec) + "d%c%02d:%02d";
-            }
-            formatter.format(format,
-                    tm.get(Calendar.YEAR), tm.get(Calendar.MONTH) + 1, tm.get(Calendar.DAY_OF_MONTH),
-                    tm.get(Calendar.HOUR_OF_DAY), tm.get(Calendar.MINUTE), tm.get(Calendar.SECOND), nsec,
-                    tzsign, tzhour, tzmin);
-            dump_cstr(buf.toString(), false, false);
+            fmt = context.runtime.newString("%4Y-%m-%dT%T.%0" + opts.sec_prec + "N%:z");
         }
+
+        RubyString str = (RubyString) TypeConverter.checkStringType(context.runtime,
+                obj.callMethod(context, "strftime", fmt));
+        dump_cstr(str.getByteList(), false, false);
     }
 
     // FIXME: both C and Java can crash potentially I added check here but
