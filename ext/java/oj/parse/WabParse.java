@@ -1,6 +1,7 @@
 package oj.parse;
 
 import oj.Options;
+import org.jruby.Ruby;
 import org.jruby.RubyArray;
 import org.jruby.RubyHash;
 import org.jruby.RubyModule;
@@ -123,11 +124,10 @@ public class WabParse extends Parse {
     private static final int TM_SEC = 5;
 
     private IRubyObject time_parse(ByteList str) {
-        int[] tm = new int[6];
+        Ruby runtime = context.runtime;
+        int year, mon, mday, hour, min, sec;
         boolean neg = false;
         long nsecs = 0;
-        int i;
-        int secs;
         int p = 0;
 
         if ('-' == str.get(p)) {
@@ -135,32 +135,28 @@ public class WabParse extends Parse {
             neg = true;
         }
 
-        if (-1 == (tm[TM_YEAR] = read_num(str, p, 4))) return context.nil;
+        if (-1 == (year = read_num(str, p, 4))) return context.nil;
         p += 4;
 
-        if (neg) {
-            tm[TM_YEAR] = -tm[TM_YEAR];
-            neg = false;
-        }
-        tm[TM_YEAR] -= 1900;
+        if (neg) year = -year;
+
         p++; // '-'
-        if (-1 == (tm[TM_MON] = read_num(str, p, 2))) return context.nil;
+        if (-1 == (mon = read_num(str, p, 2))) return context.nil;
         p += 2;
         p++; // '-'
-        tm[TM_MON]--;
-        if (-1 == (tm[TM_MDAY] = read_num(str, p, 2))) return context.nil;
+        if (-1 == (mday = read_num(str, p, 2))) return context.nil;
         p += 2;
         p++; // '-'
-        if (-1 == (tm[TM_HOUR] = read_num(str, p, 2))) return context.nil;
+        if (-1 == (hour = read_num(str, p, 2))) return context.nil;
         p += 2;
         p++; // '-'
-        if (-1 == (tm[TM_MIN] = read_num(str, p, 2))) return context.nil;
+        if (-1 == (min = read_num(str, p, 2))) return context.nil;
         p += 2;
         p++; // '-'
-        if (-1 == (tm[TM_SEC] = read_num(str, p, 2))) return context.nil;
+        if (-1 == (sec = read_num(str, p, 2))) return context.nil;
         p += 2;
         p++; // '-'
-        for (i = 9; 0 < i; i--,  p++) {
+        for (int i = 9; 0 < i; i--,  p++) {
             int s = str.get(p);
             if ('0' <= s && s <= '9') {
                 nsecs = nsecs * 10 + (s - '0');
@@ -169,19 +165,12 @@ public class WabParse extends Parse {
             }
         }
 
-//        time_t	t = (time_t)(ni.i + ni.exp);
-//        struct tm	st = gmtime(t);
-
-        IRubyObject[] args = new IRubyObject[8];
-
-        args[0] = context.runtime.newFixnum(tm[TM_YEAR]);
-        args[1] = context.runtime.newFixnum(tm[TM_MON]);
-        args[2] = context.runtime.newFixnum(tm[TM_MDAY]);
-        args[3] = context.runtime.newFixnum(tm[TM_HOUR]);
-        args[4] = context.runtime.newFixnum(tm[TM_MIN]);
-        args[5] = context.runtime.newFloat((double) (tm[TM_SEC] + ((double)nsecs) / 1000000000.0));
-        args[6] = context.runtime.newFixnum(ni.exp);
-        return context.runtime.getTime().callMethod(context, "new", args).callMethod(context, "utc");
+        return context.runtime.getTime().callMethod(context, "new", new IRubyObject[] {
+                runtime.newFixnum(year), runtime.newFixnum(mon), runtime.newFixnum(mday),
+                runtime.newFixnum(hour), runtime.newFixnum(min),
+                context.runtime.newFloat((sec + ((double) nsecs) / 1000000000.0)),
+                context.runtime.newFixnum(ni.exp)
+        }).callMethod(context, "utc");
     }
 
     @Override

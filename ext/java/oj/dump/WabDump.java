@@ -186,8 +186,7 @@ public class WabDump extends Dump {
 
     @Override
     protected void dump_time(RubyTime time, int depth) {
-        //FIXME: impl still needed
-        super._dump_time(time, true);
+        dump_xml_time(time);
     }
 
     // FIXME: all these supported in WBA?
