@@ -657,6 +657,7 @@ public abstract class Parse {
 
     void oj_parse2() {
         boolean first = true;
+        int start = 0;
 
         err_init();
         for (source.advance(0); true; source.advance()) {
@@ -735,18 +736,15 @@ public abstract class Parse {
             if (err_has()) {
                 return;
             }
-            //System.out.println("CUREND: " + (char) source.current);
+
             if (stack.isEmpty()) {
                 if (proc != null) {
-                    proc.yield(getContext(), stack_head_val());
-/*                } else {
-                    if (HAS_PROC_WITH_BLOCK) {
-                        Object[] args= new Object[] { stack.firstElement() };
-                        proc.call(args);
-                    } else {
-                        throw getRuntime().newNotImplementedError("Calling a Proc with a block not supported in this version. Use func() {|x| } syntax instead.");
-                    }
-                }*/
+                    proc.call(getContext(), stack_head_val(),
+                            context.runtime.newFixnum(start), // start
+                            context.runtime.newFixnum(source.currentOffset - start + 1)); // length
+
+                    // If we loop into next JSON document in this source this will be the new start offset.
+                    start = source.currentOffset + 1;
                 } else if (handler == null) {
                     first = false;
                 }
