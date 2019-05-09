@@ -725,7 +725,7 @@ public abstract class Parse {
                     break;
                 case '/':
                     skip_comment();
-                    break;
+                    continue;
                 case '\0':
                     source.advance(-1);
                     return;
