@@ -2,6 +2,7 @@ package oj.parse;
 
 import oj.OjLibrary;
 import oj.Options;
+import org.joda.time.DateTime;
 import org.jruby.RubyArray;
 import org.jruby.RubyClass;
 import org.jruby.RubyComplex;
@@ -125,22 +126,9 @@ public class CustomParse extends ObjectParse {
                     // match the expected IRubyObject.
                     parent.val = parent.val.callMethod(context, "utc");
                 } else if (ni.hasExp) {
-                    /*
-                    time_t	t = (time_t)(ni.i + ni.exp);
-                    struct tm	*st = gmtime(&t);
-                    IRubyObject	args[8];
-
-                    args[0] = LONG2NUM(1900 + st->tm_year);
-                    args[1] = LONG2NUM(1 + st->tm_mon);
-                    args[2] = LONG2NUM(st->tm_mday);
-                    args[3] = LONG2NUM(st->tm_hour);
-                    args[4] = LONG2NUM(st->tm_min);
-                    args[5] = rb_float_new((double)st->tm_sec + ((double)nsec + 0.5) / 1000000000.0);
-                    args[6] = LONG2NUM(ni.exp);
-                    parent.val = rb_funcall2(rb_cTime, oj_new_id, 7, args);*/
-                    // FIXME: Can this be this simple?
-                    long nsecs = 1000000000L * (ni.i + ni.exp) + (long) nsec;
-                    parent.val = RubyTime.newTimeFromNanoseconds(context.runtime, nsecs);
+                    parent.val = new RubyTime(context.runtime, context.runtime.getTime(),
+                            new DateTime(ni.i * 1000, RubyTime.getTimeZone(context.runtime, ni.exp)));
+                    ((RubyTime) parent.val).setNSec((long) nsec);
                 } else {
                     long nsecs = 1000000000L * ni.i + (long) nsec;
                     parent.val = RubyTime.newTimeFromNanoseconds(context.runtime, nsecs);

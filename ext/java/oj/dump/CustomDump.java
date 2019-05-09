@@ -124,7 +124,8 @@ public class CustomDump extends CompatDump {
                 case UnixZTime: {
                     IRubyObject v = obj.callMethod(context, "to_time");
 
-                    if (obj instanceof RubyDate) {
+                    // Does not use instanceof since DateTime < Date.
+                    if (obj.getMetaClass() == context.runtime.getObject().getConstantAt("Date")) {
                         _dump_time(utcOnDate(v), false);
                     } else {
                         _dump_time(v, true);
@@ -134,8 +135,7 @@ public class CustomDump extends CompatDump {
                 default: {
                     IRubyObject v = obj.callMethod(context, "to_time");
 
-                    if (obj instanceof RubyDate) v = utcOnDate(v);
-
+                    if (obj.getMetaClass() == context.runtime.getObject().getConstantAt("Date")) v = utcOnDate(v);
                     _dump_time(v, false);
                     break;
                 }
@@ -145,7 +145,9 @@ public class CustomDump extends CompatDump {
 
     // FIXME: Can use non-dyn dispatch if none of these methods have been overridden.
     private IRubyObject utcOnDate(IRubyObject object) {
-        return object.callMethod(context, "utc").callMethod(context, "+", object.callMethod(context, "utc_offset"));
+        // Original code: Does this actually change anything?
+        //return object.callMethod(context, "utc").callMethod(context, "+", object.callMethod(context, "utc_offset"));
+        return object.callMethod(context, "+", object.callMethod(context, "utc_offset"));
     }
 
     protected void dump_datetime(IRubyObject obj, int depth) {
